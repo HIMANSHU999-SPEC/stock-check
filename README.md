@@ -216,7 +216,7 @@ This project is ready to be uploaded to GitHub:
 
 ## License
 
-Proprietary - London Academy for Applied Technology
+Proprietary - JH INFOTECH
 
 ## Credits
 
@@ -226,4 +226,4 @@ Proprietary - London Academy for Applied Technology
 
 ## Support
 
-For support or questions, please contact the IT department at London Academy for Applied Technology.
+For support or questions, please contact the JHINFO.TECH
