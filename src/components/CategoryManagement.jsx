@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-
-const API_BASE = 'http://localhost:3001/api';
+import { categoriesAPI } from '../services/api';
 
 export default function CategoryManagement() {
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingCategory, setEditingCategory] = useState(null);
+    const [error, setError] = useState('');
     const [formData, setFormData] = useState({
         name: '',
         description: ''
@@ -17,12 +17,14 @@ export default function CategoryManagement() {
     }, []);
 
     async function loadCategories() {
+        setLoading(true);
         try {
-            const response = await fetch(`${API_BASE}/categories`);
-            const data = await response.json();
+            const data = await categoriesAPI.getAll();
             setCategories(data);
+            setError('');
         } catch (error) {
             console.error('Error loading categories:', error);
+            setError('Unable to load categories. Please check your connection and try again.');
         } finally {
             setLoading(false);
         }
@@ -46,25 +48,14 @@ export default function CategoryManagement() {
         e.preventDefault();
 
         try {
-            const url = editingCategory
-                ? `${API_BASE}/categories/${editingCategory.id}`
-                : `${API_BASE}/categories`;
-
-            const method = editingCategory ? 'PUT' : 'POST';
-
-            const response = await fetch(url, {
-                method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to save category');
+            if (editingCategory) {
+                await categoriesAPI.update(editingCategory.id, formData);
+            } else {
+                await categoriesAPI.create(formData);
             }
 
             setShowModal(false);
-            loadCategories();
+            await loadCategories();
         } catch (error) {
             alert('Error saving category: ' + error.message);
         }
@@ -74,16 +65,9 @@ export default function CategoryManagement() {
         if (!confirm('Are you sure you want to delete this category?')) return;
 
         try {
-            const response = await fetch(`${API_BASE}/categories/${id}`, {
-                method: 'DELETE'
-            });
+            await categoriesAPI.delete(id);
 
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Failed to delete category');
-            }
-
-            loadCategories();
+            await loadCategories();
         } catch (error) {
             alert('Error deleting category: ' + error.message);
         }
@@ -101,6 +85,12 @@ export default function CategoryManagement() {
                     + Add Category
                 </button>
             </div>
+
+            {error && (
+                <div className="alert alert-error" role="alert">
+                    {error}
+                </div>
+            )}
 
             <div className="card">
                 <div className="card-body">
