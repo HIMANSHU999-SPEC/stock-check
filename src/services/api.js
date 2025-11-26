@@ -1,4 +1,27 @@
-const API_BASE = 'http://localhost:3001/api';
+function normalizeApiBase(rawBase) {
+    if (!rawBase) return null;
+
+    // Remove any trailing slashes to avoid double-slash requests
+    const trimmed = rawBase.replace(/\/+$/, '');
+
+    // Append /api if the provided base does not already target the API root
+    if (!/\/api$/i.test(trimmed)) {
+        return `${trimmed}/api`;
+    }
+
+    return trimmed;
+}
+
+const isBrowser = typeof window !== 'undefined';
+const defaultApiBase = import.meta.env.DEV
+    ? 'http://localhost:3001/api'
+    : isBrowser
+        ? `${window.location.origin}/api`
+        : 'http://localhost:3001/api';
+
+const API_BASE =
+    normalizeApiBase(import.meta.env.VITE_API_BASE) ||
+    normalizeApiBase(defaultApiBase);
 
 // Helper function for API calls
 async function apiCall(endpoint, options = {}) {
@@ -11,8 +34,17 @@ async function apiCall(endpoint, options = {}) {
     });
 
     if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'API request failed');
+        let message = 'API request failed';
+
+        try {
+            const error = await response.json();
+            message = error.error || message;
+        } catch (_jsonError) {
+            const text = await response.text();
+            if (text) message = text;
+        }
+
+        throw new Error(message);
     }
 
     return response.json();

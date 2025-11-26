@@ -185,6 +185,27 @@ npm run build
 npm run preview
 ```
 
+## Deploying on Amazon Lightsail (or other Ubuntu/Debian servers)
+
+If you saw `mkdir: cannot create directory '/opt/apps': Permission denied`, create the directory with `sudo` or choose a location inside your home folder. Here’s a quick, permission-safe path that works on Lightsail:
+
+```bash
+mkdir -p ~/apps
+cd ~/apps
+```
+
+Then clone and run the project:
+
+```bash
+git clone https://github.com/HIMANSHU999-SPEC/stock-check.git
+cd stock-check
+npm install
+npm run build
+NODE_ENV=production PORT=3001 node server/index.js
+```
+
+Expose port `3001` in the Lightsail firewall and visit `http://<instance-ip>:3001`. Wrap the start command in `pm2` or `systemd` to keep the app running after reboots.
+
 ## GitHub Upload
 
 This project is ready to be uploaded to GitHub:
