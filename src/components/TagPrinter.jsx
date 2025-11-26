@@ -71,7 +71,7 @@ export default function TagPrinter() {
                                     className="btn btn-sm btn-primary"
                                     disabled={selectedAssets.length === 0}
                                 >
-                                    🖨️ Print {selectedAssets.length} Tag(s)
+                                    Print {selectedAssets.length} Tag(s)
                                 </button>
                             </div>
                         </div>
@@ -124,6 +124,10 @@ export default function TagPrinter() {
                 <div className="print-only">
                     <style>{`
             @media print {
+              @page {
+                size: A4 portrait;
+                margin: 0.5cm;
+              }
               .no-print {
                 display: none !important;
               }
@@ -133,23 +137,24 @@ export default function TagPrinter() {
               .asset-tag {
                 page-break-inside: avoid;
                 break-inside: avoid;
-                margin-bottom: 0.5cm;
                 border: 2px solid #000;
-                padding: 0.5cm;
-                width: 8cm;
-                height: 5cm;
+                padding: 0.35cm;
+                width: 100%;
+                height: 4.5cm;
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
                 background: white;
                 color: black;
+                border-radius: 6px;
+                gap: 0.15cm;
               }
               .tag-grid {
                 display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 0.5cm;
-                padding: 1cm;
+                grid-template-columns: repeat(auto-fit, minmax(6.5cm, 1fr));
+                gap: 0.35cm;
+                padding: 0.2cm;
               }
               body {
                 background: white;
@@ -163,8 +168,8 @@ export default function TagPrinter() {
                     <div className="tag-grid">
                         {selectedAssetData.map((asset) => (
                             <div key={asset.id} className="asset-tag">
-                                <div style={{ marginBottom: '0.3cm' }}>
-                                    <QRCode value={asset.asset_number} size={120} />
+                                <div style={{ marginBottom: '0.2cm' }}>
+                                    <QRCode value={asset.asset_number} size={96} />
                                 </div>
                                 <div style={{
                                     fontSize: '16px',
@@ -175,7 +180,7 @@ export default function TagPrinter() {
                                     {asset.asset_number}
                                 </div>
                                 <div style={{
-                                    fontSize: '12px',
+                                    fontSize: '11px',
                                     textAlign: 'center',
                                     marginBottom: '0.1cm'
                                 }}>

@@ -1,10 +1,18 @@
 const API_BASE = 'http://localhost:3001/api';
+const TOKEN_KEY = 'auth_token';
+
+function getAuthToken() {
+    if (typeof localStorage === 'undefined') return null;
+    return localStorage.getItem(TOKEN_KEY);
+}
 
 // Helper function for API calls
 async function apiCall(endpoint, options = {}) {
+    const token = getAuthToken();
     const response = await fetch(`${API_BASE}${endpoint}`, {
         headers: {
             'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...options.headers,
         },
         ...options,
@@ -16,6 +24,16 @@ async function apiCall(endpoint, options = {}) {
     }
 
     return response.json();
+}
+
+export function saveAuthToken(token) {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearAuthToken() {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.removeItem(TOKEN_KEY);
 }
 
 // Assets API
@@ -30,6 +48,8 @@ export const assetsAPI = {
     delete: (id) => apiCall(`/assets/${id}`, { method: 'DELETE' }),
     assign: (id, data) => apiCall(`/assets/${id}/assign`, { method: 'POST', body: JSON.stringify(data) }),
     return: (id, data) => apiCall(`/assets/${id}/return`, { method: 'POST', body: JSON.stringify(data) }),
+    importBulk: (items, createMissingCategories = true) =>
+        apiCall('/assets/import', { method: 'POST', body: JSON.stringify({ items, createMissingCategories }) }),
 };
 
 // Employees API
@@ -55,6 +75,13 @@ export const reportsAPI = {
     getSummary: () => apiCall('/reports/summary'),
     getByCategory: () => apiCall('/reports/by-category'),
     getByStatus: () => apiCall('/reports/by-status'),
-    getPricing: () => apiCall('/reports/pricing'),
     getCategories: () => apiCall('/categories'),
+};
+
+// Auth & license
+export const authAPI = {
+    login: (email, password) => apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+    me: () => apiCall('/auth/me'),
+    license: () => apiCall('/auth/license'),
+    activate: (code) => apiCall('/auth/activate', { method: 'POST', body: JSON.stringify({ code }) }),
 };

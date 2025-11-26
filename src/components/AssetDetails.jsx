@@ -190,22 +190,6 @@ export default function AssetDetails() {
                                     {asset.purchase_price ? `£${parseFloat(asset.purchase_price).toFixed(2)}` : 'N/A'}
                                 </div>
                             </div>
-
-                            <div className="form-group">
-                                <label className="form-label">Intune Price</label>
-                                <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--primary)' }}>
-                                    {asset.intune_price ? `£${parseFloat(asset.intune_price).toFixed(2)}` : 'N/A'}
-                                </div>
-                            </div>
-
-                            {asset.purchase_price && asset.intune_price && (
-                                <div className="form-group">
-                                    <label className="form-label">Price Difference</label>
-                                    <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--success)' }}>
-                                        £{(parseFloat(asset.intune_price) - parseFloat(asset.purchase_price)).toFixed(2)}
-                                    </div>
-                                </div>
-                            )}
                         </div>
                     </div>
                 </div>
@@ -236,7 +220,7 @@ export default function AssetDetails() {
 
                                 <div className="flex gap-2 mt-3">
                                     <button onClick={handleEmailEmployee} className="btn btn-primary">
-                                        📧 Email Employee
+                                        Email Employee
                                     </button>
                                     <button onClick={handleReturn} className="btn btn-secondary">
                                         Return Asset
@@ -267,7 +251,7 @@ export default function AssetDetails() {
                         </div>
                         <div className="mt-2">
                             <button onClick={handlePrintTag} className="btn btn-secondary">
-                                🖨️ Print Tag
+                                Print Tag
                             </button>
                         </div>
                     </div>

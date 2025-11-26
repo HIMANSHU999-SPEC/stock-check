@@ -16,7 +16,6 @@ export default function AssetForm() {
         serial_number: '',
         purchase_date: '',
         purchase_price: '',
-        intune_price: '',
         location: '',
         notes: '',
         status: 'available'
@@ -48,7 +47,6 @@ export default function AssetForm() {
                 serial_number: data.serial_number || '',
                 purchase_date: data.purchase_date || '',
                 purchase_price: data.purchase_price || '',
-                intune_price: data.intune_price || '',
                 location: data.location || '',
                 notes: data.notes || '',
                 status: data.status || 'available'
@@ -160,19 +158,6 @@ export default function AssetForm() {
                                     name="purchase_price"
                                     className="form-control"
                                     value={formData.purchase_price}
-                                    onChange={handleChange}
-                                    step="0.01"
-                                    min="0"
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label className="form-label">Intune Price (£)</label>
-                                <input
-                                    type="number"
-                                    name="intune_price"
-                                    className="form-control"
-                                    value={formData.intune_price}
                                     onChange={handleChange}
                                     step="0.01"
                                     min="0"

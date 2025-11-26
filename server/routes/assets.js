@@ -110,6 +110,74 @@ router.post('/', (req, res) => {
     }
 });
 
+// Bulk import assets (expects parsed Excel/JSON on client)
+router.post('/import', (req, res) => {
+    try {
+        const { items = [], createMissingCategories = true } = req.body;
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ error: 'No items provided for import' });
+        }
+
+        const allowedStatuses = ['available', 'assigned', 'maintenance', 'retired'];
+        const categoryCache = new Map();
+
+        function resolveCategoryId(categoryName) {
+            const name = categoryName?.trim();
+            if (!name) return null;
+            if (categoryCache.has(name)) return categoryCache.get(name);
+
+            const existing = db.prepare('SELECT id FROM categories WHERE LOWER(name) = LOWER(?)').get(name);
+            if (existing) {
+                categoryCache.set(name, existing.id);
+                return existing.id;
+            }
+
+            if (!createMissingCategories) {
+                throw new Error(`Category "${name}" does not exist`);
+            }
+
+            const result = db.prepare('INSERT INTO categories (name, description) VALUES (?, ?)').run(name, '');
+            categoryCache.set(name, result.lastInsertRowid);
+            return result.lastInsertRowid;
+        }
+
+        const insertStmt = db.prepare(`
+      INSERT INTO assets (
+        asset_number, name, category_id, model, serial_number,
+        purchase_date, purchase_price, intune_price, status, location, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+        const importResult = db.transaction(() => {
+            let inserted = 0;
+            for (const item of items) {
+                const status = allowedStatuses.includes(item.status) ? item.status : 'available';
+                const categoryId = resolveCategoryId(item.category);
+
+                insertStmt.run(
+                    generateAssetNumber(),
+                    item.name || 'Unnamed Asset',
+                    categoryId,
+                    item.model || null,
+                    item.serial_number || null,
+                    item.purchase_date || null,
+                    item.purchase_price || null,
+                    null, // intune_price removed from input
+                    status,
+                    item.location || null,
+                    item.notes || null
+                );
+                inserted += 1;
+            }
+            return { inserted };
+        })();
+
+        res.json({ message: 'Import completed', ...importResult });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Update asset
 router.put('/:id', (req, res) => {
     try {
