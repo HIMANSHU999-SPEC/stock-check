@@ -9,6 +9,7 @@ import CategoryManagement from './components/CategoryManagement';
 import Reports from './components/Reports';
 import TagPrinter from './components/TagPrinter';
 import Login from './components/Login';
+import EmployeeDetails from './components/EmployeeDetails';
 import { authAPI, saveAuthToken, clearAuthToken } from './services/api';
 import './index.css';
 
@@ -176,6 +177,7 @@ function App() {
     function handleLogout() {
         clearAuthToken();
         setUser(null);
+        setLicense(null);
     }
 
     return (
@@ -188,12 +190,16 @@ function App() {
                             <Route
                                 path="/login"
                                 element={
-                                    <Login
-                                        onLogin={handleLogin}
-                                        onActivate={handleActivate}
-                                        license={license}
-                                        authLoading={authLoading}
-                                    />
+                                    user && license && !license.expired ? (
+                                        <Navigate to="/" replace />
+                                    ) : (
+                                        <Login
+                                            onLogin={handleLogin}
+                                            onActivate={handleActivate}
+                                            license={license}
+                                            authLoading={authLoading}
+                                        />
+                                    )
                                 }
                             />
                             <Route
@@ -241,6 +247,14 @@ function App() {
                                 element={
                                     <ProtectedRoute user={user} license={license} authLoading={authLoading}>
                                         <EmployeeList />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/employees/:id"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <EmployeeDetails />
                                     </ProtectedRoute>
                                 }
                             />

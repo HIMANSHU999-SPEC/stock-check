@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { employeesAPI } from '../services/api';
 
 export default function EmployeeList() {
@@ -107,7 +108,11 @@ export default function EmployeeList() {
                             ) : (
                                 employees.map((employee) => (
                                     <tr key={employee.id}>
-                                        <td><strong>{employee.name}</strong></td>
+                                        <td>
+                                            <Link to={`/employees/${employee.id}`} className="text-primary">
+                                                <strong>{employee.name}</strong>
+                                            </Link>
+                                        </td>
                                         <td>{employee.email}</td>
                                         <td>{employee.department || 'N/A'}</td>
                                         <td>{employee.phone || 'N/A'}</td>

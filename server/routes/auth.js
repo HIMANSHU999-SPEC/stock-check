@@ -7,6 +7,7 @@ const router = express.Router();
 
 const TRIAL_CODE = 'jhinfotech31@gmail.com';
 const YEAR_EXTENSION_CODE = 'jhinfo.tech';
+const YEAR_RENEWAL_CODE = 'help@jhinfo.tech';
 
 function hashPassword(password) {
   return crypto.createHash('sha256').update(password).digest('hex');
@@ -37,7 +38,8 @@ function licenseStatus() {
 
 function getUserFromToken(req) {
   const auth = req.headers.authorization || '';
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  const queryToken = req.query.token || req.query.auth_token;
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : (queryToken || null);
   if (!token) return null;
   const payload = verifyToken(token);
   if (!payload) return null;
@@ -98,7 +100,7 @@ router.post('/activate', (req, res) => {
     return res.json({ message: '14-day trial activated', license: { ...newLicense, expired: false } });
   }
 
-  if (code === YEAR_EXTENSION_CODE) {
+  if (code === YEAR_EXTENSION_CODE || code === YEAR_RENEWAL_CODE) {
     const baseDate = license.expires_at && license.expires_at > now ? license.expires_at : now;
     const newLicense = {
       status: 'active',

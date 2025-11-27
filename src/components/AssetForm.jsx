@@ -14,6 +14,7 @@ export default function AssetForm() {
         category_id: '',
         model: '',
         serial_number: '',
+        quantity: 1,
         purchase_date: '',
         purchase_price: '',
         location: '',
@@ -45,6 +46,7 @@ export default function AssetForm() {
                 category_id: data.category_id || '',
                 model: data.model || '',
                 serial_number: data.serial_number || '',
+                quantity: data.quantity || 1,
                 purchase_date: data.purchase_date || '',
                 purchase_price: data.purchase_price || '',
                 location: data.location || '',
@@ -62,12 +64,18 @@ export default function AssetForm() {
         setLoading(true);
 
         try {
+            let newAssetId = id;
             if (isEdit) {
                 await assetsAPI.update(id, formData);
             } else {
-                await assetsAPI.create(formData);
+                const created = await assetsAPI.create(formData);
+                newAssetId = created.id;
             }
-            navigate('/assets');
+            if (!isEdit && newAssetId) {
+                navigate(`/assets/${newAssetId}?assign=1`);
+            } else {
+                navigate('/assets');
+            }
         } catch (error) {
             alert('Error saving asset: ' + error.message);
         } finally {
@@ -141,6 +149,22 @@ export default function AssetForm() {
                             </div>
 
                             <div className="form-group">
+                                <label className="form-label">Quantity</label>
+                                <input
+                                    type="number"
+                                    name="quantity"
+                                    className="form-control"
+                                    value={formData.quantity}
+                                    min="1"
+                                    step="1"
+                                    onChange={handleChange}
+                                />
+                                <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                    Use quantity for items without serial numbers or bulk inventory.
+                                </div>
+                            </div>
+
+                            <div className="form-group">
                                 <label className="form-label">Purchase Date</label>
                                 <input
                                     type="date"
@@ -175,6 +199,10 @@ export default function AssetForm() {
                                     <option value="available">Available</option>
                                     <option value="assigned">Assigned</option>
                                     <option value="maintenance">Maintenance</option>
+                                    <option value="repair">Repair</option>
+                                    <option value="damaged">Damaged</option>
+                                    <option value="lost">Lost</option>
+                                    <option value="stolen">Stolen</option>
                                     <option value="retired">Retired</option>
                                 </select>
                             </div>

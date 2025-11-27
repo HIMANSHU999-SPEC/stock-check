@@ -67,7 +67,10 @@ Powered by JH Infotech Stock Management System`
     return templates[type] || templates.assignment;
 }
 
-export function openEmailDraft(to, subject, body) {
-    const mailtoLink = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+export function openEmailDraft(to, subject, body, cc) {
+    const encodedSubject = encodeURIComponent(subject);
+    const encodedBody = encodeURIComponent(body);
+    const ccPart = cc ? `&cc=${encodeURIComponent(cc)}` : '';
+    const mailtoLink = `mailto:${encodeURIComponent(to)}?subject=${encodedSubject}&body=${encodedBody}${ccPart}`;
     window.location.href = mailtoLink;
 }

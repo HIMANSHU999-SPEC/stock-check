@@ -39,7 +39,7 @@ router.get('/summary', (req, res) => {
 router.get('/by-category', (req, res) => {
     try {
         const data = db.prepare(`
-      SELECT c.name, COUNT(a.id) as count, SUM(a.purchase_price) as total_value
+      SELECT c.id, c.name, COUNT(a.id) as count, SUM(a.purchase_price) as total_value
       FROM categories c
       LEFT JOIN assets a ON c.id = a.category_id
       GROUP BY c.id, c.name

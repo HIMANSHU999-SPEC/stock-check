@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
-import { assetsAPI, reportsAPI } from '../services/api';
+import { assetsAPI, reportsAPI, employeesAPI } from '../services/api';
 
 export default function AssetList() {
     const [assets, setAssets] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
     const [importing, setImporting] = useState(false);
     const [createMissingCategories, setCreateMissingCategories] = useState(true);
@@ -14,9 +15,13 @@ export default function AssetList() {
         status: '',
         category: ''
     });
+    const [assignModal, setAssignModal] = useState({ open: false, asset: null });
+    const [selectedEmployee, setSelectedEmployee] = useState('');
+    const [assignQuantity, setAssignQuantity] = useState(1);
 
     useEffect(() => {
         loadCategories();
+        loadEmployees();
     }, []);
 
     useEffect(() => {
@@ -29,6 +34,15 @@ export default function AssetList() {
             setCategories(data);
         } catch (error) {
             console.error('Error loading categories:', error);
+        }
+    }
+
+    async function loadEmployees() {
+        try {
+            const data = await employeesAPI.getAll();
+            setEmployees(data);
+        } catch (error) {
+            console.error('Error loading employees:', error);
         }
     }
 
@@ -55,6 +69,40 @@ export default function AssetList() {
         }
     }
 
+    function openAssign(asset) {
+        const available = Math.max(0, (asset.quantity || 1) - (asset.assigned_quantity || 0));
+        if (available === 0) {
+            alert('No available quantity to assign for this asset.');
+            return;
+        }
+        setAssignQuantity(Math.max(1, available || 1));
+        setSelectedEmployee('');
+        setAssignModal({ open: true, asset });
+    }
+
+    async function submitAssign() {
+        if (!assignModal.asset) return;
+        const available = Math.max(0, (assignModal.asset.quantity || 1) - (assignModal.asset.assigned_quantity || 0));
+        if (!selectedEmployee) {
+            alert('Select an employee');
+            return;
+        }
+        if (assignQuantity < 1 || assignQuantity > available) {
+            alert(`Select a quantity between 1 and ${available}`);
+            return;
+        }
+        try {
+            await assetsAPI.assign(assignModal.asset.id, {
+                employee_id: selectedEmployee,
+                quantity: assignQuantity
+            });
+            setAssignModal({ open: false, asset: null });
+            loadAssets();
+        } catch (error) {
+            alert('Error assigning asset: ' + error.message);
+        }
+    }
+
     function normalizeRow(row) {
         const normalized = {};
         Object.keys(row).forEach((key) => {
@@ -71,6 +119,7 @@ export default function AssetList() {
             category: data['category'] || '',
             model: data['model'] || '',
             serial_number: data['serial number'] || '',
+            quantity: data['quantity'] || data['qty'] || '',
             purchase_date: data['purchase date'] || '',
             purchase_price: data['purchase price'] || '',
             status: (data['status'] || '').toLowerCase(),
@@ -133,6 +182,10 @@ export default function AssetList() {
                                 <option value="available">Available</option>
                                 <option value="assigned">Assigned</option>
                                 <option value="maintenance">Maintenance</option>
+                                <option value="repair">Repair</option>
+                                <option value="damaged">Damaged</option>
+                                <option value="lost">Lost</option>
+                                <option value="stolen">Stolen</option>
                                 <option value="retired">Retired</option>
                             </select>
                         </div>
@@ -195,6 +248,7 @@ export default function AssetList() {
                                     <th>Name</th>
                                     <th>Category</th>
                                     <th>Model</th>
+                                    <th>Qty</th>
                                     <th>Status</th>
                                     <th>Assigned To</th>
                                     <th>Actions</th>
@@ -218,6 +272,7 @@ export default function AssetList() {
                                             <td>{asset.name}</td>
                                             <td>{asset.category_name || 'N/A'}</td>
                                             <td>{asset.model || 'N/A'}</td>
+                                            <td>{asset.quantity || 1}</td>
                                             <td>
                                                 <span className={`badge badge-${getStatusColor(asset.status)}`}>
                                                     {asset.status}
@@ -232,6 +287,14 @@ export default function AssetList() {
                                                     <Link to={`/assets/${asset.id}/edit`} className="btn btn-sm btn-secondary">
                                                         Edit
                                                     </Link>
+                                                    {!asset.assigned_to && (
+                                                        <button
+                                                            onClick={() => openAssign(asset)}
+                                                            className="btn btn-sm btn-primary"
+                                                        >
+                                                            Assign
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={() => handleDelete(asset.id)}
                                                         className="btn btn-sm btn-danger"
@@ -248,6 +311,51 @@ export default function AssetList() {
                     </div>
                 </div>
             )}
+
+            {assignModal.open && (
+                <div className="modal-overlay" onClick={() => setAssignModal({ open: false, asset: null })}>
+                    <div className="modal" onClick={(e) => e.stopPropagation()}>
+                        <h3>Assign Asset</h3>
+                        <div className="form-group mt-2">
+                            <label className="form-label">Employee</label>
+                            <select
+                                className="form-control"
+                                value={selectedEmployee}
+                                onChange={(e) => setSelectedEmployee(e.target.value)}
+                            >
+                                <option value="">Choose an employee...</option>
+                                {employees.map((emp) => (
+                                    <option key={emp.id} value={emp.id}>
+                                        {emp.name} ({emp.department || 'No department'})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Quantity</label>
+                            <input
+                                type="number"
+                                min="1"
+                                max={Math.max(1, (assignModal.asset?.quantity || 1) - (assignModal.asset?.assigned_quantity || 0))}
+                                className="form-control"
+                                value={assignQuantity}
+                                onChange={(e) => setAssignQuantity(parseInt(e.target.value, 10) || 1)}
+                            />
+                            <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                Available: {Math.max(0, (assignModal.asset?.quantity || 1) - (assignModal.asset?.assigned_quantity || 0))}
+                            </div>
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                            <button onClick={() => setAssignModal({ open: false, asset: null })} className="btn btn-secondary">
+                                Cancel
+                            </button>
+                            <button onClick={submitAssign} className="btn btn-primary">
+                                Assign
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -257,6 +365,10 @@ function getStatusColor(status) {
         available: 'success',
         assigned: 'info',
         maintenance: 'warning',
+        repair: 'warning',
+        damaged: 'danger',
+        lost: 'danger',
+        stolen: 'danger',
         retired: 'danger'
     };
     return colors[status] || 'primary';

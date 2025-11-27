@@ -1,27 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { assetsAPI, employeesAPI } from '../services/api';
 import { generateEmailDraft, openEmailDraft } from '../utils/emailTemplates';
 import QRCode from 'react-qr-code';
 
 export default function AssetDetails() {
+    const ADMIN_MAILBOX = 'admin@stock.local';
     const { id } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const [asset, setAsset] = useState(null);
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [selectedEmployee, setSelectedEmployee] = useState('');
+    const [assignQuantity, setAssignQuantity] = useState(1);
 
     useEffect(() => {
         loadAsset();
         loadEmployees();
     }, [id]);
 
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        if (params.get('assign') === '1') {
+            setShowAssignModal(true);
+        }
+    }, [location.search]);
+
     async function loadAsset() {
         try {
             const data = await assetsAPI.getById(id);
             setAsset(data);
+            setAssignQuantity(Math.max(1, (data.quantity || 1) - (data.assigned_quantity || 0)));
         } catch (error) {
             alert('Error loading asset: ' + error.message);
             navigate('/assets');
@@ -44,9 +55,14 @@ export default function AssetDetails() {
             alert('Please select an employee');
             return;
         }
+        const available = Math.max(0, (asset?.quantity || 0) - (asset?.assigned_quantity || 0));
+        if (assignQuantity < 1 || assignQuantity > available) {
+            alert(`Select a quantity between 1 and ${available}`);
+            return;
+        }
 
         try {
-            await assetsAPI.assign(id, { employee_id: selectedEmployee });
+            await assetsAPI.assign(id, { employee_id: selectedEmployee, quantity: assignQuantity });
             setShowAssignModal(false);
             loadAsset();
         } catch (error) {
@@ -76,7 +92,7 @@ export default function AssetDetails() {
         }
     }
 
-    function handleEmailEmployee() {
+    function handleEmailEmployee(type = 'assignment') {
         if (!asset.employee_email) {
             alert('No employee assigned to this asset');
             return;
@@ -87,13 +103,15 @@ export default function AssetDetails() {
             email: asset.employee_email
         };
 
-        const emailData = generateEmailDraft(asset, employee, 'assignment');
-        openEmailDraft(employee.email, emailData.subject, emailData.body);
+        const emailData = generateEmailDraft(asset, employee, type);
+        openEmailDraft(employee.email, emailData.subject, emailData.body, ADMIN_MAILBOX);
     }
 
     function handlePrintTag() {
         window.print();
     }
+
+    const availableQuantity = Math.max(0, (asset?.quantity || 1) - (asset?.assigned_quantity || 0));
 
     if (loading) {
         return <div className="spinner"></div>;
@@ -146,19 +164,34 @@ export default function AssetDetails() {
                                 <div>{asset.model || 'N/A'}</div>
                             </div>
 
-                            <div className="form-group">
-                                <label className="form-label">Serial Number</label>
-                                <div>{asset.serial_number || 'N/A'}</div>
-                            </div>
+                        <div className="form-group">
+                            <label className="form-label">Serial Number</label>
+                            <div>{asset.serial_number || 'N/A'}</div>
+                        </div>
 
-                            <div className="form-group">
-                                <label className="form-label">Status</label>
-                                <div>
-                                    <span className={`badge badge-${getStatusColor(asset.status)}`}>
-                                        {asset.status}
-                                    </span>
-                                </div>
+                        <div className="form-group">
+                            <label className="form-label">Quantity</label>
+                            <div>{asset.quantity || 1}</div>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Assigned Qty</label>
+                            <div>{asset.assigned_quantity || 0}</div>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Status</label>
+                            <div>
+                                <span className={`badge badge-${getStatusColor(asset.status)}`}>
+                                    {asset.status}
+                                </span>
                             </div>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Available Quantity</label>
+                            <div>{availableQuantity}</div>
+                        </div>
 
                             <div className="form-group">
                                 <label className="form-label">Location</label>
@@ -225,6 +258,12 @@ export default function AssetDetails() {
                                     <button onClick={handleReturn} className="btn btn-secondary">
                                         Return Asset
                                     </button>
+                                    <button onClick={() => handleEmailEmployee('return')} className="btn btn-secondary">
+                                        Email Return Notice
+                                    </button>
+                                    <button onClick={() => setShowAssignModal(true)} className="btn btn-secondary">
+                                        Reassign
+                                    </button>
                                 </div>
                             </>
                         ) : (
@@ -233,9 +272,15 @@ export default function AssetDetails() {
                                 <button
                                     onClick={() => setShowAssignModal(true)}
                                     className="btn btn-primary mt-2"
+                                    disabled={availableQuantity === 0}
                                 >
                                     Assign to Employee
                                 </button>
+                                {availableQuantity === 0 && (
+                                    <div className="text-muted" style={{ marginTop: '0.5rem' }}>
+                                        No available quantity to assign. Increase stock or return items first.
+                                    </div>
+                                )}
                             </>
                         )}
                     </div>
@@ -309,6 +354,20 @@ export default function AssetDetails() {
                                 ))}
                             </select>
                         </div>
+                        <div className="form-group mt-2">
+                            <label className="form-label">Quantity to Assign</label>
+                            <input
+                                type="number"
+                                className="form-control"
+                                min="1"
+                                max={Math.max(availableQuantity, 1)}
+                                value={assignQuantity}
+                                onChange={(e) => setAssignQuantity(parseInt(e.target.value, 10) || 1)}
+                            />
+                            <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                Available: {availableQuantity}
+                            </div>
+                        </div>
                         <div className="flex gap-2 mt-3">
                             <button onClick={() => setShowAssignModal(false)} className="btn btn-secondary">
                                 Cancel
@@ -329,6 +388,10 @@ function getStatusColor(status) {
         available: 'success',
         assigned: 'info',
         maintenance: 'warning',
+        repair: 'warning',
+        damaged: 'danger',
+        lost: 'danger',
+        stolen: 'danger',
         retired: 'danger'
     };
     return colors[status] || 'primary';

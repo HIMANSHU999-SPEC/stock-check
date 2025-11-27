@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const STORED_EMAIL_KEY = 'saved_login_email';
 
 export default function Login({ onLogin, onActivate, license, authLoading }) {
+    const navigate = useNavigate();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [code, setCode] = useState('');
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
+    const [code, setCode] = useState('');
     const [busy, setBusy] = useState(false);
     const [remember, setRemember] = useState(true);
 
@@ -27,6 +29,7 @@ export default function Login({ onLogin, onActivate, license, authLoading }) {
                 localStorage.setItem(STORED_EMAIL_KEY, email);
             }
             setMessage('Logged in successfully');
+            navigate('/');
         } catch (err) {
             setError(err.message || 'Login failed');
         } finally {
@@ -34,31 +37,12 @@ export default function Login({ onLogin, onActivate, license, authLoading }) {
         }
     }
 
-    async function handleActivate(e) {
-        e.preventDefault();
-        if (!code) return;
-        setBusy(true);
-        setError('');
-        setMessage('');
-        try {
-            const res = await onActivate(code);
-            setMessage(res?.message || 'License updated');
-            setCode('');
-        } catch (err) {
-            setError(err.message || 'Activation failed');
-        } finally {
-            setBusy(false);
-        }
-    }
-
-    const expired = license ? license.expired : true;
-
     return (
         <div className="card" style={{ maxWidth: '540px', margin: '2rem auto' }}>
             <div className="card-header">
                 <h3 className="card-title">Login</h3>
                 <p className="text-muted" style={{ marginBottom: 0 }}>
-                    Admin: admin@stock.local / 12345678 - Sub-admin: subadmin@stock.local / SubAdmin@123
+                    Sign in with your administrator or sub-administrator credentials.
                 </p>
             </div>
             <div className="card-body">
@@ -106,9 +90,9 @@ export default function Login({ onLogin, onActivate, license, authLoading }) {
             </div>
 
             <div className="card-header">
-                <h4 className="card-title" style={{ marginBottom: 0 }}>Trial / License</h4>
+                <h4 className="card-title" style={{ marginBottom: 0 }}>Activation</h4>
                 <p className="text-muted" style={{ marginBottom: 0 }}>
-                    Trial code: jhinfotech31@gmail.com (14 days) - Yearly extender: jhinfo.tech
+                    Enter your activation code to start a trial or extend your license.
                 </p>
             </div>
             <div className="card-body">
@@ -119,10 +103,29 @@ export default function Login({ onLogin, onActivate, license, authLoading }) {
                         className="form-control"
                         value={code}
                         onChange={(e) => setCode(e.target.value)}
-                        placeholder="Enter trial or yearly code"
+                        placeholder="Enter activation code"
                     />
                 </div>
-                <button onClick={handleActivate} className="btn btn-secondary w-100" disabled={busy}>
+                <button
+                    onClick={async (e) => {
+                        e.preventDefault();
+                        if (!code) return;
+                        setBusy(true);
+                        setError('');
+                        setMessage('');
+                        try {
+                            const res = await onActivate(code);
+                            setMessage(res?.message || 'License updated');
+                            setCode('');
+                        } catch (err) {
+                            setError(err.message || 'Activation failed');
+                        } finally {
+                            setBusy(false);
+                        }
+                    }}
+                    className="btn btn-secondary w-100"
+                    disabled={busy}
+                >
                     Activate / Extend
                 </button>
 
@@ -130,7 +133,7 @@ export default function Login({ onLogin, onActivate, license, authLoading }) {
                     <div className="text-muted">License status</div>
                     <div style={{ fontWeight: 'bold' }}>
                         {license
-                            ? `${license.status ?? 'unknown'}${expired ? ' (expired)' : ''}`
+                            ? `${license.status ?? 'unknown'}${license.expired ? ' (expired)' : ''}`
                             : 'Not activated'}
                     </div>
                     {license?.expires_at && (

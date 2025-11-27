@@ -63,6 +63,8 @@ function initializeDatabase() {
       category_id INTEGER,
       model TEXT,
       serial_number TEXT,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      assigned_quantity INTEGER NOT NULL DEFAULT 0,
       purchase_date DATE,
       purchase_price REAL,
       intune_price REAL,
@@ -75,6 +77,23 @@ function initializeDatabase() {
       FOREIGN KEY (category_id) REFERENCES categories(id),
       FOREIGN KEY (assigned_to) REFERENCES employees(id)
     )
+  `);
+
+  // Ensure quantity columns exist for older databases
+  const assetColumns = db.prepare(`PRAGMA table_info('assets')`).all();
+  const columnNames = assetColumns.map(col => col.name);
+  if (!columnNames.includes('quantity')) {
+    db.exec(`ALTER TABLE assets ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1`);
+  }
+  if (!columnNames.includes('assigned_quantity')) {
+    db.exec(`ALTER TABLE assets ADD COLUMN assigned_quantity INTEGER NOT NULL DEFAULT 0`);
+  }
+
+  // Normalize existing rows where assignment exists but assigned_quantity is zero
+  db.exec(`
+    UPDATE assets
+    SET assigned_quantity = 1
+    WHERE assigned_to IS NOT NULL AND (assigned_quantity IS NULL OR assigned_quantity = 0)
   `);
 
   // Users table
@@ -108,6 +127,17 @@ function initializeDatabase() {
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (asset_id) REFERENCES assets(id),
       FOREIGN KEY (employee_id) REFERENCES employees(id)
+    )
+  `);
+
+  // Delete audit for sub-admin limits
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS delete_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id INTEGER NOT NULL,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 

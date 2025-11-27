@@ -8,6 +8,15 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors());
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
 app.use(express.json());
 
 // Initialize database
@@ -20,6 +29,11 @@ app.use('/api/auth', authRouter);
 app.use((req, res, next) => {
     if (!req.path.startsWith('/api/')) {
         return next();
+    }
+
+    // Allow CORS preflight without auth/license
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
     }
 
     // Skip gate for auth endpoints (handled above)
