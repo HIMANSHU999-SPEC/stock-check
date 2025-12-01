@@ -15,6 +15,13 @@ export default function AssetDetails() {
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [selectedEmployee, setSelectedEmployee] = useState('');
     const [assignQuantity, setAssignQuantity] = useState(1);
+    const [showNewEmployeeForm, setShowNewEmployeeForm] = useState(false);
+    const [newEmployee, setNewEmployee] = useState({
+        name: '',
+        email: '',
+        department: '',
+        phone: ''
+    });
 
     useEffect(() => {
         loadAsset();
@@ -92,6 +99,19 @@ export default function AssetDetails() {
         }
     }
 
+    async function handleCreateEmployee(e) {
+        e.preventDefault();
+        try {
+            const created = await employeesAPI.create(newEmployee);
+            await loadEmployees();
+            setSelectedEmployee(created.id);
+            setShowNewEmployeeForm(false);
+            setNewEmployee({ name: '', email: '', department: '', phone: '' });
+        } catch (error) {
+            alert('Error creating employee: ' + error.message);
+        }
+    }
+
     function handleEmailEmployee(type = 'assignment') {
         if (!asset.employee_email) {
             alert('No employee assigned to this asset');
@@ -112,6 +132,15 @@ export default function AssetDetails() {
     }
 
     const availableQuantity = Math.max(0, (asset?.quantity || 1) - (asset?.assigned_quantity || 0));
+    const warrantyMonths = asset?.warranty_period_months || 0;
+    let warrantyExpiry = null;
+    if (warrantyMonths > 0 && asset?.purchase_date) {
+        const d = new Date(asset.purchase_date);
+        if (!Number.isNaN(d.getTime())) {
+            d.setMonth(d.getMonth() + warrantyMonths);
+            warrantyExpiry = d.toISOString().slice(0, 10);
+        }
+    }
 
     if (loading) {
         return <div className="spinner"></div>;
@@ -196,6 +225,25 @@ export default function AssetDetails() {
                             <div className="form-group">
                                 <label className="form-label">Location</label>
                                 <div>{asset.location || 'N/A'}</div>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Campus</label>
+                                <div>{asset.campus || 'N/A'}</div>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Supplier</label>
+                                <div>{asset.supplier_name || 'N/A'}</div>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Warranty Period</label>
+                                <div>{warrantyMonths ? `${warrantyMonths} months` : 'No warranty'}</div>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Warranty Expiry</label>
+                                <div>{warrantyExpiry || 'N/A'}</div>
                             </div>
                         </div>
 
@@ -336,7 +384,13 @@ export default function AssetDetails() {
             )}
 
             {showAssignModal && (
-                <div className="modal-overlay" onClick={() => setShowAssignModal(false)}>
+                <div
+                    className="modal-overlay"
+                    onClick={() => {
+                        setShowAssignModal(false);
+                        setShowNewEmployeeForm(false);
+                    }}
+                >
                     <div className="modal" onClick={(e) => e.stopPropagation()}>
                         <h3>Assign Asset to Employee</h3>
                         <div className="form-group mt-3">
@@ -368,8 +422,79 @@ export default function AssetDetails() {
                                 Available: {availableQuantity}
                             </div>
                         </div>
+
+                        <div className="form-group mt-2">
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setShowNewEmployeeForm((v) => !v)}
+                            >
+                                {showNewEmployeeForm ? 'Cancel new employee' : 'Create new employee'}
+                            </button>
+                        </div>
+
+                        {showNewEmployeeForm && (
+                            <form onSubmit={handleCreateEmployee} className="card mt-2">
+                                <div className="card-body">
+                                    <div className="grid grid-2">
+                                        <div className="form-group">
+                                            <label className="form-label">Name *</label>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                value={newEmployee.name}
+                                                onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">Email *</label>
+                                            <input
+                                                type="email"
+                                                className="form-control"
+                                                value={newEmployee.email}
+                                                onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-2">
+                                        <div className="form-group">
+                                            <label className="form-label">Department</label>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                value={newEmployee.department}
+                                                onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">Phone</label>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                value={newEmployee.phone}
+                                                onChange={(e) => setNewEmployee({ ...newEmployee, phone: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="card-footer">
+                                    <button type="submit" className="btn btn-primary">
+                                        Save & select
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+
                         <div className="flex gap-2 mt-3">
-                            <button onClick={() => setShowAssignModal(false)} className="btn btn-secondary">
+                            <button
+                                onClick={() => {
+                                    setShowAssignModal(false);
+                                    setShowNewEmployeeForm(false);
+                                }}
+                                className="btn btn-secondary"
+                            >
                                 Cancel
                             </button>
                             <button onClick={handleAssign} className="btn btn-primary">
@@ -396,3 +521,4 @@ function getStatusColor(status) {
     };
     return colors[status] || 'primary';
 }
+

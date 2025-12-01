@@ -88,12 +88,51 @@ function initializeDatabase() {
   if (!columnNames.includes('assigned_quantity')) {
     db.exec(`ALTER TABLE assets ADD COLUMN assigned_quantity INTEGER NOT NULL DEFAULT 0`);
   }
+  if (!columnNames.includes('supplier_name')) {
+    db.exec(`ALTER TABLE assets ADD COLUMN supplier_name TEXT`);
+  }
+  if (!columnNames.includes('warranty_period_months')) {
+    db.exec(`ALTER TABLE assets ADD COLUMN warranty_period_months INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!columnNames.includes('deleted_at')) {
+    db.exec(`ALTER TABLE assets ADD COLUMN deleted_at DATETIME`);
+  }
+  if (!columnNames.includes('deleted_by')) {
+    db.exec(`ALTER TABLE assets ADD COLUMN deleted_by INTEGER`);
+  }
+  if (!columnNames.includes('campus')) {
+    db.exec(`ALTER TABLE assets ADD COLUMN campus TEXT DEFAULT ''`);
+  }
 
   // Normalize existing rows where assignment exists but assigned_quantity is zero
   db.exec(`
     UPDATE assets
     SET assigned_quantity = 1
     WHERE assigned_to IS NOT NULL AND (assigned_quantity IS NULL OR assigned_quantity = 0)
+  `);
+  db.exec(`
+    UPDATE assets
+    SET assigned_quantity = 0
+    WHERE assigned_quantity IS NULL
+  `);
+  db.exec(`
+    UPDATE assets
+    SET warranty_period_months = 0
+    WHERE warranty_period_months IS NULL
+  `);
+
+  // Ensure supplier_name is not null for existing rows
+  db.exec(`
+    UPDATE assets
+    SET supplier_name = ''
+    WHERE supplier_name IS NULL
+  `);
+
+  // Ensure campus is not null for existing rows
+  db.exec(`
+    UPDATE assets
+    SET campus = ''
+    WHERE campus IS NULL
   `);
 
   // Users table
@@ -141,6 +180,19 @@ function initializeDatabase() {
     )
   `);
 
+  // Recycle bin to support soft deletes and timed purge
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS recycle_bin (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      payload TEXT NOT NULL,
+      deleted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      deleted_by INTEGER,
+      can_restore_until DATETIME NOT NULL
+    )
+  `);
+
   // Insert default categories
   const insertCategory = db.prepare('INSERT OR IGNORE INTO categories (name, description) VALUES (?, ?)');
   insertCategory.run('Laptop', 'Laptop computers');
@@ -154,18 +206,40 @@ function initializeDatabase() {
   insertCategory.run('Other', 'Miscellaneous items');
 
   // Seed default users
-  ensureUser({
-    email: 'admin@stock.local',
-    name: 'Administrator',
-    role: 'admin',
-    password: '12345678'
-  });
-  ensureUser({
-    email: 'subadmin@stock.local',
-    name: 'Sub Administrator',
-    role: 'subadmin',
-    password: 'SubAdmin@123'
-  });
+  // Update legacy admin credentials if present, otherwise ensure new ones.
+  const adminNewEmail = 'itsupport@laat.ac.uk';
+  const adminOld = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@stock.local');
+  const adminExistingNew = db.prepare('SELECT id FROM users WHERE email = ?').get(adminNewEmail);
+  if (!adminExistingNew) {
+    if (adminOld) {
+      db.prepare('UPDATE users SET email = ?, password_hash = ? WHERE id = ?')
+        .run(adminNewEmail, hashPassword('IN3Ia-147!'), adminOld.id);
+    } else {
+      ensureUser({
+        email: adminNewEmail,
+        name: 'Administrator',
+        role: 'admin',
+        password: 'IN3Ia-147!'
+      });
+    }
+  }
+
+  const subNewEmail = 'itteam@laat.ac.uk';
+  const subOld = db.prepare('SELECT id FROM users WHERE email = ?').get('subadmin@stock.local');
+  const subExistingNew = db.prepare('SELECT id FROM users WHERE email = ?').get(subNewEmail);
+  if (!subExistingNew) {
+    if (subOld) {
+      db.prepare('UPDATE users SET email = ?, password_hash = ? WHERE id = ?')
+        .run(subNewEmail, hashPassword('IN3ia-147!'), subOld.id);
+    } else {
+      ensureUser({
+        email: subNewEmail,
+        name: 'IT Team',
+        role: 'subadmin',
+        password: 'IN3ia-147!'
+      });
+    }
+  }
 
   // Seed default license state
   ensureSetting('license', {

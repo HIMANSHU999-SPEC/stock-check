@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { assetsAPI, reportsAPI, employeesAPI } from '../services/api';
 
 export default function AssetList() {
     const [assets, setAssets] = useState([]);
     const [categories, setCategories] = useState([]);
+    const [campuses, setCampuses] = useState([]);
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
     const [importing, setImporting] = useState(false);
@@ -13,16 +14,32 @@ export default function AssetList() {
     const [filters, setFilters] = useState({
         search: '',
         status: '',
-        category: ''
+        category: '',
+        campus: ''
     });
+    const location = useLocation();
+    const navigate = useNavigate();
     const [assignModal, setAssignModal] = useState({ open: false, asset: null });
     const [selectedEmployee, setSelectedEmployee] = useState('');
     const [assignQuantity, setAssignQuantity] = useState(1);
+    const [showNewEmployeeForm, setShowNewEmployeeForm] = useState(false);
+    const [newEmployee, setNewEmployee] = useState({
+        name: '',
+        email: '',
+        department: '',
+        phone: ''
+    });
 
     useEffect(() => {
         loadCategories();
         loadEmployees();
-    }, []);
+        loadCampuses();
+        const params = new URLSearchParams(location.search);
+        const campusParam = params.get('campus');
+        if (campusParam !== null) {
+            setFilters((prev) => ({ ...prev, campus: campusParam }));
+        }
+    }, [location.search]);
 
     useEffect(() => {
         loadAssets();
@@ -34,6 +51,16 @@ export default function AssetList() {
             setCategories(data);
         } catch (error) {
             console.error('Error loading categories:', error);
+        }
+    }
+
+    async function loadCampuses() {
+        try {
+            const data = await reportsAPI.getByCampus();
+            const names = data.map((c) => c.campus).filter(Boolean);
+            setCampuses(names);
+        } catch (error) {
+            console.error('Error loading campuses:', error);
         }
     }
 
@@ -49,7 +76,11 @@ export default function AssetList() {
     async function loadAssets() {
         try {
             setLoading(true);
-            const data = await assetsAPI.getAll(filters);
+            const params = {
+                ...filters,
+                campus: filters.campus === '__unassigned__' ? '' : filters.campus
+            };
+            const data = await assetsAPI.getAll(params);
             setAssets(data);
         } catch (error) {
             console.error('Error loading assets:', error);
@@ -77,6 +108,7 @@ export default function AssetList() {
         }
         setAssignQuantity(Math.max(1, available || 1));
         setSelectedEmployee('');
+        setShowNewEmployeeForm(false);
         setAssignModal({ open: true, asset });
     }
 
@@ -122,8 +154,11 @@ export default function AssetList() {
             quantity: data['quantity'] || data['qty'] || '',
             purchase_date: data['purchase date'] || '',
             purchase_price: data['purchase price'] || '',
+            warranty_period_months: data['warranty period'] || data['warranty'] || data['warranty months'] || '',
+            supplier_name: data['supplier'] || data['supplier name'] || '',
             status: (data['status'] || '').toLowerCase(),
             location: data['location'] || '',
+            campus: data['campus'] || '',
             notes: data['notes'] || ''
         };
     }
@@ -203,6 +238,31 @@ export default function AssetList() {
                                 ))}
                             </select>
                         </div>
+                        <div className="form-group">
+                            <select
+                                className="form-control"
+                                value={filters.campus}
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setFilters({ ...filters, campus: val });
+                                    const search = new URLSearchParams(location.search);
+                                    if (val) {
+                                        search.set('campus', val);
+                                    } else {
+                                        search.delete('campus');
+                                    }
+                                    navigate({ search: search.toString() });
+                                }}
+                            >
+                                <option value="">All Campuses</option>
+                                <option value="__unassigned__">Unassigned</option>
+                                {campuses.map((c) => (
+                                    <option key={c} value={c}>
+                                        {c}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -214,7 +274,7 @@ export default function AssetList() {
                 <div className="card-body">
                     <p className="text-muted">
                         Upload .xlsx or .xls with columns: Name, Category, Model, Serial Number, Purchase Date,
-                        Purchase Price, Status, Location, Notes. Categories will be auto-created if needed.
+                        Purchase Price, Supplier, Status, Location, Notes. Categories will be auto-created if needed.
                     </p>
                     <div className="flex gap-2 items-center">
                         <input
@@ -248,6 +308,8 @@ export default function AssetList() {
                                     <th>Name</th>
                                     <th>Category</th>
                                     <th>Model</th>
+                                    <th>Supplier</th>
+                                    <th>Campus</th>
                                     <th>Qty</th>
                                     <th>Status</th>
                                     <th>Assigned To</th>
@@ -257,7 +319,7 @@ export default function AssetList() {
                             <tbody>
                                 {assets.length === 0 ? (
                                     <tr>
-                                        <td colSpan="7" className="text-center text-muted">
+                                        <td colSpan="9" className="text-center text-muted">
                                             No assets found
                                         </td>
                                     </tr>
@@ -272,6 +334,8 @@ export default function AssetList() {
                                             <td>{asset.name}</td>
                                             <td>{asset.category_name || 'N/A'}</td>
                                             <td>{asset.model || 'N/A'}</td>
+                                            <td>{asset.supplier_name || 'N/A'}</td>
+                                            <td>{asset.campus || 'N/A'}</td>
                                             <td>{asset.quantity || 1}</td>
                                             <td>
                                                 <span className={`badge badge-${getStatusColor(asset.status)}`}>
@@ -313,7 +377,13 @@ export default function AssetList() {
             )}
 
             {assignModal.open && (
-                <div className="modal-overlay" onClick={() => setAssignModal({ open: false, asset: null })}>
+                <div
+                    className="modal-overlay"
+                    onClick={() => {
+                        setAssignModal({ open: false, asset: null });
+                        setShowNewEmployeeForm(false);
+                    }}
+                >
                     <div className="modal" onClick={(e) => e.stopPropagation()}>
                         <h3>Assign Asset</h3>
                         <div className="form-group mt-2">
@@ -345,8 +415,87 @@ export default function AssetList() {
                                 Available: {Math.max(0, (assignModal.asset?.quantity || 1) - (assignModal.asset?.assigned_quantity || 0))}
                             </div>
                         </div>
+                        <div className="form-group">
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => setShowNewEmployeeForm((v) => !v)}
+                            >
+                                {showNewEmployeeForm ? 'Cancel new employee' : 'Create new employee'}
+                            </button>
+                        </div>
+                        {showNewEmployeeForm && (
+                            <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                try {
+                                    const created = await employeesAPI.create(newEmployee);
+                                    await loadEmployees();
+                                    setSelectedEmployee(created.id);
+                                    setShowNewEmployeeForm(false);
+                                    setNewEmployee({ name: '', email: '', department: '', phone: '' });
+                                } catch (error) {
+                                    alert('Error creating employee: ' + error.message);
+                                }
+                            }} className="card mt-2">
+                                <div className="card-body">
+                                    <div className="grid grid-2">
+                                        <div className="form-group">
+                                            <label className="form-label">Name *</label>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                value={newEmployee.name}
+                                                onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">Email *</label>
+                                            <input
+                                                type="email"
+                                                className="form-control"
+                                                value={newEmployee.email}
+                                                onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-2">
+                                        <div className="form-group">
+                                            <label className="form-label">Department</label>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                value={newEmployee.department}
+                                                onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">Phone</label>
+                                            <input
+                                                type="text"
+                                                className="form-control"
+                                                value={newEmployee.phone}
+                                                onChange={(e) => setNewEmployee({ ...newEmployee, phone: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="card-footer">
+                                    <button type="submit" className="btn btn-primary">
+                                        Save & select
+                                    </button>
+                                </div>
+                            </form>
+                        )}
                         <div className="flex gap-2 mt-3">
-                            <button onClick={() => setAssignModal({ open: false, asset: null })} className="btn btn-secondary">
+                            <button
+                                onClick={() => {
+                                    setAssignModal({ open: false, asset: null });
+                                    setShowNewEmployeeForm(false);
+                                }}
+                                className="btn btn-secondary"
+                            >
                                 Cancel
                             </button>
                             <button onClick={submitAssign} className="btn btn-primary">

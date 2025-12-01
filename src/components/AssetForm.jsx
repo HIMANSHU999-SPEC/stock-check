@@ -8,6 +8,9 @@ export default function AssetForm() {
     const isEdit = Boolean(id);
 
     const [categories, setCategories] = useState([]);
+    const [campuses, setCampuses] = useState([]);
+    const [addingCampus, setAddingCampus] = useState(false);
+    const [newCampus, setNewCampus] = useState('');
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
@@ -17,6 +20,9 @@ export default function AssetForm() {
         quantity: 1,
         purchase_date: '',
         purchase_price: '',
+        supplier_name: '',
+        warranty_period_months: 0,
+        campus: '',
         location: '',
         notes: '',
         status: 'available'
@@ -24,6 +30,7 @@ export default function AssetForm() {
 
     useEffect(() => {
         loadCategories();
+        loadCampuses();
         if (isEdit) {
             loadAsset();
         }
@@ -38,6 +45,16 @@ export default function AssetForm() {
         }
     }
 
+    async function loadCampuses() {
+        try {
+            const data = await reportsAPI.getByCampus();
+            const names = data.map((c) => c.campus).filter(Boolean);
+            setCampuses(names);
+        } catch (error) {
+            console.error('Error loading campuses:', error);
+        }
+    }
+
     async function loadAsset() {
         try {
             const data = await assetsAPI.getById(id);
@@ -49,6 +66,9 @@ export default function AssetForm() {
                 quantity: data.quantity || 1,
                 purchase_date: data.purchase_date || '',
                 purchase_price: data.purchase_price || '',
+                supplier_name: data.supplier_name || '',
+                warranty_period_months: data.warranty_period_months || 0,
+                campus: data.campus || '',
                 location: data.location || '',
                 notes: data.notes || '',
                 status: data.status || 'available'
@@ -218,6 +238,89 @@ export default function AssetForm() {
                                     placeholder="e.g., Building A, Room 101"
                                 />
                             </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Campus</label>
+                                <select
+                                    name="campus"
+                                    className="form-control"
+                                    value={addingCampus ? '__new__' : (formData.campus || '')}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === '__new__') {
+                                            setAddingCampus(true);
+                                            setNewCampus('');
+                                            return;
+                                        }
+                                        setAddingCampus(false);
+                                        setFormData((prev) => ({ ...prev, campus: val }));
+                                    }}
+                                >
+                                    <option value="">Unassigned</option>
+                                    {campuses.map((c) => (
+                                        <option key={c} value={c}>
+                                            {c}
+                                        </option>
+                                    ))}
+                                    <option value="__new__">+ Add new campus</option>
+                                </select>
+                                {addingCampus && (
+                                    <div className="flex gap-2 mt-2">
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            placeholder="Enter campus name"
+                                            value={newCampus}
+                                            onChange={(e) => setNewCampus(e.target.value)}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary"
+                                            onClick={() => {
+                                                if (!newCampus.trim()) return;
+                                                setFormData((prev) => ({ ...prev, campus: newCampus.trim() }));
+                                                setCampuses((prev) =>
+                                                    prev.includes(newCampus.trim()) ? prev : [...prev, newCampus.trim()]
+                                                );
+                                                setAddingCampus(false);
+                                            }}
+                                        >
+                                            Save
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Supplier</label>
+                                <input
+                                    type="text"
+                                    name="supplier_name"
+                                    className="form-control"
+                                    value={formData.supplier_name}
+                                    onChange={handleChange}
+                                    placeholder="Who supplied this item?"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-2">
+                            <div className="form-group">
+                                <label className="form-label">Warranty Period (months)</label>
+                                <input
+                                    type="number"
+                                    name="warranty_period_months"
+                                    className="form-control"
+                                    min="0"
+                                    step="1"
+                                    value={formData.warranty_period_months}
+                                    onChange={handleChange}
+                                    placeholder="e.g., 24"
+                                />
+                                <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                    Leave 0 if no warranty.
+                                </div>
+                            </div>
                         </div>
 
                         <div className="form-group">
@@ -251,3 +354,4 @@ export default function AssetForm() {
         </div>
     );
 }
+

@@ -6,8 +6,10 @@ const { signToken, verifyToken } = require('../utils/token');
 const router = express.Router();
 
 const TRIAL_CODE = 'jhinfotech31@gmail.com';
-const YEAR_EXTENSION_CODE = 'jhinfo.tech';
-const YEAR_RENEWAL_CODE = 'help@jhinfo.tech';
+const TRIAL_EXTENSION_CODE = 'sales@jhinfo.tech';
+const ACTIVATION_CODE = 'help@jhinfo.tech';
+const RENEWAL_CODE = 'helpp@jhinfo.tech';
+const MASTER_RESET_PASSWORD_HASH = crypto.createHash('sha256').update('Admin@123').digest('hex');
 
 function hashPassword(password) {
   return crypto.createHash('sha256').update(password).digest('hex');
@@ -90,29 +92,96 @@ router.post('/activate', (req, res) => {
   const license = getLicense();
 
   if (code === TRIAL_CODE) {
+    if (license.status === 'trial') {
+      return res.status(400).json({ error: 'Trial already activated' });
+    }
     const newLicense = {
       status: 'trial',
       activated_at: now,
-      expires_at: now + 14 * 24 * 60 * 60 * 1000,
-      last_code: code
+      expires_at: now + 15 * 24 * 60 * 60 * 1000,
+      last_code: code,
+      trial_extended: false
     };
     saveLicense(newLicense);
     return res.json({ message: '14-day trial activated', license: { ...newLicense, expired: false } });
   }
 
-  if (code === YEAR_EXTENSION_CODE || code === YEAR_RENEWAL_CODE) {
+  if (code === TRIAL_EXTENSION_CODE) {
+    if (license.status !== 'trial') {
+      return res.status(400).json({ error: 'Trial extension only available after trial activation' });
+    }
+    if (license.trial_extended) {
+      return res.status(400).json({ error: 'Trial already extended once' });
+    }
+    const baseDate = license.expires_at && license.expires_at > now ? license.expires_at : now;
+    const newLicense = {
+      status: 'trial',
+      activated_at: license.activated_at || now,
+      expires_at: baseDate + 7 * 24 * 60 * 60 * 1000, // extend trial by 7 days
+      last_code: code,
+      trial_extended: true
+    };
+    saveLicense(newLicense);
+    return res.json({ message: 'Trial extended once', license: { ...newLicense, expired: false } });
+  }
+
+  if (code === ACTIVATION_CODE) {
     const baseDate = license.expires_at && license.expires_at > now ? license.expires_at : now;
     const newLicense = {
       status: 'active',
       activated_at: license.activated_at || now,
       expires_at: baseDate + 365 * 24 * 60 * 60 * 1000,
-      last_code: code
+      last_code: code,
+      trial_extended: license.trial_extended || false
+    };
+    saveLicense(newLicense);
+    return res.json({ message: 'License activated for 1 year', license: { ...newLicense, expired: false } });
+  }
+
+  if (code === RENEWAL_CODE) {
+    const baseDate = license.expires_at && license.expires_at > now ? license.expires_at : now;
+    const newLicense = {
+      status: 'active',
+      activated_at: license.activated_at || now,
+      expires_at: baseDate + 365 * 24 * 60 * 60 * 1000,
+      last_code: code,
+      trial_extended: license.trial_extended || false
     };
     saveLicense(newLicense);
     return res.json({ message: 'License extended for 1 year', license: { ...newLicense, expired: false } });
   }
 
   return res.status(400).json({ error: 'Invalid activation code' });
+});
+
+// Change password (requires auth or master override)
+router.post('/change-password', (req, res) => {
+  const { current_password, new_password, email } = req.body;
+  if (!new_password) {
+    return res.status(400).json({ error: 'New password is required' });
+  }
+
+  const requester = getUserFromToken(req);
+  const targetEmail = email || requester?.email;
+
+  if (!targetEmail) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(targetEmail);
+  if (!user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  const isMasterOverride = current_password && hashPassword(current_password) === MASTER_RESET_PASSWORD_HASH;
+  const isSelfWithPassword = requester && requester.id === user.id && user.password_hash === hashPassword(current_password || '');
+
+  if (!isMasterOverride && !isSelfWithPassword) {
+    return res.status(403).json({ error: 'Current password is incorrect' });
+  }
+
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(new_password), user.id);
+  return res.json({ message: 'Password updated successfully' });
 });
 
 module.exports = { router, getUserFromToken, licenseStatus };

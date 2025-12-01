@@ -724,3 +724,40 @@ textarea.form-control {
 .footer-link:hover {
   text-decoration: underline;
 }
+/* Improve campus overview table contrast per theme */
+.campus-table {
+  background: transparent;
+}
+
+body.light-mode .campus-table th,
+body.light-mode .campus-table td {
+  background-color: #f8fafc;
+  color: var(--light-text-primary);
+  border-color: #e2e8f0;
+}
+
+body:not(.light-mode) .campus-table th,
+body:not(.light-mode) .campus-table td {
+  background-color: #1e293b;
+  color: var(--text-primary);
+  border-color: #334155;
+}
+
+/* Campus badge styling */
+.campus-badge {
+  display: inline-block;
+  border: none;
+  padding: 0.35rem 0.65rem;
+  border-radius: var(--radius-md);
+  background: #f1f5f9;
+  color: #1e293b;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+body:not(.light-mode) .campus-badge {
+  background: #1e293b;
+  color: #f1f5f9;
+}
+

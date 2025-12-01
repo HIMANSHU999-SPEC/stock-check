@@ -107,8 +107,24 @@ export const assetsAPI = {
     return: (id, data) => apiCall(`/assets/${id}/return`, { method: 'POST', body: JSON.stringify(data) }),
     importBulk: (items, createMissingCategories = true) =>
         apiCall('/assets/import', { method: 'POST', body: JSON.stringify({ items, createMissingCategories }) }),
+    restore: (id, password) =>
+        apiCall(`/assets/${id}/restore`, { method: 'POST', body: JSON.stringify({ password }) }),
+    recycleBin: {
+        list: () => apiCall('/assets/bin'),
+        get: (id) => apiCall(`/assets/bin/${id}`)
+    },
     exportByCategory: (category) =>
         downloadCsv(`/assets/export/by-category${category ? `?category=${category}` : ''}`, 'assets-by-category.csv'),
+    exportBySupplier: (supplier) =>
+        downloadCsv(
+            `/assets/export/by-supplier${supplier !== undefined ? `?supplier=${encodeURIComponent(supplier)}` : ''}`,
+            'assets-by-supplier.csv'
+        ),
+    exportByCampus: (campus) =>
+        downloadCsv(
+            `/assets/export/by-campus${campus !== undefined ? `?campus=${encodeURIComponent(campus)}` : ''}`,
+            'assets-by-campus.csv'
+        ),
     exportAssignments: (employeeIds = []) => {
         const ids = Array.isArray(employeeIds) ? employeeIds.filter(Boolean) : [];
         if (ids.length === 1) {
@@ -151,6 +167,8 @@ export const reportsAPI = {
     getSummary: () => apiCall('/reports/summary'),
     getByCategory: () => apiCall('/reports/by-category'),
     getByStatus: () => apiCall('/reports/by-status'),
+    getBySupplier: () => apiCall('/reports/by-supplier'),
+    getByCampus: () => apiCall('/reports/by-campus'),
     getCategories: () => apiCall('/categories'),
 };
 

@@ -10,6 +10,7 @@ import Reports from './components/Reports';
 import TagPrinter from './components/TagPrinter';
 import Login from './components/Login';
 import EmployeeDetails from './components/EmployeeDetails';
+import RecycleBin from './components/RecycleBin';
 import { authAPI, saveAuthToken, clearAuthToken } from './services/api';
 import './index.css';
 
@@ -60,6 +61,11 @@ function Navbar({ user, onLogout, license }) {
                     <li>
                         <Link to="/reports" className={`nav-link ${isActive('/reports') ? 'active' : ''}`}>
                             Reports
+                        </Link>
+                    </li>
+                    <li>
+                        <Link to="/recycle-bin" className={`nav-link ${isActive('/recycle-bin') ? 'active' : ''}`}>
+                            Recycle Bin
                         </Link>
                     </li>
                     <li>
@@ -279,6 +285,14 @@ function App() {
                                 element={
                                     <ProtectedRoute user={user} license={license} authLoading={authLoading}>
                                         <TagPrinter />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/recycle-bin"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <RecycleBin />
                                     </ProtectedRoute>
                                 }
                             />

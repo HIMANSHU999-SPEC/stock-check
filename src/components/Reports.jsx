@@ -1,10 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { reportsAPI, assetsAPI, employeesAPI } from '../services/api';
 
 export default function Reports() {
     const [summary, setSummary] = useState(null);
     const [categoryData, setCategoryData] = useState([]);
     const [statusData, setStatusData] = useState([]);
+    const [supplierData, setSupplierData] = useState([]);
+    const [campusData, setCampusData] = useState([]);
+    const [campusExporting, setCampusExporting] = useState(false);
+    const [selectedCampuses, setSelectedCampuses] = useState([]);
+    const [supplierAssets, setSupplierAssets] = useState([]);
+    const [selectedSupplier, setSelectedSupplier] = useState({ value: '', label: '' });
     const [employees, setEmployees] = useState([]);
     const [selectedCategory, setSelectedCategory] = useState('');
     const [selectedEmployees, setSelectedEmployees] = useState([]);
@@ -17,15 +24,19 @@ export default function Reports() {
 
     async function loadReports() {
         try {
-            const [summaryRes, categoryRes, statusRes] = await Promise.all([
+            const [summaryRes, categoryRes, statusRes, supplierRes, campusRes] = await Promise.all([
                 reportsAPI.getSummary(),
                 reportsAPI.getByCategory(),
-                reportsAPI.getByStatus()
+                reportsAPI.getByStatus(),
+                reportsAPI.getBySupplier(),
+                reportsAPI.getByCampus()
             ]);
 
             setSummary(summaryRes);
             setCategoryData(categoryRes);
             setStatusData(statusRes);
+            setSupplierData(supplierRes);
+            setCampusData(campusRes);
         } catch (error) {
             console.error('Error loading reports:', error);
         } finally {
@@ -58,6 +69,17 @@ export default function Reports() {
         }
     }
 
+    async function viewSupplierAssets(supplier) {
+        try {
+            const value = supplier === 'Unspecified' ? '' : supplier;
+            setSelectedSupplier({ value, label: supplier || 'Unspecified' });
+            const data = await assetsAPI.getAll({ supplier: value });
+            setSupplierAssets(data);
+        } catch (error) {
+            alert('Failed to load supplier items: ' + error.message);
+        }
+    }
+
     function toggleEmployee(id) {
         setSelectedEmployees((prev) =>
             prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -70,7 +92,12 @@ export default function Reports() {
 
     return (
         <div>
-            <h2>Reports & Analytics</h2>
+            <div className="flex justify-between items-center">
+                <h2>Reports & Analytics</h2>
+                <Link to="/assets" className="btn btn-secondary">
+                    View Master Stock List
+                </Link>
+            </div>
 
             <div className="stats-grid mb-3">
                 <div className="stat-card">
@@ -172,6 +199,211 @@ export default function Reports() {
 
             <div className="card mt-3">
                 <div className="card-header">
+                    <h3 className="card-title">Assets by Supplier</h3>
+                </div>
+                <div className="table-container">
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Supplier</th>
+                                <th>Assets</th>
+                                <th>Total Qty</th>
+                                <th>Available</th>
+                                <th>Total Value</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {supplierData.map((item, index) => (
+                                <tr key={index}>
+                                    <td><strong>{item.supplier_name}</strong></td>
+                                    <td>{item.asset_count || 0}</td>
+                                    <td>{item.total_quantity || 0}</td>
+                                    <td>{item.available_quantity || 0}</td>
+                                    <td>£{(item.total_value || 0).toLocaleString()}</td>
+                                    <td>
+                                        <button
+                                            className="btn btn-sm btn-secondary"
+                                            onClick={() => viewSupplierAssets(item.supplier_name === 'Unspecified' ? '' : item.supplier_name)}
+                                        >
+                                            View items
+                                        </button>
+                                        <button
+                                            className="btn btn-sm btn-primary"
+                                            style={{ marginLeft: '0.5rem' }}
+                                            onClick={async () => {
+                                                try {
+                                                    await assetsAPI.exportBySupplier(
+                                                        item.supplier_name === 'Unspecified' ? '' : item.supplier_name
+                                                    );
+                                                } catch (error) {
+                                                    alert('Export failed: ' + error.message);
+                                                }
+                                            }}
+                                        >
+                                            Export CSV
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {supplierData.length === 0 && (
+                                <tr>
+                                    <td colSpan="6" className="text-center text-muted">No supplier data</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+                {selectedSupplier.label && (
+                    <div className="card-body">
+                        <div className="flex justify-between items-center mb-2">
+                            <h4 className="card-title" style={{ margin: 0 }}>
+                                Items from {selectedSupplier.label}
+                            </h4>
+                            <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => {
+                                    setSupplierAssets([]);
+                                    setSelectedSupplier({ value: '', label: '' });
+                                }}
+                            >
+                                Clear
+                            </button>
+                        </div>
+                        {supplierAssets.length === 0 ? (
+                            <div className="text-muted">No items for this supplier.</div>
+                        ) : (
+                            <div className="table-container">
+                                <table className="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Asset #</th>
+                                            <th>Name</th>
+                                            <th>Category</th>
+                                            <th>Model</th>
+                                            <th>Status</th>
+                                            <th>Qty</th>
+                                            <th>Assigned</th>
+                                            <th>Purchase Price</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {supplierAssets.map((asset) => (
+                                            <tr key={asset.id}>
+                                                <td>{asset.asset_number}</td>
+                                                <td>{asset.name}</td>
+                                                <td>{asset.category_name || 'N/A'}</td>
+                                                <td>{asset.model || 'N/A'}</td>
+                                                <td>
+                                                    <span className={`badge badge-${getStatusColor(asset.status)}`}>
+                                                        {asset.status}
+                                                    </span>
+                                                </td>
+                                                <td>{asset.quantity || 0}</td>
+                                                <td>{asset.assigned_quantity || 0}</td>
+                                                <td>£{asset.purchase_price ? Number(asset.purchase_price).toLocaleString() : '0'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            <div className="card mt-3">
+                <div className="card-header">
+                    <div className="flex justify-between items-center">
+                        <h3 className="card-title">Assets by Campus</h3>
+                        <button
+                            className="btn btn-secondary"
+                            disabled={campusExporting}
+                            onClick={async () => {
+                                try {
+                                    setCampusExporting(true);
+                                    await assetsAPI.exportByCampus();
+                                } catch (error) {
+                                    alert('Export failed: ' + error.message);
+                                } finally {
+                                    setCampusExporting(false);
+                                }
+                            }}
+                        >
+                            {campusExporting ? 'Exporting...' : 'Export CSV'}
+                        </button>
+                        <button
+                            className="btn btn-secondary"
+                            disabled={campusExporting || selectedCampuses.length === 0}
+                            onClick={async () => {
+                                try {
+                                    setCampusExporting(true);
+                                    for (const c of selectedCampuses) {
+                                        await assetsAPI.exportByCampus(c === 'Unassigned' ? '' : c);
+                                    }
+                                } catch (error) {
+                                    alert('Export failed: ' + error.message);
+                                } finally {
+                                    setCampusExporting(false);
+                                }
+                            }}
+                        >
+                            {campusExporting ? 'Exporting...' : 'Export Selected'}
+                        </button>
+                    </div>
+                </div>
+                <div className="table-container">
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Campus</th>
+                                <th>Assets</th>
+                                <th>Total Qty</th>
+                                <th>Available</th>
+                                <th>Total Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {campusData.map((item, index) => {
+                                const displayName = item.campus && item.campus.trim() ? item.campus : 'Unassigned';
+                                const value = item.campus && item.campus.trim() ? item.campus : 'Unassigned';
+                                const checked = selectedCampuses.includes(value);
+                                return (
+                                    <tr key={index}>
+                                        <td>
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={(e) => {
+                                                    setSelectedCampuses((prev) =>
+                                                        e.target.checked
+                                                            ? [...prev, value]
+                                                            : prev.filter((v) => v !== value)
+                                                    );
+                                                }}
+                                            />
+                                        </td>
+                                        <td><strong>{displayName}</strong></td>
+                                        <td>{item.asset_count || 0}</td>
+                                        <td>{item.total_quantity || 0}</td>
+                                        <td>{item.available_quantity || 0}</td>
+                                        <td>£{(item.total_value || 0).toLocaleString()}</td>
+                                    </tr>
+                                );
+                            })}
+                            {campusData.length === 0 && (
+                                <tr>
+                                    <td colSpan="5" className="text-center text-muted">No campus data</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div className="card mt-3">
+                <div className="card-header">
                     <div className="flex justify-between items-center">
                         <h3 className="card-title">Export Assigned Devices by Employee</h3>
                         <button
@@ -224,3 +456,4 @@ function getStatusColor(status) {
     };
     return colors[status] || 'primary';
 }
+

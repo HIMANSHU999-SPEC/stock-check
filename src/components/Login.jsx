@@ -5,7 +5,7 @@ const STORED_EMAIL_KEY = 'saved_login_email';
 
 export default function Login({ onLogin, onActivate, license, authLoading }) {
     const navigate = useNavigate();
-    const [email, setEmail] = useState('');
+    const [email, setEmail] = useState('itsupport@laat.ac.uk');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');

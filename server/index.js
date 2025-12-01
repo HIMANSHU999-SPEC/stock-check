@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const db = require('./database');
 const { router: authRouter, getUserFromToken, licenseStatus } = require('./routes/auth');
 
 const app = express();
@@ -18,9 +19,6 @@ app.use((req, res, next) => {
     next();
 });
 app.use(express.json());
-
-// Initialize database
-require('./database');
 
 // Auth & license routes
 app.use('/api/auth', authRouter);
@@ -60,6 +58,37 @@ app.use('/api/assets', require('./routes/assets'));
 app.use('/api/employees', require('./routes/employees'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/reports', require('./routes/reports'));
+
+// Daily purge for recycle bin (assets older than 90 days)
+function purgeRecycleBin() {
+    try {
+        const expired = db.prepare(`
+      SELECT id, entity_id FROM recycle_bin
+      WHERE entity_type = 'asset' AND can_restore_until <= datetime('now','localtime')
+    `).all();
+
+        const deleteHistoryStmt = db.prepare('DELETE FROM asset_history WHERE asset_id = ?');
+        const deleteAssetStmt = db.prepare('DELETE FROM assets WHERE id = ?');
+        const deleteBinStmt = db.prepare('DELETE FROM recycle_bin WHERE id = ?');
+
+        db.transaction(() => {
+            expired.forEach((item) => {
+                deleteHistoryStmt.run(item.entity_id);
+                deleteAssetStmt.run(item.entity_id);
+                deleteBinStmt.run(item.id);
+            });
+        })();
+
+        if (expired.length > 0) {
+            console.log(`Purged ${expired.length} expired recycle bin item(s)`);
+        }
+    } catch (err) {
+        console.error('Recycle bin purge failed', err);
+    }
+}
+
+purgeRecycleBin();
+setInterval(purgeRecycleBin, 24 * 60 * 60 * 1000);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {

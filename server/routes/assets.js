@@ -5,6 +5,15 @@ const { generateAssetNumber } = require('../utils/assetNumber');
 const PDFDocument = require('pdfkit');
 const archiver = require('archiver');
 const { PassThrough } = require('stream');
+const crypto = require('crypto');
+
+const RESTORE_PASSWORD_HASH = crypto.createHash('sha256').update('Admin@123').digest('hex');
+
+function verifyRestorePassword(password) {
+    if (!password) return false;
+    const hash = crypto.createHash('sha256').update(password).digest('hex');
+    return hash === RESTORE_PASSWORD_HASH;
+}
 
 function toCsv(rows) {
     if (!rows || rows.length === 0) return '';
@@ -26,13 +35,13 @@ function toCsv(rows) {
 // Get all assets with optional filtering
 router.get('/', (req, res) => {
     try {
-        const { status, category, search } = req.query;
+        const { status, category, search, supplier, campus } = req.query;
         let query = `
       SELECT a.*, c.name as category_name, e.name as employee_name, e.email as employee_email
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN employees e ON a.assigned_to = e.id
-      WHERE 1=1
+      WHERE a.deleted_at IS NULL
     `;
         const params = [];
 
@@ -44,6 +53,20 @@ router.get('/', (req, res) => {
         if (category) {
             query += ' AND a.category_id = ?';
             params.push(category);
+        }
+
+        if (supplier !== undefined) {
+            if (supplier === '') {
+                query += " AND (a.supplier_name IS NULL OR TRIM(a.supplier_name) = '')";
+            } else {
+                query += " AND LOWER(TRIM(COALESCE(a.supplier_name, ''))) = LOWER(TRIM(?))";
+                params.push(supplier);
+            }
+        }
+
+        if (campus) {
+            query += " AND LOWER(TRIM(COALESCE(a.campus, ''))) = LOWER(TRIM(?))";
+            params.push(campus);
         }
 
         if (search) {
@@ -67,12 +90,12 @@ router.get('/export/by-category', (req, res) => {
         const { category } = req.query;
         let query = `
       SELECT a.asset_number, a.name, a.model, a.serial_number, a.quantity, a.assigned_quantity,
-             a.status, a.location, a.purchase_date, a.purchase_price,
+             a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
              c.name as category, e.name as assigned_to, e.email as assigned_email
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN employees e ON a.assigned_to = e.id
-      WHERE 1=1
+      WHERE a.deleted_at IS NULL
     `;
         const params = [];
         if (category) {
@@ -83,6 +106,70 @@ router.get('/export/by-category', (req, res) => {
         const rows = db.prepare(query).all(...params);
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', 'attachment; filename="assets-by-category.csv"');
+        return res.send(toCsv(rows));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Export assets filtered by supplier (CSV)
+router.get('/export/by-supplier', (req, res) => {
+    try {
+        const { supplier } = req.query;
+        let query = `
+      SELECT a.asset_number, a.name, a.model, a.serial_number, a.quantity, a.assigned_quantity,
+             a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
+             c.name as category, e.name as assigned_to, e.email as assigned_email
+      FROM assets a
+      LEFT JOIN categories c ON a.category_id = c.id
+      LEFT JOIN employees e ON a.assigned_to = e.id
+      WHERE a.deleted_at IS NULL
+    `;
+        const params = [];
+        if (supplier !== undefined) {
+            if (supplier === '') {
+                query += " AND (a.supplier_name IS NULL OR TRIM(a.supplier_name) = '')";
+            } else {
+                query += " AND LOWER(TRIM(COALESCE(a.supplier_name, ''))) = LOWER(TRIM(?))";
+                params.push(supplier);
+            }
+        }
+        query += ' ORDER BY a.supplier_name, a.name';
+        const rows = db.prepare(query).all(...params);
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename="assets-by-supplier.csv"');
+        return res.send(toCsv(rows));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Export assets filtered by campus (CSV)
+router.get('/export/by-campus', (req, res) => {
+    try {
+        const { campus } = req.query;
+        let query = `
+      SELECT a.asset_number, a.name, a.model, a.serial_number, a.quantity, a.assigned_quantity,
+             a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
+             c.name as category, e.name as assigned_to, e.email as assigned_email
+      FROM assets a
+      LEFT JOIN categories c ON a.category_id = c.id
+      LEFT JOIN employees e ON a.assigned_to = e.id
+      WHERE a.deleted_at IS NULL
+    `;
+        const params = [];
+        if (campus !== undefined) {
+            if (campus === '') {
+                query += " AND (a.campus IS NULL OR TRIM(a.campus) = '')";
+            } else {
+                query += " AND LOWER(TRIM(COALESCE(a.campus, ''))) = LOWER(TRIM(?))";
+                params.push(campus);
+            }
+        }
+        query += ' ORDER BY a.campus, a.name';
+        const rows = db.prepare(query).all(...params);
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename=\"assets-by-campus.csv\"');
         return res.send(toCsv(rows));
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -121,7 +208,7 @@ function exportAssignments(res, ids) {
       FROM assets a
       JOIN employees e ON a.assigned_to = e.id
       LEFT JOIN categories c ON a.category_id = c.id
-      WHERE a.assigned_to IS NOT NULL
+      WHERE a.assigned_to IS NOT NULL AND a.deleted_at IS NULL
     `;
     if (ids.length > 0) {
         const placeholders = ids.map(() => '?').join(',');
@@ -255,6 +342,68 @@ router.post('/export/by-employees', (req, res) => {
     }
 });
 
+// Recycle bin listing for assets
+router.get('/bin', (req, res) => {
+    try {
+        const items = db.prepare(`
+      SELECT id, entity_id, deleted_at, deleted_by, can_restore_until, payload
+      FROM recycle_bin
+      WHERE entity_type = 'asset'
+      ORDER BY deleted_at DESC
+    `).all();
+
+        const mapped = items.map((item) => {
+            let payload = {};
+            try {
+                payload = JSON.parse(item.payload || '{}');
+            } catch (e) {
+                payload = {};
+            }
+            return {
+                id: item.id,
+                entity_id: item.entity_id,
+                deleted_at: item.deleted_at,
+                deleted_by: item.deleted_by,
+                can_restore_until: item.can_restore_until,
+                asset_number: payload.asset_number || '',
+                name: payload.name || '',
+                campus: payload.campus || '',
+                status: payload.status || '',
+                supplier_name: payload.supplier_name || ''
+            };
+        });
+
+        res.json(mapped);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/bin/:id', (req, res) => {
+    try {
+        const item = db.prepare(`
+      SELECT id, entity_id, deleted_at, deleted_by, can_restore_until, payload
+      FROM recycle_bin
+      WHERE entity_type = 'asset' AND id = ?
+    `).get(req.params.id);
+
+        if (!item) {
+            return res.status(404).json({ error: 'Recycle bin entry not found' });
+        }
+
+        let payload = {};
+        try {
+            payload = JSON.parse(item.payload || '{}');
+        } catch (e) {
+            payload = {};
+        }
+
+        res.json({ ...item, payload });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Export assignments by selected employees (CSV) - GET query
 router.get('/export/by-employees', (req, res) => {
     try {
@@ -280,7 +429,7 @@ router.get('/:id', (req, res) => {
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN employees e ON a.assigned_to = e.id
-      WHERE a.id = ?
+      WHERE a.id = ? AND a.deleted_at IS NULL
     `).get(req.params.id);
 
         if (!asset) {
@@ -309,26 +458,30 @@ router.post('/', (req, res) => {
         const {
             name,
             category_id,
-            model,
-            serial_number,
-            quantity = 1,
-            purchase_date,
-            purchase_price,
-            intune_price,
-            location,
-            notes
-        } = req.body;
+        model,
+        serial_number,
+        quantity = 1,
+        purchase_date,
+        purchase_price,
+        supplier_name,
+        warranty_period_months,
+        intune_price,
+        status = 'available',
+        campus = '',
+        location,
+        notes
+    } = req.body;
 
         const safeQuantity = Math.max(1, parseInt(quantity, 10) || 1);
 
         const result = db.prepare(`
       INSERT INTO assets (
         asset_number, name, category_id, model, serial_number, quantity, assigned_quantity,
-        purchase_date, purchase_price, intune_price, location, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+        purchase_date, purchase_price, supplier_name, warranty_period_months, intune_price, status, campus, location, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
             assetNumber, name, category_id, model, serial_number, safeQuantity,
-            purchase_date, purchase_price, intune_price, location, notes
+            purchase_date, purchase_price, supplier_name, Math.max(0, parseInt(warranty_period_months, 10) || 0), intune_price, status, campus, location, notes
         );
 
         // Add to history
@@ -378,8 +531,8 @@ router.post('/import', (req, res) => {
         const insertStmt = db.prepare(`
       INSERT INTO assets (
         asset_number, name, category_id, model, serial_number, quantity, assigned_quantity,
-        purchase_date, purchase_price, intune_price, status, location, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
+        purchase_date, purchase_price, supplier_name, warranty_period_months, intune_price, status, campus, location, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
         const importResult = db.transaction(() => {
@@ -389,6 +542,7 @@ router.post('/import', (req, res) => {
                 const categoryId = resolveCategoryId(item.category);
 
                 const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+                const warrantyMonths = Math.max(0, parseInt(item.warranty_period_months || item.warranty || item['warranty months'] || item['warranty period'], 10) || 0);
                 insertStmt.run(
                     generateAssetNumber(),
                     item.name || 'Unnamed Asset',
@@ -398,8 +552,11 @@ router.post('/import', (req, res) => {
                     qty,
                     item.purchase_date || null,
                     item.purchase_price || null,
+                    item.supplier_name || item.supplier || null,
+                    warrantyMonths,
                     null, // intune_price removed from input
                     status,
+                    item.campus || '',
                     item.location || null,
                     item.notes || null
                 );
@@ -422,18 +579,21 @@ router.put('/:id', (req, res) => {
             category_id,
             model,
             serial_number,
-            quantity = 1,
-            purchase_date,
-            purchase_price,
-            intune_price,
-            status,
-            location,
-            notes
-        } = req.body;
+        quantity = 1,
+        purchase_date,
+        purchase_price,
+        supplier_name,
+        warranty_period_months,
+        intune_price,
+        status,
+        campus = '',
+        location,
+        notes
+    } = req.body;
 
-        const current = db.prepare('SELECT status, assigned_quantity, assigned_to FROM assets WHERE id = ?').get(req.params.id);
-        if (!current) {
-            return res.status(404).json({ error: 'Asset not found' });
+    const current = db.prepare('SELECT status, assigned_quantity, assigned_to FROM assets WHERE id = ? AND deleted_at IS NULL').get(req.params.id);
+    if (!current) {
+        return res.status(404).json({ error: 'Asset not found' });
         }
 
         const safeQuantity = Math.max(1, parseInt(quantity, 10) || 1);
@@ -450,13 +610,13 @@ router.put('/:id', (req, res) => {
         db.prepare(`
       UPDATE assets SET
         name = ?, category_id = ?, model = ?, serial_number = ?, quantity = ?,
-        purchase_date = ?, purchase_price = ?, intune_price = ?,
-        status = ?, assigned_to = ?, assigned_quantity = ?, location = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+        purchase_date = ?, purchase_price = ?, supplier_name = ?, warranty_period_months = ?, intune_price = ?,
+        status = ?, assigned_to = ?, assigned_quantity = ?, campus = ?, location = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
             name, category_id, model, serial_number, safeQuantity,
-            purchase_date, purchase_price, intune_price,
-            status, newAssignedTo, newAssignedQty, location, notes, req.params.id
+            purchase_date, purchase_price, supplier_name, Math.max(0, parseInt(warranty_period_months, 10) || 0), intune_price,
+            status, newAssignedTo, newAssignedQty, campus, location, notes, req.params.id
         );
 
         if (statusChanged) {
@@ -494,15 +654,34 @@ router.delete('/:id', (req, res) => {
             }
         }
 
-        db.prepare('DELETE FROM asset_history WHERE asset_id = ?').run(req.params.id);
-        db.prepare('DELETE FROM assets WHERE id = ?').run(req.params.id);
-
-        if (req.user && req.user.role === 'subadmin') {
-            db.prepare('INSERT INTO delete_logs (user_id, target_type, target_id) VALUES (?, ?, ?)')
-                .run(req.user.id, 'asset', req.params.id);
+        const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.id);
+        if (!asset || asset.deleted_at) {
+            return res.status(404).json({ error: 'Asset not found' });
         }
 
-        res.json({ message: 'Asset deleted successfully' });
+        const userId = req.user?.id || null;
+
+        const doDelete = db.transaction(() => {
+            db.prepare(`
+        INSERT INTO recycle_bin (entity_type, entity_id, payload, deleted_at, deleted_by, can_restore_until)
+        VALUES ('asset', ?, ?, datetime('now','localtime'), ?, datetime('now','localtime', '+90 days'))
+      `).run(asset.id, JSON.stringify(asset), userId);
+
+            db.prepare(`
+        UPDATE assets
+        SET deleted_at = datetime('now','localtime'), deleted_by = ?
+        WHERE id = ?
+      `).run(userId, asset.id);
+
+            if (req.user && req.user.role === 'subadmin') {
+                db.prepare('INSERT INTO delete_logs (user_id, target_type, target_id) VALUES (?, ?, ?)')
+                    .run(req.user.id, 'asset', req.params.id);
+            }
+        });
+
+        doDelete();
+
+        res.json({ message: 'Asset moved to recycle bin (retained for 90 days)' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -516,15 +695,34 @@ router.post('/:id/assign', (req, res) => {
             return res.status(400).json({ error: 'Employee is required for assignment' });
         }
 
-        const asset = db.prepare('SELECT quantity, assigned_quantity, assigned_to FROM assets WHERE id = ?').get(req.params.id);
+        const asset = db.prepare('SELECT quantity, assigned_quantity, assigned_to FROM assets WHERE id = ? AND deleted_at IS NULL').get(req.params.id);
         if (!asset) {
             return res.status(404).json({ error: 'Asset not found' });
         }
 
         const requestedQty = Math.max(1, parseInt(quantity, 10) || 1);
-        const available = asset.quantity - asset.assigned_quantity;
-        if (requestedQty > available && asset.assigned_to !== employee_id) {
-            return res.status(400).json({ error: `Only ${available} available to assign` });
+        const currentAssigned = Math.max(0, parseInt(asset.assigned_quantity, 10) || 0);
+        const available = Math.max(asset.quantity - currentAssigned, 0);
+
+        let newAssignedQty = requestedQty;
+        let action = 'assigned';
+        let note = notes || `Assigned quantity ${requestedQty}`;
+
+        if (asset.assigned_to && asset.assigned_to === employee_id) {
+            if (requestedQty > available) {
+                return res.status(400).json({ error: `Only ${available} available to assign` });
+            }
+            newAssignedQty = currentAssigned + requestedQty;
+            action = 'assigned_more';
+            note = notes || `Increased assignment by ${requestedQty} (total ${newAssignedQty})`;
+        } else {
+            if (requestedQty > asset.quantity) {
+                return res.status(400).json({ error: `Cannot assign more than total quantity (${asset.quantity})` });
+            }
+            action = asset.assigned_to ? 'reassigned' : 'assigned';
+            note = asset.assigned_to
+                ? notes || `Reassigned from employee ${asset.assigned_to} to ${employee_id} (qty ${requestedQty})`
+                : note;
         }
 
         // If reassigning to the same employee, allow updating quantity; if to a different employee, move assignment.
@@ -532,12 +730,7 @@ router.post('/:id/assign', (req, res) => {
       UPDATE assets SET
         assigned_to = ?, status = 'assigned', assigned_quantity = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(employee_id, requestedQty, req.params.id);
-
-        const action = asset.assigned_to && asset.assigned_to !== employee_id ? 'reassigned' : 'assigned';
-        const note = asset.assigned_to && asset.assigned_to !== employee_id
-            ? `Reassigned from employee ${asset.assigned_to} to ${employee_id} (qty ${requestedQty})`
-            : notes || `Assigned quantity ${requestedQty}`;
+    `).run(employee_id, newAssignedQty, req.params.id);
 
         db.prepare(`
       INSERT INTO asset_history (asset_id, action, employee_id, notes)
@@ -555,7 +748,7 @@ router.post('/:id/assign', (req, res) => {
 router.post('/:id/return', (req, res) => {
     try {
         const { notes } = req.body;
-        const asset = db.prepare('SELECT assigned_to FROM assets WHERE id = ?').get(req.params.id);
+        const asset = db.prepare('SELECT assigned_to FROM assets WHERE id = ? AND deleted_at IS NULL').get(req.params.id);
 
         db.prepare(`
       UPDATE assets SET
@@ -570,6 +763,81 @@ router.post('/:id/return', (req, res) => {
 
         const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.id);
         res.json(updatedAsset);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Restore asset from recycle bin (password protected)
+router.post('/:id/restore', (req, res) => {
+    try {
+        const { password } = req.body;
+        if (!verifyRestorePassword(password)) {
+            return res.status(403).json({ error: 'Invalid recycle bin password' });
+        }
+
+        const binItem = db.prepare(`
+      SELECT * FROM recycle_bin
+      WHERE entity_type = 'asset' AND entity_id = ?
+    `).get(req.params.id);
+
+        if (!binItem) {
+            return res.status(404).json({ error: 'No recycle bin entry for this asset' });
+        }
+
+        const isExpired = db.prepare(`
+      SELECT CASE WHEN can_restore_until <= datetime('now','localtime') THEN 1 ELSE 0 END as expired
+      FROM recycle_bin WHERE id = ?
+    `).get(binItem.id)?.expired;
+
+        if (isExpired) {
+            return res.status(410).json({ error: 'Recycle bin entry expired and cannot be restored' });
+        }
+
+        let payload = {};
+        try {
+            payload = JSON.parse(binItem.payload || '{}');
+        } catch (e) {
+            // fall back to empty payload
+        }
+
+        const campus = payload.campus || '';
+        const restoreTx = db.transaction(() => {
+            db.prepare(`
+        UPDATE assets SET
+          asset_number = ?, name = ?, category_id = ?, model = ?, serial_number = ?, quantity = ?,
+          assigned_quantity = ?, purchase_date = ?, purchase_price = ?, supplier_name = ?, warranty_period_months = ?,
+          intune_price = ?, status = ?, assigned_to = ?, campus = ?, location = ?, notes = ?,
+          deleted_at = NULL, deleted_by = NULL, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(
+                payload.asset_number,
+                payload.name,
+                payload.category_id,
+                payload.model,
+                payload.serial_number,
+                payload.quantity || 1,
+                payload.assigned_quantity || 0,
+                payload.purchase_date || null,
+                payload.purchase_price || null,
+                payload.supplier_name || null,
+                Math.max(0, parseInt(payload.warranty_period_months, 10) || 0),
+                payload.intune_price || null,
+                payload.status || 'available',
+                payload.assigned_to || null,
+                campus,
+                payload.location || null,
+                payload.notes || null,
+                binItem.entity_id
+            );
+
+            db.prepare('DELETE FROM recycle_bin WHERE id = ?').run(binItem.id);
+        });
+
+        restoreTx();
+
+        const restored = db.prepare('SELECT * FROM assets WHERE id = ?').get(binItem.entity_id);
+        res.json({ message: 'Asset restored successfully', asset: restored });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
