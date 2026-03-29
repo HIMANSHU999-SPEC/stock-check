@@ -8,6 +8,7 @@ const { PassThrough } = require('stream');
 const crypto = require('crypto');
 
 const RESTORE_PASSWORD_HASH = crypto.createHash('sha256').update('Admin@123').digest('hex');
+const emailService = require('../utils/email');
 
 function verifyRestorePassword(password) {
     if (!password) return false;
@@ -738,6 +739,15 @@ router.post('/:id/assign', (req, res) => {
     `).run(req.params.id, action, employee_id, note);
 
         const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.id);
+
+        // Send email notification (non-blocking)
+        try {
+            const employee = db.prepare('SELECT id, name, email FROM employees WHERE id = ?').get(employee_id);
+            if (employee && employee.email) {
+                emailService.sendAssetAssigned({ asset: updatedAsset, employee, assignedBy: req.user?.name }).catch(() => {});
+            }
+        } catch (_e) {}
+
         res.json(updatedAsset);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -762,6 +772,17 @@ router.post('/:id/return', (req, res) => {
     `).run(req.params.id, asset.assigned_to, notes || 'Asset returned');
 
         const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.id);
+
+        // Send return email notification (non-blocking)
+        try {
+            if (asset.assigned_to) {
+                const employee = db.prepare('SELECT id, name, email FROM employees WHERE id = ?').get(asset.assigned_to);
+                if (employee && employee.email) {
+                    emailService.sendAssetReturned({ asset: updatedAsset, employee, returnedBy: req.user?.name }).catch(() => {});
+                }
+            }
+        } catch (_e) {}
+
         res.json(updatedAsset);
     } catch (error) {
         res.status(500).json({ error: error.message });

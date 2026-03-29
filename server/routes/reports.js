@@ -123,6 +123,51 @@ router.get('/by-campus', (req, res) => {
     }
 });
 
+// Campus detail: assets grouped by category with pricing
+router.get('/by-campus-detail', (req, res) => {
+    try {
+        const campus = req.query.campus !== undefined ? req.query.campus : null;
+        let campusFilter = campus !== null ? campus : null;
+
+        const rows = db.prepare(`
+            SELECT
+                CASE WHEN a.campus IS NULL OR TRIM(a.campus) = '' THEN 'Unspecified' ELSE a.campus END AS campus,
+                COALESCE(c.name, 'Uncategorized') AS category,
+                COUNT(a.id) AS asset_count,
+                SUM(a.quantity) AS total_quantity,
+                SUM(COALESCE(a.quantity,0) - COALESCE(a.assigned_quantity,0)) AS available_quantity,
+                SUM(a.assigned_quantity) AS assigned_quantity,
+                SUM(a.purchase_price) AS total_value,
+                SUM(a.intune_price) AS total_intune_value
+            FROM assets a
+            LEFT JOIN categories c ON a.category_id = c.id
+            WHERE a.deleted_at IS NULL
+            ${campusFilter !== null ? "AND (CASE WHEN a.campus IS NULL OR TRIM(a.campus) = '' THEN 'Unspecified' ELSE a.campus END) = ?" : ''}
+            GROUP BY campus, category
+            ORDER BY campus, total_value DESC
+        `).all(...(campusFilter !== null ? [campusFilter] : []));
+
+        // Group by campus
+        const grouped = {};
+        rows.forEach(row => {
+            if (!grouped[row.campus]) {
+                grouped[row.campus] = { campus: row.campus, categories: [], totals: { asset_count: 0, total_quantity: 0, available_quantity: 0, assigned_quantity: 0, total_value: 0, total_intune_value: 0 } };
+            }
+            grouped[row.campus].categories.push(row);
+            grouped[row.campus].totals.asset_count += row.asset_count || 0;
+            grouped[row.campus].totals.total_quantity += row.total_quantity || 0;
+            grouped[row.campus].totals.available_quantity += row.available_quantity || 0;
+            grouped[row.campus].totals.assigned_quantity += row.assigned_quantity || 0;
+            grouped[row.campus].totals.total_value += row.total_value || 0;
+            grouped[row.campus].totals.total_intune_value += row.total_intune_value || 0;
+        });
+
+        res.json(Object.values(grouped));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Get Intune pricing report
 router.get('/pricing', (req, res) => {
     try {

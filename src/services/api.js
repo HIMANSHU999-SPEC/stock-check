@@ -169,6 +169,7 @@ export const reportsAPI = {
     getByStatus: () => apiCall('/reports/by-status'),
     getBySupplier: () => apiCall('/reports/by-supplier'),
     getByCampus: () => apiCall('/reports/by-campus'),
+    getCampusDetail: (campus) => apiCall(`/reports/by-campus-detail${campus !== undefined ? `?campus=${encodeURIComponent(campus)}` : ''}`),
     getCategories: () => apiCall('/categories'),
 };
 
@@ -178,4 +179,15 @@ export const authAPI = {
     me: () => apiCall('/auth/me'),
     license: () => apiCall('/auth/license'),
     activate: (code) => apiCall('/auth/activate', { method: 'POST', body: JSON.stringify({ code }) }),
+    getEmailSettings: () => apiCall('/auth/email-settings'),
+    saveEmailSettings: (settings) => apiCall('/auth/email-settings', { method: 'POST', body: JSON.stringify(settings) }),
+    testEmail: () => apiCall('/auth/email-test', { method: 'POST', body: '{}' }),
+};
+
+// User management (admin only)
+export const usersAPI = {
+    getAll: () => apiCall('/auth/users'),
+    create: (data) => apiCall('/auth/users', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => apiCall(`/auth/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => apiCall(`/auth/users/${id}`, { method: 'DELETE' }),
 };

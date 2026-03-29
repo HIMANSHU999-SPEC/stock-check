@@ -4,6 +4,7 @@ import Dashboard from './components/Dashboard';
 import AssetList from './components/AssetList';
 import AssetDetails from './components/AssetDetails';
 import AssetForm from './components/AssetForm';
+import AssetImport from './components/AssetImport';
 import EmployeeList from './components/EmployeeList';
 import CategoryManagement from './components/CategoryManagement';
 import Reports from './components/Reports';
@@ -11,12 +12,16 @@ import TagPrinter from './components/TagPrinter';
 import Login from './components/Login';
 import EmployeeDetails from './components/EmployeeDetails';
 import RecycleBin from './components/RecycleBin';
+import CampusReport from './components/CampusReport';
+import UserManagement from './components/UserManagement';
+import EmailSettings from './components/EmailSettings';
 import { authAPI, saveAuthToken, clearAuthToken } from './services/api';
 import './index.css';
 
 function Navbar({ user, onLogout, license }) {
     const location = useLocation();
     const [darkMode, setDarkMode] = React.useState(true);
+    const [menuOpen, setMenuOpen] = React.useState(false);
 
     React.useEffect(() => {
         if (darkMode) {
@@ -26,7 +31,7 @@ function Navbar({ user, onLogout, license }) {
         }
     }, [darkMode]);
 
-    const isActive = (path) => location.pathname === path;
+    const isActive = (path) => location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
 
     return (
         <nav className="navbar">
@@ -39,7 +44,7 @@ function Navbar({ user, onLogout, license }) {
                 </div>
                 <ul className="navbar-nav">
                     <li>
-                        <Link to="/" className={`nav-link ${isActive('/') ? 'active' : ''}`}>
+                        <Link to="/" className={`nav-link ${location.pathname === '/' ? 'active' : ''}`}>
                             Dashboard
                         </Link>
                     </li>
@@ -54,6 +59,11 @@ function Navbar({ user, onLogout, license }) {
                         </Link>
                     </li>
                     <li>
+                        <Link to="/campus-report" className={`nav-link ${isActive('/campus-report') ? 'active' : ''}`}>
+                            Campus
+                        </Link>
+                    </li>
+                    <li>
                         <Link to="/categories" className={`nav-link ${isActive('/categories') ? 'active' : ''}`}>
                             Categories
                         </Link>
@@ -65,14 +75,21 @@ function Navbar({ user, onLogout, license }) {
                     </li>
                     <li>
                         <Link to="/recycle-bin" className={`nav-link ${isActive('/recycle-bin') ? 'active' : ''}`}>
-                            Recycle Bin
+                            Bin
                         </Link>
                     </li>
                     <li>
                         <Link to="/tags" className={`nav-link ${isActive('/tags') ? 'active' : ''}`}>
-                            Print Tags
+                            Tags
                         </Link>
                     </li>
+                    {user?.role === 'admin' && (
+                        <li>
+                            <Link to="/admin/users" className={`nav-link ${isActive('/admin') ? 'active' : ''}`}>
+                                Admin
+                            </Link>
+                        </li>
+                    )}
                     <li>
                         <button
                             className="theme-toggle"
@@ -124,7 +141,7 @@ function Footer() {
     );
 }
 
-function ProtectedRoute({ user, license, authLoading, children }) {
+function ProtectedRoute({ user, license, authLoading, adminOnly, children }) {
     if (authLoading) {
         return <div className="spinner"></div>;
     }
@@ -135,6 +152,10 @@ function ProtectedRoute({ user, license, authLoading, children }) {
 
     if (!user) {
         return <Navigate to="/login" replace />;
+    }
+
+    if (adminOnly && user.role !== 'admin') {
+        return <Navigate to="/" replace />;
     }
 
     return children;
@@ -208,94 +229,21 @@ function App() {
                                     )
                                 }
                             />
-                            <Route
-                                path="/"
-                                element={
-                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
-                                        <Dashboard />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/assets"
-                                element={
-                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
-                                        <AssetList />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/assets/new"
-                                element={
-                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
-                                        <AssetForm />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/assets/:id"
-                                element={
-                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
-                                        <AssetDetails />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/assets/:id/edit"
-                                element={
-                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
-                                        <AssetForm />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/employees"
-                                element={
-                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
-                                        <EmployeeList />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/employees/:id"
-                                element={
-                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
-                                        <EmployeeDetails />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/categories"
-                                element={
-                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
-                                        <CategoryManagement />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/reports"
-                                element={
-                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
-                                        <Reports />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/tags"
-                                element={
-                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
-                                        <TagPrinter />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/recycle-bin"
-                                element={
-                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
-                                        <RecycleBin />
-                                    </ProtectedRoute>
-                                }
-                            />
+                            <Route path="/" element={<ProtectedRoute user={user} license={license} authLoading={authLoading}><Dashboard /></ProtectedRoute>} />
+                            <Route path="/assets" element={<ProtectedRoute user={user} license={license} authLoading={authLoading}><AssetList /></ProtectedRoute>} />
+                            <Route path="/assets/new" element={<ProtectedRoute user={user} license={license} authLoading={authLoading}><AssetForm /></ProtectedRoute>} />
+                            <Route path="/assets/import" element={<ProtectedRoute user={user} license={license} authLoading={authLoading}><AssetImport /></ProtectedRoute>} />
+                            <Route path="/assets/:id" element={<ProtectedRoute user={user} license={license} authLoading={authLoading}><AssetDetails /></ProtectedRoute>} />
+                            <Route path="/assets/:id/edit" element={<ProtectedRoute user={user} license={license} authLoading={authLoading}><AssetForm /></ProtectedRoute>} />
+                            <Route path="/employees" element={<ProtectedRoute user={user} license={license} authLoading={authLoading}><EmployeeList /></ProtectedRoute>} />
+                            <Route path="/employees/:id" element={<ProtectedRoute user={user} license={license} authLoading={authLoading}><EmployeeDetails /></ProtectedRoute>} />
+                            <Route path="/categories" element={<ProtectedRoute user={user} license={license} authLoading={authLoading}><CategoryManagement /></ProtectedRoute>} />
+                            <Route path="/reports" element={<ProtectedRoute user={user} license={license} authLoading={authLoading}><Reports /></ProtectedRoute>} />
+                            <Route path="/campus-report" element={<ProtectedRoute user={user} license={license} authLoading={authLoading}><CampusReport /></ProtectedRoute>} />
+                            <Route path="/tags" element={<ProtectedRoute user={user} license={license} authLoading={authLoading}><TagPrinter /></ProtectedRoute>} />
+                            <Route path="/recycle-bin" element={<ProtectedRoute user={user} license={license} authLoading={authLoading}><RecycleBin /></ProtectedRoute>} />
+                            <Route path="/admin/users" element={<ProtectedRoute user={user} license={license} authLoading={authLoading} adminOnly><UserManagement /></ProtectedRoute>} />
+                            <Route path="/admin/email" element={<ProtectedRoute user={user} license={license} authLoading={authLoading} adminOnly><EmailSettings /></ProtectedRoute>} />
                         </Routes>
                     </div>
                 </main>
