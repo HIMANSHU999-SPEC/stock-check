@@ -27,7 +27,32 @@ falls back to `server/stock-management.db` if it is not set.
 
 ## Option A — EC2 / Lightsail (Node + PM2)
 
-One-time setup to move the database onto a stable path (do this once):
+### Connecting to a Lightsail instance (SSH with your .pem key)
+
+Keep your `.pem` key private — never share or commit it.
+
+```bash
+# From your own machine. Lock down key permissions the first time:
+chmod 400 /path/to/LightsailKey.pem
+
+# Connect. User is "bitnami" for the Node.js blueprint, "ubuntu" for Ubuntu OS:
+ssh -i /path/to/LightsailKey.pem ubuntu@YOUR_INSTANCE_PUBLIC_IP
+```
+
+Once connected, locate the app and the current database (they were set up when
+you first deployed):
+
+```bash
+sudo find / -name 'stock-management.db' 2>/dev/null   # where the data lives
+sudo find / -type d -name 'stock-check' 2>/dev/null   # the app directory
+pm2 list                                              # how it's running (if PM2)
+cd /path/to/stock-check                               # cd into the app dir
+```
+
+> **Before anything else, back up the database** (see command below). Note the
+> path it is in — you pass that as `DB_PATH`.
+
+### One-time setup to move the database onto a stable path (recommended)
 
 ```bash
 sudo mkdir -p /var/lib/stock-management
@@ -36,11 +61,14 @@ sudo mv server/stock-management.db /var/lib/stock-management/ 2>/dev/null || tru
 ```
 
 Then update with the bundled script (it backs up the DB, pulls, installs,
-builds, and restarts):
+builds, and restarts). The first time, fetch the branch once so the script
+itself is present, then run it:
 
 ```bash
 cd /path/to/stock-check
-export DB_PATH=/var/lib/stock-management/stock-management.db
+git fetch origin claude/library-management-system-s0vpql
+git checkout claude/library-management-system-s0vpql
+export DB_PATH=/var/lib/stock-management/stock-management.db   # your DB path
 BRANCH=claude/library-management-system-s0vpql ./scripts/update.sh
 ```
 
