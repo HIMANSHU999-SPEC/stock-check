@@ -7,7 +7,8 @@ A comprehensive stock management application for **London Academy for Applied Te
 - ✅ **Asset Management**: Register, track, and manage all organizational assets
 - ✅ **Automatic Asset Numbering**: Auto-generated asset numbers in format `AST-YYYY-NNNN`
 - ✅ **Employee Management**: Manage employees and asset assignments
-- ✅ **QR Code Tags**: Generate and print asset tags with QR codes
+- ✅ **Library Management**: Books inventory, borrowers (students & staff), QR-code issue/return desk
+- ✅ **QR Code Tags**: Generate and print asset and book tags with QR codes
 - ✅ **Email Drafts**: Create email drafts for asset assignments via default email client
 - ✅ **Intune Pricing**: Track purchase prices and Intune pricing for cost analysis
 - ✅ **Reports & Analytics**: Comprehensive reporting with CSV export
@@ -91,6 +92,27 @@ A comprehensive stock management application for **London Academy for Applied Te
 2. View summary statistics, category breakdown, and Intune pricing analysis
 3. Export Intune pricing report to CSV
 
+### Library Management
+
+The **Books**, **Borrowers**, and **Issue Desk** sections form a self-contained
+library module (available to logged-in admin users).
+
+1. **Add books** — Go to **Books → Add New Book**. Each book gets an auto-generated
+   accession number (`LIB-YYYY-NNNN`). You can also bulk-import from Excel and
+   print QR tags for the shelves (each tag encodes the book number).
+2. **Add borrowers** — Go to **Borrowers** and add **students** or **staff**
+   (with an ID, class/department, email, etc.). These are "the people already in
+   the system" you issue books to.
+3. **Issue books** — Go to **Issue Desk**:
+   - Scan a book's QR/barcode with a handheld scanner (keyboard-wedge — it types
+     the book number and presses Enter) or type the number manually. Each scan
+     adds the book to a **temporary list**.
+   - Adjust quantities, pick a borrower already in the system (or add a new one
+     inline), set a due date, and click **Issue** to check the whole list out at once.
+4. **Return books** — The Issue Desk shows all currently-issued books with a
+   **Return** button; overdue loans are flagged. Returns are also available from a
+   book's details page.
+
 ## Project Structure
 
 ```
@@ -144,6 +166,27 @@ stock-management/
 - `PUT /api/employees/:id` - Update employee
 - `DELETE /api/employees/:id` - Delete employee
 
+### Books (Library)
+- `GET /api/books` - List books (filters: `search`, `category`, `campus`, `availability`)
+- `POST /api/books` - Add a book (auto number `LIB-YYYY-NNNN`)
+- `GET /api/books/:id` - Get a book with its loan history
+- `PUT /api/books/:id` - Update a book
+- `DELETE /api/books/:id` - Delete a book (blocked while copies are on loan)
+- `GET /api/books/lookup?number=LIB-YYYY-NNNN` - Look up a book by its number (QR/barcode scan)
+- `POST /api/books/import` - Bulk import books
+- `GET /api/books/summary` - Library statistics
+- `GET /api/books/export` - Export inventory to CSV
+- `POST /api/books/issue` - Issue a temporary list of books to one borrower
+- `GET /api/books/loans` - List loans (filters: `status`, `overdue`)
+- `POST /api/books/loans/:loanId/return` - Return a specific loan
+
+### Borrowers (students & staff)
+- `GET /api/borrowers` - List borrowers (filters: `type`, `search`)
+- `POST /api/borrowers` - Create a borrower
+- `GET /api/borrowers/:id` - Get a borrower with loan history
+- `PUT /api/borrowers/:id` - Update a borrower
+- `DELETE /api/borrowers/:id` - Delete a borrower (blocked while books are on loan)
+
 ### Reports
 - `GET /api/reports/summary` - Get summary statistics
 - `GET /api/reports/by-category` - Assets by category
@@ -167,6 +210,16 @@ stock-management/
 
 ### Asset History Table
 - `id`, `asset_id`, `action`, `employee_id`, `notes`, `timestamp`
+
+### Books Table
+- `id`, `book_number`, `title`, `author`, `isbn`, `category`, `publisher`, `published_year`
+- `quantity`, `issued_quantity`, `shelf_location`, `campus`, `notes`, `created_at`, `updated_at`
+
+### Borrowers Table
+- `id`, `name`, `type` (`student`/`staff`), `identifier`, `email`, `class_dept`, `phone`, `campus`, `created_at`
+
+### Book Loans Table
+- `id`, `book_id`, `borrower_id`, `quantity`, `issued_at`, `due_at`, `returned_at`, `status`, `issued_by`, `notes`
 
 ## Development
 

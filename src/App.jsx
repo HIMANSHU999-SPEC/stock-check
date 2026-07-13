@@ -11,6 +11,12 @@ import TagPrinter from './components/TagPrinter';
 import Login from './components/Login';
 import EmployeeDetails from './components/EmployeeDetails';
 import RecycleBin from './components/RecycleBin';
+import BookList from './components/BookList';
+import BookForm from './components/BookForm';
+import BookDetails from './components/BookDetails';
+import BorrowerList from './components/BorrowerList';
+import IssueDesk from './components/IssueDesk';
+import BookTagPrinter from './components/BookTagPrinter';
 import { authAPI, saveAuthToken, clearAuthToken } from './services/api';
 import './index.css';
 
@@ -61,6 +67,21 @@ function Navbar({ user, onLogout, license }) {
                     <li>
                         <Link to="/reports" className={`nav-link ${isActive('/reports') ? 'active' : ''}`}>
                             Reports
+                        </Link>
+                    </li>
+                    <li>
+                        <Link to="/books" className={`nav-link ${isActive('/books') ? 'active' : ''}`}>
+                            Books
+                        </Link>
+                    </li>
+                    <li>
+                        <Link to="/borrowers" className={`nav-link ${isActive('/borrowers') ? 'active' : ''}`}>
+                            Borrowers
+                        </Link>
+                    </li>
+                    <li>
+                        <Link to="/library/issue" className={`nav-link ${isActive('/library/issue') ? 'active' : ''}`}>
+                            Issue Desk
                         </Link>
                     </li>
                     <li>
@@ -293,6 +314,62 @@ function App() {
                                 element={
                                     <ProtectedRoute user={user} license={license} authLoading={authLoading}>
                                         <RecycleBin />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/books"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <BookList />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/books/new"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <BookForm />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/books/:id"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <BookDetails />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/books/:id/edit"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <BookForm />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/borrowers"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <BorrowerList />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/library/issue"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <IssueDesk />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/library/tags"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <BookTagPrinter />
                                     </ProtectedRoute>
                                 }
                             />

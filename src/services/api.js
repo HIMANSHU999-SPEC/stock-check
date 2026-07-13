@@ -172,6 +172,42 @@ export const reportsAPI = {
     getCategories: () => apiCall('/categories'),
 };
 
+// Books / Library API
+export const booksAPI = {
+    getAll: (params = {}) => {
+        const query = new URLSearchParams(params).toString();
+        return apiCall(`/books${query ? `?${query}` : ''}`);
+    },
+    getById: (id) => apiCall(`/books/${id}`),
+    lookup: (number) => apiCall(`/books/lookup?number=${encodeURIComponent(number)}`),
+    create: (data) => apiCall('/books', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => apiCall(`/books/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => apiCall(`/books/${id}`, { method: 'DELETE' }),
+    importBulk: (items) => apiCall('/books/import', { method: 'POST', body: JSON.stringify({ items }) }),
+    summary: () => apiCall('/books/summary'),
+    // Loans
+    issue: (data) => apiCall('/books/issue', { method: 'POST', body: JSON.stringify(data) }),
+    getLoans: (params = {}) => {
+        const query = new URLSearchParams(params).toString();
+        return apiCall(`/books/loans${query ? `?${query}` : ''}`);
+    },
+    returnLoan: (loanId, notes) =>
+        apiCall(`/books/loans/${loanId}/return`, { method: 'POST', body: JSON.stringify({ notes }) }),
+    exportInventory: () => downloadCsv('/books/export', 'books-inventory.csv'),
+};
+
+// Borrowers API (students & staff)
+export const borrowersAPI = {
+    getAll: (params = {}) => {
+        const query = new URLSearchParams(params).toString();
+        return apiCall(`/borrowers${query ? `?${query}` : ''}`);
+    },
+    getById: (id) => apiCall(`/borrowers/${id}`),
+    create: (data) => apiCall('/borrowers', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => apiCall(`/borrowers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => apiCall(`/borrowers/${id}`, { method: 'DELETE' }),
+};
+
 // Auth & license
 export const authAPI = {
     login: (email, password) => apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),

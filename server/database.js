@@ -155,6 +155,65 @@ function initializeDatabase() {
     )
   `);
 
+  // ---------------------------------------------------------------------------
+  // Library management tables
+  // ---------------------------------------------------------------------------
+
+  // Books inventory
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS books (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      book_number TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      author TEXT,
+      isbn TEXT,
+      category TEXT,
+      publisher TEXT,
+      published_year INTEGER,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      issued_quantity INTEGER NOT NULL DEFAULT 0,
+      shelf_location TEXT,
+      campus TEXT DEFAULT '',
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Borrowers (students and staff) — the library's own people list,
+  // kept separate from IT-asset "employees".
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS borrowers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'student' CHECK (type IN ('student', 'staff')),
+      identifier TEXT,
+      email TEXT,
+      class_dept TEXT,
+      phone TEXT,
+      campus TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Book loans (issue / return records)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS book_loans (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      book_id INTEGER NOT NULL,
+      borrower_id INTEGER NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      issued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      due_at DATETIME,
+      returned_at DATETIME,
+      status TEXT NOT NULL DEFAULT 'issued' CHECK (status IN ('issued', 'returned')),
+      issued_by INTEGER,
+      notes TEXT,
+      FOREIGN KEY (book_id) REFERENCES books(id),
+      FOREIGN KEY (borrower_id) REFERENCES borrowers(id)
+    )
+  `);
+
   // Asset history table
   db.exec(`
     CREATE TABLE IF NOT EXISTS asset_history (

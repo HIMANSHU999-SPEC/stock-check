@@ -58,6 +58,8 @@ app.use('/api/assets', require('./routes/assets'));
 app.use('/api/employees', require('./routes/employees'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/reports', require('./routes/reports'));
+app.use('/api/books', require('./routes/books'));
+app.use('/api/borrowers', require('./routes/borrowers'));
 
 // Daily purge for recycle bin (assets older than 90 days)
 function purgeRecycleBin() {
