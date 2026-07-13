@@ -37,6 +37,15 @@ export default function BookTagPrinter() {
     }
 
     const selectedData = books.filter((b) => selected.includes(b.id));
+    // One tag per physical copy: a book with 5 copies prints 5 tags.
+    const tagsToPrint = selectedData.flatMap((book) => {
+        const copies = Math.max(1, book.quantity || 1);
+        return Array.from({ length: copies }, (_, i) => ({
+            ...book,
+            tagKey: `${book.id}-${i}`,
+            copyLabel: copies > 1 ? `Copy ${i + 1} of ${copies}` : null
+        }));
+    });
 
     if (loading) {
         return <div className="spinner"></div>;
@@ -59,7 +68,7 @@ export default function BookTagPrinter() {
                                     className="btn btn-sm btn-primary"
                                     disabled={selected.length === 0}
                                 >
-                                    Print {selected.length} Tag(s)
+                                    Print {tagsToPrint.length} Tag(s) — one per copy
                                 </button>
                             </div>
                         </div>
@@ -80,6 +89,7 @@ export default function BookTagPrinter() {
                                     <th>Title</th>
                                     <th>Author</th>
                                     <th>Category</th>
+                                    <th>Copies (= tags)</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -96,6 +106,7 @@ export default function BookTagPrinter() {
                                         <td>{book.title}</td>
                                         <td>{book.author || 'N/A'}</td>
                                         <td>{book.category || 'N/A'}</td>
+                                        <td>{book.quantity || 1}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -142,19 +153,20 @@ export default function BookTagPrinter() {
           `}</style>
 
                     <div className="tag-grid">
-                        {selectedData.map((book) => (
-                            <div key={book.id} className="asset-tag">
+                        {tagsToPrint.map((tag) => (
+                            <div key={tag.tagKey} className="asset-tag">
                                 <div style={{ marginBottom: '0.2cm' }}>
-                                    <QRCode value={book.book_number} size={96} />
+                                    <QRCode value={tag.book_number} size={96} />
                                 </div>
                                 <div style={{ fontSize: '16px', fontWeight: 'bold', textAlign: 'center', marginBottom: '0.2cm' }}>
-                                    {book.book_number}
+                                    {tag.book_number}
                                 </div>
                                 <div style={{ fontSize: '11px', textAlign: 'center', marginBottom: '0.1cm' }}>
-                                    {book.title}
+                                    {tag.title}
                                 </div>
                                 <div style={{ fontSize: '10px', textAlign: 'center', color: '#666' }}>
-                                    {book.author || ''}
+                                    {tag.author || ''}
+                                    {tag.copyLabel ? `${tag.author ? ' — ' : ''}${tag.copyLabel}` : ''}
                                 </div>
                                 <div style={{ fontSize: '8px', textAlign: 'center', marginTop: '0.2cm', color: '#999' }}>
                                     London Academy for Applied Technology

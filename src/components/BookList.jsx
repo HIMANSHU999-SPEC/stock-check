@@ -100,7 +100,16 @@ export default function BookList() {
     return (
         <div>
             <div className="flex justify-between items-center mb-3">
-                <h2>Library — Books</h2>
+                <div>
+                    <h2 style={{ marginBottom: '0.15rem' }}>Library — Books</h2>
+                    {!loading && (
+                        <span className="text-muted">
+                            {books.length} title{books.length === 1 ? '' : 's'} ·{' '}
+                            {books.reduce((s, b) => s + (b.quantity || 0), 0)} total copies ·{' '}
+                            {books.reduce((s, b) => s + (b.available_quantity || 0), 0)} available
+                        </span>
+                    )}
+                </div>
                 <div className="flex gap-2">
                     <button onClick={handleExport} className="btn btn-secondary">
                         Export CSV
