@@ -219,6 +219,20 @@ function initializeDatabase() {
     )
   `);
 
+  // Activity log (audit trail) — records key actions across the system
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      user_email TEXT,
+      action TEXT NOT NULL,
+      entity_type TEXT,
+      entity_id INTEGER,
+      description TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Asset history table
   db.exec(`
     CREATE TABLE IF NOT EXISTS asset_history (

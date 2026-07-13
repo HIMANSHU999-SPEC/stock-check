@@ -17,6 +17,8 @@ import BookDetails from './components/BookDetails';
 import BorrowerList from './components/BorrowerList';
 import IssueDesk from './components/IssueDesk';
 import BookTagPrinter from './components/BookTagPrinter';
+import UserManagement from './components/UserManagement';
+import ActivityLog from './components/ActivityLog';
 import { authAPI, saveAuthToken, clearAuthToken } from './services/api';
 import './index.css';
 
@@ -92,6 +94,18 @@ function Navbar({ user, onLogout, license }) {
                             Issue Desk
                         </Link>
                     </li>
+                    <li>
+                        <Link to="/activity" className={`nav-link ${isActive('/activity') ? 'active' : ''}`}>
+                            Activity
+                        </Link>
+                    </li>
+                    {user?.role === 'admin' && (
+                        <li>
+                            <Link to="/users" className={`nav-link ${isActive('/users') ? 'active' : ''}`}>
+                                Users
+                            </Link>
+                        </li>
+                    )}
                     <li>
                         <Link to="/recycle-bin" className={`nav-link ${isActive('/recycle-bin') ? 'active' : ''}`}>
                             Recycle Bin
@@ -378,6 +392,22 @@ function App() {
                                 element={
                                     <ProtectedRoute user={user} license={license} authLoading={authLoading}>
                                         <BookTagPrinter />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/activity"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <ActivityLog />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/users"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <UserManagement currentUser={user} />
                                     </ProtectedRoute>
                                 }
                             />

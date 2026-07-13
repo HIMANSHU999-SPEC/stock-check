@@ -1,11 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { reportsAPI, assetsAPI, authAPI } from '../services/api';
+import { reportsAPI, assetsAPI, authAPI, booksAPI } from '../services/api';
+
+// Lightweight horizontal bar chart (no external chart library).
+function BarChart({ data, unit = '' }) {
+    const max = Math.max(1, ...data.map((d) => d.value));
+    const palette = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#ec4899', '#84cc16'];
+    if (!data.length) {
+        return <p className="text-muted">No data yet</p>;
+    }
+    return (
+        <div className="flex flex-col gap-2">
+            {data.map((d, i) => (
+                <div key={d.label}>
+                    <div className="flex justify-between" style={{ fontSize: '0.85rem', marginBottom: '2px' }}>
+                        <span>{d.label}</span>
+                        <span className="text-muted">{unit}{(d.value || 0).toLocaleString()}</span>
+                    </div>
+                    <div style={{ background: 'rgba(127,127,127,0.15)', borderRadius: '4px', overflow: 'hidden', height: '14px' }}>
+                        <div style={{
+                            width: `${Math.round((d.value / max) * 100)}%`,
+                            background: palette[i % palette.length],
+                            height: '100%'
+                        }} />
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
 
 export default function Dashboard() {
     const [stats, setStats] = useState(null);
     const [recentAssets, setRecentAssets] = useState([]);
     const [campusStats, setCampusStats] = useState([]);
+    const [statusStats, setStatusStats] = useState([]);
+    const [categoryStats, setCategoryStats] = useState([]);
+    const [bookSummary, setBookSummary] = useState(null);
     const [license, setLicense] = useState(null);
     const [showLicense, setShowLicense] = useState(true);
     const [campusModal, setCampusModal] = useState({ open: false, name: '', assets: [], loading: false });
@@ -17,14 +48,24 @@ export default function Dashboard() {
 
     async function loadData() {
         try {
-            const [summaryData, assetsData, campusData] = await Promise.all([
+            const [summaryData, assetsData, campusData, statusData, categoryData] = await Promise.all([
                 reportsAPI.getSummary(),
                 assetsAPI.getAll(),
-                reportsAPI.getByCampus()
+                reportsAPI.getByCampus(),
+                reportsAPI.getByStatus().catch(() => []),
+                reportsAPI.getByCategory().catch(() => [])
             ]);
             setStats(summaryData);
             setRecentAssets(assetsData.slice(0, 5));
             setCampusStats(campusData);
+            setStatusStats(statusData);
+            setCategoryStats(categoryData);
+            try {
+                const bs = await booksAPI.summary();
+                setBookSummary(bs);
+            } catch (e) {
+                // library summary optional
+            }
             try {
                 const lic = await authAPI.license();
                 setLicense(lic);
@@ -105,6 +146,69 @@ export default function Dashboard() {
                         £{(stats?.total_value || 0).toLocaleString()}
                     </div>
                     <div className="text-muted">Purchase price</div>
+                </div>
+            </div>
+
+            <div className="grid grid-2">
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title">Assets by Status</h3>
+                    </div>
+                    <div className="card-body">
+                        <BarChart data={statusStats.map((s) => ({ label: s.status || 'unknown', value: s.count || 0 }))} />
+                    </div>
+                </div>
+                <div className="card">
+                    <div className="card-header">
+                        <h3 className="card-title">Top Categories</h3>
+                    </div>
+                    <div className="card-body">
+                        <BarChart
+                            data={[...categoryStats]
+                                .sort((a, b) => (b.count || 0) - (a.count || 0))
+                                .slice(0, 6)
+                                .map((c) => ({ label: c.name, value: c.count || 0 }))}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <div className="card">
+                <div className="card-header">
+                    <div className="flex justify-between items-center">
+                        <h3 className="card-title">📚 Library Overview</h3>
+                        <Link to="/library/issue" className="btn btn-sm btn-primary">Issue Desk</Link>
+                    </div>
+                </div>
+                <div className="card-body">
+                    <div className="stats-grid" style={{ marginBottom: '1rem' }}>
+                        <div className="stat-card">
+                            <div className="stat-label">Book Titles</div>
+                            <div className="stat-value">{bookSummary?.titles || 0}</div>
+                            <div className="text-muted">{bookSummary?.total_copies || 0} total copies</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-label">On Loan</div>
+                            <div className="stat-value">{bookSummary?.active_loans || 0}</div>
+                            <div className="text-muted">{bookSummary?.issued_copies || 0} copies issued</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-label">Overdue</div>
+                            <div className="stat-value">{bookSummary?.overdue_loans || 0}</div>
+                            <div className="text-muted">past due date</div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-label">Borrowers</div>
+                            <div className="stat-value">{bookSummary?.borrowers || 0}</div>
+                            <div className="text-muted">students &amp; staff</div>
+                        </div>
+                    </div>
+                    <BarChart
+                        data={[
+                            { label: 'Available copies', value: bookSummary?.available_copies || 0 },
+                            { label: 'Issued copies', value: bookSummary?.issued_copies || 0 }
+                        ]}
+                    />
                 </div>
             </div>
 

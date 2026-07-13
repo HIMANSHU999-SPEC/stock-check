@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { logActivity } = require('../utils/activity');
 
 const ALLOWED_TYPES = ['student', 'staff'];
 
@@ -76,6 +77,10 @@ router.post('/', (req, res) => {
     `).run(name.trim(), safeType, identifier || null, email || null, class_dept || null, phone || null, campus || '');
 
         const created = db.prepare('SELECT * FROM borrowers WHERE id = ?').get(result.lastInsertRowid);
+        logActivity(req, {
+            action: 'borrower_created', entity_type: 'borrower', entity_id: created.id,
+            description: `Added ${created.type} borrower ${created.name}`
+        });
         res.status(201).json(created);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -115,8 +120,13 @@ router.delete('/:id', (req, res) => {
             return res.status(400).json({ error: 'Cannot delete a borrower with books still on loan' });
         }
 
+        const borrower = db.prepare('SELECT * FROM borrowers WHERE id = ?').get(req.params.id);
         db.prepare('DELETE FROM book_loans WHERE borrower_id = ?').run(req.params.id);
         db.prepare('DELETE FROM borrowers WHERE id = ?').run(req.params.id);
+        logActivity(req, {
+            action: 'borrower_deleted', entity_type: 'borrower', entity_id: Number(req.params.id),
+            description: `Deleted borrower ${borrower ? borrower.name : req.params.id}`
+        });
         res.json({ message: 'Borrower deleted successfully' });
     } catch (error) {
         res.status(500).json({ error: error.message });

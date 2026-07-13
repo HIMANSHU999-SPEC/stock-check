@@ -211,6 +211,22 @@ export const borrowersAPI = {
     delete: (id) => apiCall(`/borrowers/${id}`, { method: 'DELETE' }),
 };
 
+// Users API (admin-only)
+export const usersAPI = {
+    getAll: () => apiCall('/users'),
+    create: (data) => apiCall('/users', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => apiCall(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => apiCall(`/users/${id}`, { method: 'DELETE' }),
+};
+
+// Activity log / audit trail API
+export const activityAPI = {
+    list: (params = {}) => {
+        const query = new URLSearchParams(params).toString();
+        return apiCall(`/activity${query ? `?${query}` : ''}`);
+    },
+};
+
 // Auth & license
 export const authAPI = {
     login: (email, password) => apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),

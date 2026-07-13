@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { generateBookNumber } = require('../utils/bookNumber');
+const { logActivity } = require('../utils/activity');
 
 function toCsv(rows) {
     if (!rows || rows.length === 0) return '';
@@ -239,6 +240,10 @@ router.post('/issue', (req, res) => {
         });
 
         const issued = runIssue();
+        logActivity(req, {
+            action: 'books_issued', entity_type: 'borrower', entity_id: borrower_id,
+            description: `Issued ${issued.length} title(s) to ${borrower.name} (${borrower.type})`
+        });
         res.status(201).json({
             message: `Issued ${issued.length} title(s) to ${borrower.name}`,
             borrower,
@@ -284,6 +289,11 @@ router.post('/loans/:loanId/return', (req, res) => {
       JOIN borrowers br ON l.borrower_id = br.id
       WHERE l.id = ?
     `).get(loan.id);
+
+        logActivity(req, {
+            action: 'book_returned', entity_type: 'book', entity_id: loan.book_id,
+            description: `Returned "${updated.title}" (${updated.book_number}) from ${updated.borrower_name}`
+        });
 
         res.json({ message: 'Book returned', loan: updated });
     } catch (error) {
@@ -349,6 +359,10 @@ router.post('/', (req, res) => {
         );
 
         const created = db.prepare('SELECT * FROM books WHERE id = ?').get(result.lastInsertRowid);
+        logActivity(req, {
+            action: 'book_created', entity_type: 'book', entity_id: created.id,
+            description: `Added book "${created.title}" (${created.book_number})`
+        });
         res.status(201).json(decorate(created));
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -433,6 +447,10 @@ router.put('/:id', (req, res) => {
         );
 
         const updated = db.prepare('SELECT * FROM books WHERE id = ?').get(req.params.id);
+        logActivity(req, {
+            action: 'book_updated', entity_type: 'book', entity_id: updated.id,
+            description: `Updated book "${updated.title}" (${updated.book_number})`
+        });
         res.json(decorate(updated));
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -456,6 +474,11 @@ router.delete('/:id', (req, res) => {
             db.prepare("DELETE FROM book_loans WHERE book_id = ? AND status = 'returned'").run(book.id);
             db.prepare('DELETE FROM books WHERE id = ?').run(book.id);
         })();
+
+        logActivity(req, {
+            action: 'book_deleted', entity_type: 'book', entity_id: book.id,
+            description: `Deleted book "${book.title}" (${book.book_number})`
+        });
 
         res.json({ message: 'Book deleted successfully' });
     } catch (error) {
