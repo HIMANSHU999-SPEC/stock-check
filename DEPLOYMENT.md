@@ -1,5 +1,18 @@
 # Deployment & Updating on AWS (data-safe)
 
+## Environment variables
+
+No credentials are hardcoded in this repository. Configure via environment:
+
+| Variable | Purpose |
+|---|---|
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | First admin account, created **only** when the users table is empty (fresh install). If unset, a random password is generated and printed once to the server console. Existing databases are never modified. |
+| `AUTH_SECRET` | Secret for signing login tokens. **Set this in production** (e.g. `openssl rand -hex 32`); the fallback default is public in the repo. |
+| `MASTER_RESET_PASSWORD` | Optional master override for password resets. Disabled when unset. |
+| `RESTORE_PASSWORD` | Optional password for recycle-bin restores. When unset, restores require an admin login instead. |
+| `DB_PATH` | SQLite database location (defaults to `server/stock-management.db`). |
+| `PORT` | API port (default 3001). |
+
 This guide explains how to deploy the new Library Management update to an
 existing AWS installation **without losing any existing data**.
 

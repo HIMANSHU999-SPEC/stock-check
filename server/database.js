@@ -23,16 +23,35 @@ function ensureSetting(key, valueObject) {
   }
 }
 
-function ensureUser({ email, name, role, password }) {
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
-  if (!existing) {
-    db.prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)').run(
-      name,
-      email,
-      hashPassword(password),
-      role
-    );
+// Bootstrap the first administrator on an empty database. No credentials are
+// hardcoded in the repository: provide ADMIN_EMAIL / ADMIN_PASSWORD env vars,
+// or a random password is generated and printed once to the server console.
+// Further accounts are created by the admin from the Users page.
+function bootstrapFirstAdmin() {
+  const { c: userCount } = db.prepare('SELECT COUNT(*) as c FROM users').get();
+  if (userCount > 0) return;
+
+  const email = process.env.ADMIN_EMAIL || 'admin@localhost';
+  let password = process.env.ADMIN_PASSWORD;
+  let generated = false;
+  if (!password) {
+    password = crypto.randomBytes(9).toString('base64url');
+    generated = true;
   }
+
+  db.prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)')
+    .run('Administrator', email, hashPassword(password), 'admin');
+
+  console.log('==================================================');
+  console.log('First-run administrator account created:');
+  console.log(`  email:    ${email}`);
+  if (generated) {
+    console.log(`  password: ${password}`);
+    console.log('  (randomly generated — log in and change it immediately)');
+  } else {
+    console.log('  password: (taken from ADMIN_PASSWORD env var)');
+  }
+  console.log('==================================================');
 }
 
 // Initialize database schema
@@ -283,41 +302,9 @@ function initializeDatabase() {
   insertCategory.run('Furniture', 'Office furniture');
   insertCategory.run('Other', 'Miscellaneous items');
 
-  // Seed default users
-  // Update legacy admin credentials if present, otherwise ensure new ones.
-  const adminNewEmail = 'itsupport@laat.ac.uk';
-  const adminOld = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@stock.local');
-  const adminExistingNew = db.prepare('SELECT id FROM users WHERE email = ?').get(adminNewEmail);
-  if (!adminExistingNew) {
-    if (adminOld) {
-      db.prepare('UPDATE users SET email = ?, password_hash = ? WHERE id = ?')
-        .run(adminNewEmail, hashPassword('IN3Ia-147!'), adminOld.id);
-    } else {
-      ensureUser({
-        email: adminNewEmail,
-        name: 'Administrator',
-        role: 'admin',
-        password: 'IN3Ia-147!'
-      });
-    }
-  }
-
-  const subNewEmail = 'itteam@laat.ac.uk';
-  const subOld = db.prepare('SELECT id FROM users WHERE email = ?').get('subadmin@stock.local');
-  const subExistingNew = db.prepare('SELECT id FROM users WHERE email = ?').get(subNewEmail);
-  if (!subExistingNew) {
-    if (subOld) {
-      db.prepare('UPDATE users SET email = ?, password_hash = ? WHERE id = ?')
-        .run(subNewEmail, hashPassword('IN3ia-147!'), subOld.id);
-    } else {
-      ensureUser({
-        email: subNewEmail,
-        name: 'IT Team',
-        role: 'subadmin',
-        password: 'IN3ia-147!'
-      });
-    }
-  }
+  // Create the first admin only when the users table is empty (fresh install).
+  // Existing databases keep their accounts exactly as they are.
+  bootstrapFirstAdmin();
 
   // Seed default license state
   ensureSetting('license', {

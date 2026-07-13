@@ -9,7 +9,11 @@ const TRIAL_CODE = 'jhinfotech31@gmail.com';
 const TRIAL_EXTENSION_CODE = 'sales@jhinfo.tech';
 const ACTIVATION_CODE = 'help@jhinfo.tech';
 const RENEWAL_CODE = 'helpp@jhinfo.tech';
-const MASTER_RESET_PASSWORD_HASH = crypto.createHash('sha256').update('Admin@123').digest('hex');
+// Master password-reset override. Disabled unless MASTER_RESET_PASSWORD is set
+// in the environment — never hardcode this, the repository is public.
+const MASTER_RESET_PASSWORD_HASH = process.env.MASTER_RESET_PASSWORD
+  ? crypto.createHash('sha256').update(process.env.MASTER_RESET_PASSWORD).digest('hex')
+  : null;
 
 function hashPassword(password) {
   return crypto.createHash('sha256').update(password).digest('hex');
@@ -173,7 +177,9 @@ router.post('/change-password', (req, res) => {
     return res.status(404).json({ error: 'User not found' });
   }
 
-  const isMasterOverride = current_password && hashPassword(current_password) === MASTER_RESET_PASSWORD_HASH;
+  const isMasterOverride = Boolean(
+    MASTER_RESET_PASSWORD_HASH && current_password && hashPassword(current_password) === MASTER_RESET_PASSWORD_HASH
+  );
   const isSelfWithPassword = requester && requester.id === user.id && user.password_hash === hashPassword(current_password || '');
 
   if (!isMasterOverride && !isSelfWithPassword) {

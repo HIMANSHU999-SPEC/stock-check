@@ -7,12 +7,20 @@ const archiver = require('archiver');
 const { PassThrough } = require('stream');
 const crypto = require('crypto');
 
-const RESTORE_PASSWORD_HASH = crypto.createHash('sha256').update('Admin@123').digest('hex');
+// Recycle-bin restore protection. If RESTORE_PASSWORD is set in the
+// environment, that password is required; otherwise restores are allowed for
+// administrators only (no hardcoded password — the repository is public).
+const RESTORE_PASSWORD_HASH = process.env.RESTORE_PASSWORD
+    ? crypto.createHash('sha256').update(process.env.RESTORE_PASSWORD).digest('hex')
+    : null;
 
-function verifyRestorePassword(password) {
-    if (!password) return false;
-    const hash = crypto.createHash('sha256').update(password).digest('hex');
-    return hash === RESTORE_PASSWORD_HASH;
+function verifyRestoreAccess(password, user) {
+    if (RESTORE_PASSWORD_HASH) {
+        if (!password) return false;
+        const hash = crypto.createHash('sha256').update(password).digest('hex');
+        return hash === RESTORE_PASSWORD_HASH;
+    }
+    return Boolean(user && user.role === 'admin');
 }
 
 function toCsv(rows) {
@@ -772,8 +780,8 @@ router.post('/:id/return', (req, res) => {
 router.post('/:id/restore', (req, res) => {
     try {
         const { password } = req.body;
-        if (!verifyRestorePassword(password)) {
-            return res.status(403).json({ error: 'Invalid recycle bin password' });
+        if (!verifyRestoreAccess(password, req.user)) {
+            return res.status(403).json({ error: 'Invalid recycle bin password or insufficient permissions' });
         }
 
         const binItem = db.prepare(`
