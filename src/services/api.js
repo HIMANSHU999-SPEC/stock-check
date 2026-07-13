@@ -128,6 +128,11 @@ export const assetsAPI = {
             `/assets/export/by-campus${campus !== undefined ? `?campus=${encodeURIComponent(campus)}` : ''}`,
             'assets-by-campus.csv'
         ),
+    exportByModel: (model) =>
+        downloadCsv(
+            `/assets/export/by-model${model !== undefined ? `?model=${encodeURIComponent(model)}` : ''}`,
+            'assets-by-model.csv'
+        ),
     exportAssignments: (employeeIds = []) => {
         const ids = Array.isArray(employeeIds) ? employeeIds.filter(Boolean) : [];
         if (ids.length === 1) {
@@ -172,6 +177,7 @@ export const reportsAPI = {
     getByStatus: () => apiCall('/reports/by-status'),
     getBySupplier: () => apiCall('/reports/by-supplier'),
     getByCampus: () => apiCall('/reports/by-campus'),
+    getByModel: () => apiCall('/reports/by-model'),
     getCategories: () => apiCall('/categories'),
 };
 

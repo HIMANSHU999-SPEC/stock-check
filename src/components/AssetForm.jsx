@@ -10,6 +10,7 @@ export default function AssetForm() {
 
     const [categories, setCategories] = useState([]);
     const [campuses, setCampuses] = useState([]);
+    const [models, setModels] = useState([]);
     const [addingCampus, setAddingCampus] = useState(false);
     const [newCampus, setNewCampus] = useState('');
     const [loading, setLoading] = useState(false);
@@ -32,10 +33,21 @@ export default function AssetForm() {
     useEffect(() => {
         loadCategories();
         loadCampuses();
+        loadModels();
         if (isEdit) {
             loadAsset();
         }
     }, [id]);
+
+    async function loadModels() {
+        try {
+            const data = await reportsAPI.getByModel();
+            const names = [...new Set(data.map((m) => m.model).filter((n) => n && n !== 'Unspecified'))];
+            setModels(names);
+        } catch (error) {
+            console.error('Error loading models:', error);
+        }
+    }
 
     async function loadCategories() {
         try {
@@ -155,9 +167,14 @@ export default function AssetForm() {
                                     type="text"
                                     name="model"
                                     className="form-control"
+                                    list="asset-models"
+                                    placeholder="Pick an existing model or type a new one"
                                     value={formData.model}
                                     onChange={handleChange}
                                 />
+                                <datalist id="asset-models">
+                                    {models.map((m) => <option key={m} value={m} />)}
+                                </datalist>
                             </div>
 
                             <div className="form-group">

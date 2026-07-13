@@ -123,6 +123,32 @@ router.get('/by-campus', (req, res) => {
     }
 });
 
+// Assets grouped by model (case/spacing-insensitive so "X360 G8" and
+// "x360 g8 " count as one model), per category.
+router.get('/by-model', (req, res) => {
+    try {
+        const data = db.prepare(`
+      SELECT
+        COALESCE(NULLIF(TRIM(MIN(a.model)), ''), 'Unspecified') AS model,
+        c.name AS category,
+        COUNT(*) AS asset_count,
+        SUM(COALESCE(a.quantity, 0)) AS total_quantity,
+        SUM(COALESCE(a.assigned_quantity, 0)) AS assigned_quantity,
+        SUM(COALESCE(a.quantity, 0) - COALESCE(a.assigned_quantity, 0)) AS available_quantity,
+        SUM(a.purchase_price) AS total_value
+      FROM assets a
+      LEFT JOIN categories c ON a.category_id = c.id
+      WHERE a.deleted_at IS NULL
+      GROUP BY LOWER(TRIM(COALESCE(a.model, ''))), a.category_id
+      ORDER BY asset_count DESC, model
+    `).all();
+
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Get Intune pricing report
 router.get('/pricing', (req, res) => {
     try {

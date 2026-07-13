@@ -43,7 +43,7 @@ function toCsv(rows) {
 // Get all assets with optional filtering
 router.get('/', (req, res) => {
     try {
-        const { status, category, search, supplier, campus } = req.query;
+        const { status, category, search, supplier, campus, model } = req.query;
         let query = `
       SELECT a.*, c.name as category_name, e.name as employee_name, e.email as employee_email
       FROM assets a
@@ -75,6 +75,15 @@ router.get('/', (req, res) => {
         if (campus) {
             query += " AND LOWER(TRIM(COALESCE(a.campus, ''))) = LOWER(TRIM(?))";
             params.push(campus);
+        }
+
+        if (model) {
+            if (model === 'Unspecified') {
+                query += " AND (a.model IS NULL OR TRIM(a.model) = '')";
+            } else {
+                query += " AND LOWER(TRIM(COALESCE(a.model, ''))) = LOWER(TRIM(?))";
+                params.push(model);
+            }
         }
 
         if (search) {
@@ -146,6 +155,38 @@ router.get('/export/by-supplier', (req, res) => {
         const rows = db.prepare(query).all(...params);
         res.setHeader('Content-Type', 'text/csv');
         res.setHeader('Content-Disposition', 'attachment; filename="assets-by-supplier.csv"');
+        return res.send(toCsv(rows));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Export assets filtered by model (CSV)
+router.get('/export/by-model', (req, res) => {
+    try {
+        const { model } = req.query;
+        let query = `
+      SELECT a.asset_number, a.name, a.model, a.serial_number, a.quantity, a.assigned_quantity,
+             a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
+             c.name as category, e.name as assigned_to, e.email as assigned_email
+      FROM assets a
+      LEFT JOIN categories c ON a.category_id = c.id
+      LEFT JOIN employees e ON a.assigned_to = e.id
+      WHERE a.deleted_at IS NULL
+    `;
+        const params = [];
+        if (model !== undefined) {
+            if (model === '' || model === 'Unspecified') {
+                query += " AND (a.model IS NULL OR TRIM(a.model) = '')";
+            } else {
+                query += " AND LOWER(TRIM(COALESCE(a.model, ''))) = LOWER(TRIM(?))";
+                params.push(model);
+            }
+        }
+        query += ' ORDER BY a.model, a.name';
+        const rows = db.prepare(query).all(...params);
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', 'attachment; filename="assets-by-model.csv"');
         return res.send(toCsv(rows));
     } catch (error) {
         res.status(500).json({ error: error.message });

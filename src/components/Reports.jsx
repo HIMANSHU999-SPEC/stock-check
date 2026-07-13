@@ -8,6 +8,7 @@ export default function Reports() {
     const [statusData, setStatusData] = useState([]);
     const [supplierData, setSupplierData] = useState([]);
     const [campusData, setCampusData] = useState([]);
+    const [modelData, setModelData] = useState([]);
     const [campusExporting, setCampusExporting] = useState(false);
     const [selectedCampuses, setSelectedCampuses] = useState([]);
     const [supplierAssets, setSupplierAssets] = useState([]);
@@ -24,12 +25,13 @@ export default function Reports() {
 
     async function loadReports() {
         try {
-            const [summaryRes, categoryRes, statusRes, supplierRes, campusRes] = await Promise.all([
+            const [summaryRes, categoryRes, statusRes, supplierRes, campusRes, modelRes] = await Promise.all([
                 reportsAPI.getSummary(),
                 reportsAPI.getByCategory(),
                 reportsAPI.getByStatus(),
                 reportsAPI.getBySupplier(),
-                reportsAPI.getByCampus()
+                reportsAPI.getByCampus(),
+                reportsAPI.getByModel().catch(() => [])
             ]);
 
             setSummary(summaryRes);
@@ -37,6 +39,7 @@ export default function Reports() {
             setStatusData(statusRes);
             setSupplierData(supplierRes);
             setCampusData(campusRes);
+            setModelData(modelRes);
         } catch (error) {
             console.error('Error loading reports:', error);
         } finally {
@@ -194,6 +197,67 @@ export default function Reports() {
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+
+            <div className="card mt-3">
+                <div className="card-header">
+                    <h3 className="card-title">Assets by Model</h3>
+                </div>
+                <div className="table-container">
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Model</th>
+                                <th>Category</th>
+                                <th>Assets</th>
+                                <th>Total Qty</th>
+                                <th>Assigned</th>
+                                <th>Available</th>
+                                <th>Total Value</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {modelData.map((item, index) => (
+                                <tr key={index}>
+                                    <td><strong>{item.model}</strong></td>
+                                    <td>{item.category || 'N/A'}</td>
+                                    <td>{item.asset_count || 0}</td>
+                                    <td>{item.total_quantity || 0}</td>
+                                    <td>{item.assigned_quantity || 0}</td>
+                                    <td>{item.available_quantity || 0}</td>
+                                    <td>£{(item.total_value || 0).toLocaleString()}</td>
+                                    <td>
+                                        <Link
+                                            to={`/assets?model=${encodeURIComponent(item.model)}`}
+                                            className="btn btn-sm btn-secondary"
+                                        >
+                                            View items
+                                        </Link>
+                                        <button
+                                            className="btn btn-sm btn-primary"
+                                            style={{ marginLeft: '0.5rem' }}
+                                            onClick={async () => {
+                                                try {
+                                                    await assetsAPI.exportByModel(item.model);
+                                                } catch (error) {
+                                                    alert('Export failed: ' + error.message);
+                                                }
+                                            }}
+                                        >
+                                            Export CSV
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {modelData.length === 0 && (
+                                <tr>
+                                    <td colSpan="8" className="text-center text-muted">No model data</td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
 

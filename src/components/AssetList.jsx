@@ -15,8 +15,10 @@ export default function AssetList() {
         search: '',
         status: '',
         category: '',
-        campus: ''
+        campus: '',
+        model: ''
     });
+    const [models, setModels] = useState([]);
     const location = useLocation();
     const navigate = useNavigate();
     const [assignModal, setAssignModal] = useState({ open: false, asset: null });
@@ -34,12 +36,35 @@ export default function AssetList() {
         loadCategories();
         loadEmployees();
         loadCampuses();
+        loadModels();
         const params = new URLSearchParams(location.search);
         const campusParam = params.get('campus');
         if (campusParam !== null) {
             setFilters((prev) => ({ ...prev, campus: campusParam }));
         }
+        const modelParam = params.get('model');
+        if (modelParam !== null) {
+            setFilters((prev) => ({ ...prev, model: modelParam }));
+        }
     }, [location.search]);
+
+    async function loadModels() {
+        try {
+            const data = await reportsAPI.getByModel();
+            // The report is grouped per category; merge to one row per model name.
+            const merged = new Map();
+            for (const m of data) {
+                merged.set(m.model, (merged.get(m.model) || 0) + (m.asset_count || 0));
+            }
+            setModels(
+                [...merged.entries()]
+                    .map(([model, asset_count]) => ({ model, asset_count }))
+                    .sort((a, b) => b.asset_count - a.asset_count)
+            );
+        } catch (error) {
+            console.error('Error loading models:', error);
+        }
+    }
 
     useEffect(() => {
         loadAssets();
@@ -234,6 +259,20 @@ export default function AssetList() {
                                 {categories.map((cat) => (
                                     <option key={cat.id} value={cat.id}>
                                         {cat.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <select
+                                className="form-control"
+                                value={filters.model}
+                                onChange={(e) => setFilters({ ...filters, model: e.target.value })}
+                            >
+                                <option value="">All Models</option>
+                                {models.map((m, i) => (
+                                    <option key={`${m.model}-${i}`} value={m.model}>
+                                        {m.model} ({m.asset_count})
                                     </option>
                                 ))}
                             </select>
