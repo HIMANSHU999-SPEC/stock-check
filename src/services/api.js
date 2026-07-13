@@ -1,4 +1,7 @@
-const API_BASE = 'http://localhost:3001/api';
+// Relative base so API calls resolve against the current origin. In production
+// nginx proxies /api/ to the backend; in dev the Vite server proxies /api to
+// http://localhost:3001 (see vite.config.js). Override with VITE_API_BASE if needed.
+const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 const TOKEN_KEY = 'auth_token';
 
 function getAuthToken() {
