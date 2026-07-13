@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { booksAPI, borrowersAPI } from '../services/api';
+import CameraScanner from './CameraScanner';
 
 const NEW_BORROWER = {
     name: '',
@@ -27,6 +28,7 @@ export default function IssueDesk() {
     const [cart, setCart] = useState([]);
     const [scanValue, setScanValue] = useState('');
     const [scanError, setScanError] = useState('');
+    const [showCamera, setShowCamera] = useState(false);
 
     // Borrowers
     const [borrowers, setBorrowers] = useState([]);
@@ -231,9 +233,16 @@ export default function IssueDesk() {
                                         autoFocus
                                     />
                                     <button type="submit" className="btn btn-primary">Add</button>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary"
+                                        onClick={() => { setScanError(''); setShowCamera(true); }}
+                                    >
+                                        📷 Scan
+                                    </button>
                                 </div>
                                 <div className="text-muted" style={{ fontSize: '0.85rem', marginTop: '0.35rem' }}>
-                                    A handheld QR/barcode scanner types the book number and presses Enter automatically.
+                                    Use 📷 Scan for the device camera, a handheld QR/barcode scanner, or type the number.
                                 </div>
                             </div>
                         </form>
@@ -476,6 +485,13 @@ export default function IssueDesk() {
                     </table>
                 </div>
             </div>
+
+            {showCamera && (
+                <CameraScanner
+                    onScan={(text) => addByNumber(text)}
+                    onClose={() => { setShowCamera(false); focusScan(); }}
+                />
+            )}
         </div>
     );
 }

@@ -22,6 +22,7 @@ export default function BookForm() {
     const [formData, setFormData] = useState(EMPTY);
     const [loading, setLoading] = useState(isEdit);
     const [saving, setSaving] = useState(false);
+    const [showMore, setShowMore] = useState(false);
 
     useEffect(() => {
         if (isEdit) {
@@ -92,57 +93,7 @@ export default function BookForm() {
                                     value={formData.title}
                                     onChange={(e) => update('title', e.target.value)}
                                     required
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Author</label>
-                                <input
-                                    type="text"
-                                    className="form-control"
-                                    value={formData.author}
-                                    onChange={(e) => update('author', e.target.value)}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-3">
-                            <div className="form-group">
-                                <label className="form-label">ISBN</label>
-                                <input
-                                    type="text"
-                                    className="form-control"
-                                    value={formData.isbn}
-                                    onChange={(e) => update('isbn', e.target.value)}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Category / Genre</label>
-                                <input
-                                    type="text"
-                                    className="form-control"
-                                    value={formData.category}
-                                    onChange={(e) => update('category', e.target.value)}
-                                />
-                            </div>
-                            <div className="form-group">
-                                <label className="form-label">Publisher</label>
-                                <input
-                                    type="text"
-                                    className="form-control"
-                                    value={formData.publisher}
-                                    onChange={(e) => update('publisher', e.target.value)}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-3">
-                            <div className="form-group">
-                                <label className="form-label">Published Year</label>
-                                <input
-                                    type="number"
-                                    className="form-control"
-                                    value={formData.published_year}
-                                    onChange={(e) => update('published_year', e.target.value)}
+                                    autoFocus
                                 />
                             </div>
                             <div className="form-group">
@@ -156,38 +107,107 @@ export default function BookForm() {
                                     required
                                 />
                             </div>
-                            <div className="form-group">
-                                <label className="form-label">Shelf Location</label>
-                                <input
-                                    type="text"
-                                    className="form-control"
-                                    value={formData.shelf_location}
-                                    onChange={(e) => update('shelf_location', e.target.value)}
-                                />
-                            </div>
                         </div>
 
-                        <div className="grid grid-2">
-                            <div className="form-group">
-                                <label className="form-label">Campus</label>
-                                <input
-                                    type="text"
-                                    className="form-control"
-                                    value={formData.campus}
-                                    onChange={(e) => update('campus', e.target.value)}
-                                />
-                            </div>
-                        </div>
+                        <p className="text-muted" style={{ fontSize: '0.85rem', marginTop: '-0.25rem' }}>
+                            Only a title is required — a book number and QR code are generated automatically.
+                        </p>
 
                         <div className="form-group">
-                            <label className="form-label">Notes</label>
-                            <textarea
-                                className="form-control"
-                                rows="3"
-                                value={formData.notes}
-                                onChange={(e) => update('notes', e.target.value)}
-                            />
+                            <button
+                                type="button"
+                                className="btn btn-sm btn-secondary"
+                                onClick={() => setShowMore((v) => !v)}
+                            >
+                                {showMore ? 'Hide extra details' : '+ More details (optional)'}
+                            </button>
                         </div>
+
+                        {showMore && (
+                            <>
+                                <div className="grid grid-2">
+                                    <div className="form-group">
+                                        <label className="form-label">Author</label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            value={formData.author}
+                                            onChange={(e) => update('author', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Category / Genre</label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            value={formData.category}
+                                            onChange={(e) => update('category', e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-3">
+                                    <div className="form-group">
+                                        <label className="form-label">ISBN</label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            value={formData.isbn}
+                                            onChange={(e) => update('isbn', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Publisher</label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            value={formData.publisher}
+                                            onChange={(e) => update('publisher', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Published Year</label>
+                                        <input
+                                            type="number"
+                                            className="form-control"
+                                            value={formData.published_year}
+                                            onChange={(e) => update('published_year', e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-2">
+                                    <div className="form-group">
+                                        <label className="form-label">Shelf Location</label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            value={formData.shelf_location}
+                                            onChange={(e) => update('shelf_location', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Campus</label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            value={formData.campus}
+                                            onChange={(e) => update('campus', e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="form-label">Notes</label>
+                                    <textarea
+                                        className="form-control"
+                                        rows="3"
+                                        value={formData.notes}
+                                        onChange={(e) => update('notes', e.target.value)}
+                                    />
+                                </div>
+                            </>
+                        )}
                     </div>
                     <div className="card-footer flex gap-2">
                         <button type="button" className="btn btn-secondary" onClick={() => navigate('/books')}>
