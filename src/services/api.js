@@ -184,7 +184,8 @@ export const booksAPI = {
     getById: (id) => apiCall(`/books/${id}`),
     lookup: (number) => apiCall(`/books/lookup?number=${encodeURIComponent(number)}`),
     lookupIsbn: (isbn) => apiCall(`/books/isbn/${encodeURIComponent(isbn)}`),
-    rapidAdd: (isbn) => apiCall('/books/rapid', { method: 'POST', body: JSON.stringify({ isbn }) }),
+    rapidAdd: (isbn, extras = {}) =>
+        apiCall('/books/rapid', { method: 'POST', body: JSON.stringify({ isbn, ...extras }) }),
     getSettings: () => apiCall('/books/settings'),
     saveSettings: (data) => apiCall('/books/settings', { method: 'PUT', body: JSON.stringify(data) }),
     create: (data) => apiCall('/books', { method: 'POST', body: JSON.stringify(data) }),

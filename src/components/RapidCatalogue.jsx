@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { booksAPI } from '../services/api';
+import { CAMPUSES, BOOK_CATEGORIES } from '../constants';
 
 // Rapid cataloguing: scan ISBN -> auto-fetch -> auto-save -> ready for the next
 // scan. New ISBNs are created from online catalogue data; scanning a book we
@@ -11,6 +12,8 @@ export default function RapidCatalogue() {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [session, setSession] = useState([]);
+    const [category, setCategory] = useState('');
+    const [campus, setCampus] = useState('');
     const inputRef = useRef(null);
 
     useEffect(() => {
@@ -32,13 +35,15 @@ export default function RapidCatalogue() {
         setBusy(true);
         setError('');
         try {
-            const res = await booksAPI.rapidAdd(value);
+            const res = await booksAPI.rapidAdd(value, { category, campus });
             setSession((prev) => [{
                 key: Date.now(),
                 action: res.action,
                 title: res.book.title,
                 book_number: res.book.book_number,
                 quantity: res.book.quantity,
+                category: res.book.category,
+                campus: res.book.campus,
                 id: res.book.id
             }, ...prev]);
         } catch (err) {
@@ -61,6 +66,33 @@ export default function RapidCatalogue() {
 
             <div className="card mb-3">
                 <div className="card-body">
+                    <div className="grid grid-2 mb-2">
+                        <div className="form-group">
+                            <label className="form-label">Category for these scans</label>
+                            <input
+                                type="text"
+                                className="form-control"
+                                list="rapid-categories"
+                                placeholder="e.g. Business, IT (optional)"
+                                value={category}
+                                onChange={(e) => setCategory(e.target.value)}
+                            />
+                            <datalist id="rapid-categories">
+                                {BOOK_CATEGORIES.map((c) => <option key={c} value={c} />)}
+                            </datalist>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Campus for these scans</label>
+                            <select
+                                className="form-control"
+                                value={campus}
+                                onChange={(e) => setCampus(e.target.value)}
+                            >
+                                <option value="">— No campus —</option>
+                                {CAMPUSES.map((c) => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                        </div>
+                    </div>
                     <form onSubmit={handleScan}>
                         <label className="form-label" style={{ fontSize: '1.05rem' }}>
                             Scan the ISBN barcode — the book is saved automatically
@@ -111,13 +143,15 @@ export default function RapidCatalogue() {
                                 <th>Result</th>
                                 <th>Book Number</th>
                                 <th>Title</th>
+                                <th>Category</th>
+                                <th>Campus</th>
                                 <th>Copies now</th>
                             </tr>
                         </thead>
                         <tbody>
                             {session.length === 0 ? (
                                 <tr>
-                                    <td colSpan="4" className="text-center text-muted">
+                                    <td colSpan="6" className="text-center text-muted">
                                         Nothing scanned yet — grab the scanner and go!
                                     </td>
                                 </tr>
@@ -135,6 +169,8 @@ export default function RapidCatalogue() {
                                             </Link>
                                         </td>
                                         <td>{s.title}</td>
+                                        <td>{s.category || '—'}</td>
+                                        <td>{s.campus || '—'}</td>
                                         <td>{s.quantity}</td>
                                     </tr>
                                 ))

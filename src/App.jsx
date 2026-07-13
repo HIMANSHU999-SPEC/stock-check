@@ -31,11 +31,11 @@ function Navbar({ user, onLogout, license }) {
     return (
         <nav className="navbar">
             <div className="container navbar-content">
-                <div className="navbar-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div className="navbar-brand">
                     <img
                         src="/laat-logo.png"
                         alt="London Academy for Applied Technology"
-                        style={{ height: '48px', width: 'auto', background: '#fff', borderRadius: '6px', padding: '3px' }}
+                        style={{ height: '40px', width: 'auto', background: '#fff', borderRadius: '6px', padding: '3px' }}
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                     <div>

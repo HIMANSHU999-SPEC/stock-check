@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { booksAPI } from '../services/api';
+import { CAMPUSES, BOOK_CATEGORIES } from '../constants';
 
 const EMPTY = {
     title: '',
@@ -209,13 +210,18 @@ export default function BookForm() {
                                         />
                                     </div>
                                     <div className="form-group">
-                                        <label className="form-label">Category / Genre</label>
+                                        <label className="form-label">Category</label>
                                         <input
                                             type="text"
                                             className="form-control"
+                                            list="book-categories"
+                                            placeholder="e.g. Business, IT"
                                             value={formData.category}
                                             onChange={(e) => update('category', e.target.value)}
                                         />
+                                        <datalist id="book-categories">
+                                            {BOOK_CATEGORIES.map((c) => <option key={c} value={c} />)}
+                                        </datalist>
                                     </div>
                                 </div>
 
@@ -261,12 +267,17 @@ export default function BookForm() {
                                     </div>
                                     <div className="form-group">
                                         <label className="form-label">Campus</label>
-                                        <input
-                                            type="text"
+                                        <select
                                             className="form-control"
                                             value={formData.campus}
                                             onChange={(e) => update('campus', e.target.value)}
-                                        />
+                                        >
+                                            <option value="">— Select campus —</option>
+                                            {CAMPUSES.map((c) => <option key={c} value={c}>{c}</option>)}
+                                            {formData.campus && !CAMPUSES.includes(formData.campus) && (
+                                                <option value={formData.campus}>{formData.campus}</option>
+                                            )}
+                                        </select>
                                     </div>
                                 </div>
 

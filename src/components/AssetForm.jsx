@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { assetsAPI, reportsAPI } from '../services/api';
+import { CAMPUSES } from '../constants';
 
 export default function AssetForm() {
     const navigate = useNavigate();
@@ -48,10 +49,12 @@ export default function AssetForm() {
     async function loadCampuses() {
         try {
             const data = await reportsAPI.getByCampus();
-            const names = data.map((c) => c.campus).filter(Boolean);
-            setCampuses(names);
+            const names = data.map((c) => c.campus).filter((n) => n && n !== 'Unspecified');
+            // Standard campuses always offered, merged with any already in use.
+            setCampuses([...new Set([...CAMPUSES, ...names])]);
         } catch (error) {
             console.error('Error loading campuses:', error);
+            setCampuses([...CAMPUSES]);
         }
     }
 

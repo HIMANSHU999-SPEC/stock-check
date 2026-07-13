@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { borrowersAPI } from '../services/api';
+import { CAMPUSES } from '../constants';
 
 const EMPTY = {
     name: '',
@@ -230,12 +231,17 @@ export default function BorrowerList() {
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Campus</label>
-                                    <input
-                                        type="text"
+                                    <select
                                         className="form-control"
                                         value={formData.campus}
                                         onChange={(e) => setFormData({ ...formData, campus: e.target.value })}
-                                    />
+                                    >
+                                        <option value="">— Select campus —</option>
+                                        {CAMPUSES.map((c) => <option key={c} value={c}>{c}</option>)}
+                                        {formData.campus && !CAMPUSES.includes(formData.campus) && (
+                                            <option value={formData.campus}>{formData.campus}</option>
+                                        )}
+                                    </select>
                                 </div>
                             </div>
                             <div className="grid grid-2">

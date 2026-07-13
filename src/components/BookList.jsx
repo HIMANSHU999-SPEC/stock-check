@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { booksAPI } from '../services/api';
+import { CAMPUSES, BOOK_CATEGORIES } from '../constants';
 
 export default function BookList() {
     const [books, setBooks] = useState([]);
     const [loading, setLoading] = useState(true);
     const [importing, setImporting] = useState(false);
-    const [filters, setFilters] = useState({ search: '', category: '', availability: '' });
+    const [filters, setFilters] = useState({ search: '', category: '', campus: '', availability: '' });
 
     useEffect(() => {
         loadBooks();
@@ -19,6 +20,7 @@ export default function BookList() {
             const params = {};
             if (filters.search) params.search = filters.search;
             if (filters.category) params.category = filters.category;
+            if (filters.campus) params.campus = filters.campus;
             if (filters.availability) params.availability = filters.availability;
             const data = await booksAPI.getAll(params);
             setBooks(data);
@@ -114,7 +116,7 @@ export default function BookList() {
 
             <div className="card mb-3">
                 <div className="card-body">
-                    <div className="grid grid-3">
+                    <div className="grid grid-4">
                         <div className="form-group">
                             <input
                                 type="text"
@@ -128,10 +130,24 @@ export default function BookList() {
                             <input
                                 type="text"
                                 className="form-control"
-                                placeholder="Filter by category / genre"
+                                list="book-category-filter"
+                                placeholder="Category (e.g. Business, IT)"
                                 value={filters.category}
                                 onChange={(e) => setFilters({ ...filters, category: e.target.value })}
                             />
+                            <datalist id="book-category-filter">
+                                {BOOK_CATEGORIES.map((c) => <option key={c} value={c} />)}
+                            </datalist>
+                        </div>
+                        <div className="form-group">
+                            <select
+                                className="form-control"
+                                value={filters.campus}
+                                onChange={(e) => setFilters({ ...filters, campus: e.target.value })}
+                            >
+                                <option value="">All Campuses</option>
+                                {CAMPUSES.map((c) => <option key={c} value={c}>{c}</option>)}
+                            </select>
                         </div>
                         <div className="form-group">
                             <select
@@ -181,6 +197,7 @@ export default function BookList() {
                                     <th>Title</th>
                                     <th>Author</th>
                                     <th>Category</th>
+                                    <th>Campus</th>
                                     <th>Copies</th>
                                     <th>Available</th>
                                     <th>Shelf</th>
@@ -190,7 +207,7 @@ export default function BookList() {
                             <tbody>
                                 {books.length === 0 ? (
                                     <tr>
-                                        <td colSpan="8" className="text-center text-muted">
+                                        <td colSpan="9" className="text-center text-muted">
                                             No books found
                                         </td>
                                     </tr>
@@ -205,6 +222,7 @@ export default function BookList() {
                                             <td>{book.title}</td>
                                             <td>{book.author || 'N/A'}</td>
                                             <td>{book.category || 'N/A'}</td>
+                                            <td>{book.campus || '—'}</td>
                                             <td>{book.quantity}</td>
                                             <td>
                                                 <span className={`badge badge-${book.available_quantity > 0 ? 'success' : 'danger'}`}>

@@ -124,12 +124,12 @@ router.get('/', (req, res) => {
         const params = [];
 
         if (category) {
-            query += ' AND LOWER(TRIM(COALESCE(category, ""))) = LOWER(TRIM(?))';
+            query += " AND LOWER(TRIM(COALESCE(category, ''))) = LOWER(TRIM(?))";
             params.push(category);
         }
 
         if (campus) {
-            query += ' AND LOWER(TRIM(COALESCE(campus, ""))) = LOWER(TRIM(?))';
+            query += " AND LOWER(TRIM(COALESCE(campus, ''))) = LOWER(TRIM(?))";
             params.push(campus);
         }
 
@@ -288,6 +288,8 @@ router.put('/settings', (req, res) => {
 router.post('/rapid', async (req, res) => {
     try {
         const isbn = (req.body.isbn || '').replace(/[^0-9Xx]/g, '');
+        const category = (req.body.category || '').trim() || null;
+        const campus = (req.body.campus || '').trim();
         if (!isbn) {
             return res.status(400).json({ error: 'A valid ISBN is required' });
         }
@@ -297,8 +299,14 @@ router.post('/rapid', async (req, res) => {
     `).get(isbn);
 
         if (existing) {
-            db.prepare('UPDATE books SET quantity = quantity + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-                .run(existing.id);
+            // Add a copy; fill in category/campus if the record didn't have them yet.
+            db.prepare(`
+        UPDATE books SET quantity = quantity + 1,
+          category = COALESCE(category, ?),
+          campus = CASE WHEN COALESCE(campus, '') = '' THEN ? ELSE campus END,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(category, campus, existing.id);
             const updated = db.prepare('SELECT * FROM books WHERE id = ?').get(existing.id);
             logActivity(req, {
                 action: 'book_copy_added', entity_type: 'book', entity_id: existing.id,
@@ -319,8 +327,8 @@ router.post('/rapid', async (req, res) => {
       INSERT INTO books (
         book_number, title, author, isbn, category, publisher, published_year,
         quantity, issued_quantity, shelf_location, campus, notes
-      ) VALUES (?, ?, ?, ?, NULL, ?, ?, 1, 0, NULL, '', NULL)
-    `).run(bookNumber, meta.title, meta.author || null, isbn, meta.publisher || null, meta.published_year);
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, NULL, ?, NULL)
+    `).run(bookNumber, meta.title, meta.author || null, isbn, category, meta.publisher || null, meta.published_year, campus);
 
         const created = db.prepare('SELECT * FROM books WHERE id = ?').get(result.lastInsertRowid);
         logActivity(req, {
