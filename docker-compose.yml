@@ -1,0 +1,23 @@
+# Docker Compose for a data-safe deployment.
+#
+# The database lives in the named volume `stock_data`, which is NOT removed by
+# `docker compose up --build` or by rebuilding the image — your data persists
+# across updates. To update after pulling new code:
+#
+#   docker compose up -d --build
+#
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      DB_PATH: /data/stock-management.db
+    volumes:
+      - stock_data:/data
+
+volumes:
+  stock_data:

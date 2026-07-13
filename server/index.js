@@ -96,7 +96,9 @@ setInterval(purgeRecycleBin, 24 * 60 * 60 * 1000);
 if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.join(__dirname, '../dist')));
 
-    app.get('*', (req, res) => {
+    // SPA catch-all. Express 5 (path-to-regexp v8) no longer accepts a bare '*'
+    // string wildcard, so use a RegExp to serve index.html for all non-API paths.
+    app.get(/.*/, (req, res) => {
         res.sendFile(path.join(__dirname, '../dist/index.html'));
     });
 }
