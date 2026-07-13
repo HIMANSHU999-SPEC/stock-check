@@ -25,6 +25,71 @@ function availableOf(book) {
     return Math.max(0, (book.quantity || 0) - (book.issued_quantity || 0));
 }
 
+// Fetch JSON with a timeout so a slow external service can't hang the request.
+async function fetchJson(url) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+        const resp = await fetch(url, {
+            signal: controller.signal,
+            headers: { 'User-Agent': 'LAAT-Library/1.0 (library management)' }
+        });
+        if (!resp.ok) return null;
+        return await resp.json();
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+function parseYear(value) {
+    if (!value) return null;
+    const m = String(value).match(/\d{4}/);
+    return m ? parseInt(m[0], 10) : null;
+}
+
+// Look up book metadata by ISBN from public catalogues (Open Library, then
+// Google Books as a fallback). Returns normalized fields or null if not found.
+async function lookupIsbnMetadata(isbn) {
+    // Open Library
+    try {
+        const key = `ISBN:${isbn}`;
+        const ol = await fetchJson(`https://openlibrary.org/api/books?bibkeys=${key}&format=json&jscmd=data`);
+        if (ol && ol[key]) {
+            const d = ol[key];
+            return {
+                isbn,
+                title: d.title || '',
+                author: (d.authors || []).map((a) => a.name).filter(Boolean).join(', '),
+                publisher: (d.publishers || []).map((p) => p.name).filter(Boolean).join(', '),
+                published_year: parseYear(d.publish_date),
+                source: 'Open Library'
+            };
+        }
+    } catch (e) {
+        // fall through to Google Books
+    }
+
+    // Google Books
+    try {
+        const gb = await fetchJson(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+        if (gb && gb.totalItems > 0 && Array.isArray(gb.items) && gb.items[0]) {
+            const v = gb.items[0].volumeInfo || {};
+            return {
+                isbn,
+                title: v.title || '',
+                author: (v.authors || []).filter(Boolean).join(', '),
+                publisher: v.publisher || '',
+                published_year: parseYear(v.publishedDate),
+                source: 'Google Books'
+            };
+        }
+    } catch (e) {
+        // no result
+    }
+
+    return null;
+}
+
 // Attach a derived status/available_quantity to a book row
 function decorate(book) {
     if (!book) return book;
@@ -86,13 +151,50 @@ router.get('/lookup', (req, res) => {
         if (!raw) {
             return res.status(400).json({ error: 'A book number is required' });
         }
-        const book = db.prepare('SELECT * FROM books WHERE book_number = ? COLLATE NOCASE').get(raw);
+        // Match either our accession number or the book's own ISBN barcode
+        // (so a handheld scanner can scan the printed ISBN directly).
+        const digits = raw.replace(/[^0-9Xx]/g, '');
+        const book = db.prepare(`
+      SELECT * FROM books
+      WHERE book_number = ? COLLATE NOCASE
+         OR (? != '' AND REPLACE(REPLACE(COALESCE(isbn, ''), '-', ''), ' ', '') = ?)
+    `).get(raw, digits, digits);
         if (!book) {
             return res.status(404).json({ error: `No book found for "${raw}"` });
         }
         res.json(decorate(book));
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+// -----------------------------------------------------------------------------
+// Look up book metadata by ISBN from public catalogues (for fast cataloguing).
+// Also reports whether we already hold a copy of that ISBN.
+// -----------------------------------------------------------------------------
+router.get('/isbn/:isbn', async (req, res) => {
+    try {
+        const isbn = (req.params.isbn || '').replace(/[^0-9Xx]/g, '');
+        if (!isbn) {
+            return res.status(400).json({ error: 'A valid ISBN is required' });
+        }
+
+        const existing = db.prepare(`
+      SELECT * FROM books WHERE REPLACE(REPLACE(COALESCE(isbn, ''), '-', ''), ' ', '') = ?
+    `).get(isbn);
+
+        const meta = await lookupIsbnMetadata(isbn);
+        if (!meta) {
+            return res.status(404).json({
+                error: `No catalogue details found for ISBN ${isbn}. You can still add it manually.`,
+                isbn,
+                existing: existing ? decorate(existing) : null
+            });
+        }
+
+        res.json({ ...meta, existing: existing ? decorate(existing) : null });
+    } catch (error) {
+        res.status(502).json({ error: 'ISBN lookup failed: ' + error.message });
     }
 });
 

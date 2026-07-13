@@ -23,6 +23,44 @@ export default function BookForm() {
     const [loading, setLoading] = useState(isEdit);
     const [saving, setSaving] = useState(false);
     const [showMore, setShowMore] = useState(false);
+    const [isbnQuery, setIsbnQuery] = useState('');
+    const [lookingUp, setLookingUp] = useState(false);
+    const [lookupMsg, setLookupMsg] = useState('');
+    const [lookupOk, setLookupOk] = useState(false);
+
+    async function handleIsbnLookup(e) {
+        if (e) e.preventDefault();
+        const isbn = isbnQuery.replace(/[^0-9Xx]/g, '');
+        if (!isbn) {
+            setLookupOk(false);
+            setLookupMsg('Scan or type an ISBN first.');
+            return;
+        }
+        setLookingUp(true);
+        setLookupMsg('');
+        try {
+            const meta = await booksAPI.lookupIsbn(isbn);
+            setFormData((prev) => ({
+                ...prev,
+                title: meta.title || prev.title,
+                author: meta.author || prev.author,
+                isbn: meta.isbn || isbn,
+                publisher: meta.publisher || prev.publisher,
+                published_year: meta.published_year || prev.published_year
+            }));
+            setShowMore(true);
+            setLookupOk(true);
+            setLookupMsg(
+                `Found via ${meta.source}: "${meta.title}"` +
+                (meta.existing ? ` — note: already in library as ${meta.existing.book_number}` : '')
+            );
+        } catch (err) {
+            setLookupOk(false);
+            setLookupMsg(err.message);
+        } finally {
+            setLookingUp(false);
+        }
+    }
 
     useEffect(() => {
         if (isEdit) {
@@ -84,6 +122,42 @@ export default function BookForm() {
             <div className="card">
                 <form onSubmit={handleSubmit}>
                     <div className="card-body">
+                        <div className="card mb-3" style={{ background: 'var(--bg-tertiary)' }}>
+                            <div className="card-body">
+                                <label className="form-label">
+                                    📷 Scan or type the ISBN to auto-fill details
+                                </label>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        className="form-control"
+                                        placeholder="e.g. 978-0-19-964299-1"
+                                        value={isbnQuery}
+                                        onChange={(e) => setIsbnQuery(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleIsbnLookup(e); }}
+                                        autoFocus={!isEdit}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="btn btn-primary"
+                                        onClick={handleIsbnLookup}
+                                        disabled={lookingUp}
+                                    >
+                                        {lookingUp ? 'Looking up…' : 'Look up'}
+                                    </button>
+                                </div>
+                                {lookupMsg && (
+                                    <p style={{ marginTop: '0.5rem', color: lookupOk ? 'var(--success)' : 'var(--danger)' }}>
+                                        {lookupMsg}
+                                    </p>
+                                )}
+                                <p className="text-muted" style={{ fontSize: '0.8rem', marginTop: '0.35rem' }}>
+                                    A handheld scanner reads the barcode and presses Enter automatically. Details come from
+                                    Open Library / Google Books — check and adjust before saving.
+                                </p>
+                            </div>
+                        </div>
+
                         <div className="grid grid-2">
                             <div className="form-group">
                                 <label className="form-label">Title *</label>
@@ -93,7 +167,6 @@ export default function BookForm() {
                                     value={formData.title}
                                     onChange={(e) => update('title', e.target.value)}
                                     required
-                                    autoFocus
                                 />
                             </div>
                             <div className="form-group">

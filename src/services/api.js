@@ -183,6 +183,7 @@ export const booksAPI = {
     },
     getById: (id) => apiCall(`/books/${id}`),
     lookup: (number) => apiCall(`/books/lookup?number=${encodeURIComponent(number)}`),
+    lookupIsbn: (isbn) => apiCall(`/books/isbn/${encodeURIComponent(isbn)}`),
     create: (data) => apiCall('/books', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => apiCall(`/books/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id) => apiCall(`/books/${id}`, { method: 'DELETE' }),

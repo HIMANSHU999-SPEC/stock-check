@@ -242,7 +242,8 @@ export default function IssueDesk() {
                                     </button>
                                 </div>
                                 <div className="text-muted" style={{ fontSize: '0.85rem', marginTop: '0.35rem' }}>
-                                    Use 📷 Scan for the device camera, a handheld QR/barcode scanner, or type the number.
+                                    Scan the book's ISBN barcode or our QR tag (handheld scanner or 📷 camera), or type
+                                    the book number / ISBN.
                                 </div>
                             </div>
                         </form>
