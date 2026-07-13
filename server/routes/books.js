@@ -101,6 +101,19 @@ function decorate(book) {
     };
 }
 
+// Library settings (loan limits) stored in the settings table. 0 = unlimited.
+const LIBRARY_DEFAULTS = { student_limit: 3, staff_limit: 5, loan_days: 14 };
+
+function getLibrarySettings() {
+    try {
+        const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('library');
+        if (row) return { ...LIBRARY_DEFAULTS, ...JSON.parse(row.value) };
+    } catch (e) {
+        // fall through to defaults
+    }
+    return { ...LIBRARY_DEFAULTS };
+}
+
 // -----------------------------------------------------------------------------
 // List books (with optional filters)
 // -----------------------------------------------------------------------------
@@ -206,7 +219,8 @@ router.get('/loans', (req, res) => {
         const { status, overdue } = req.query;
         let query = `
       SELECT l.*, b.book_number, b.title, b.author,
-             br.name as borrower_name, br.type as borrower_type, br.identifier as borrower_identifier
+             br.name as borrower_name, br.type as borrower_type, br.identifier as borrower_identifier,
+             br.email as borrower_email
       FROM book_loans l
       JOIN books b ON l.book_id = b.id
       JOIN borrowers br ON l.borrower_id = br.id
@@ -235,6 +249,87 @@ router.get('/loans', (req, res) => {
         res.json(loans);
     } catch (error) {
         res.status(500).json({ error: error.message });
+    }
+});
+
+// -----------------------------------------------------------------------------
+// Library settings — loan limits per borrower type (admin-only to change)
+// -----------------------------------------------------------------------------
+router.get('/settings', (req, res) => {
+    res.json(getLibrarySettings());
+});
+
+router.put('/settings', (req, res) => {
+    try {
+        if (!req.user || req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Only administrators can change library settings' });
+        }
+        const current = getLibrarySettings();
+        const next = {
+            student_limit: Math.max(0, parseInt(req.body.student_limit, 10) || 0),
+            staff_limit: Math.max(0, parseInt(req.body.staff_limit, 10) || 0),
+            loan_days: Math.max(1, parseInt(req.body.loan_days, 10) || current.loan_days)
+        };
+        db.prepare('REPLACE INTO settings (key, value) VALUES (?, ?)').run('library', JSON.stringify(next));
+        logActivity(req, {
+            action: 'library_settings_updated', entity_type: 'settings', entity_id: null,
+            description: `Loan limits: students ${next.student_limit || 'unlimited'}, staff ${next.staff_limit || 'unlimited'}, period ${next.loan_days} days`
+        });
+        res.json(next);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// -----------------------------------------------------------------------------
+// Rapid cataloguing: scan an ISBN — if we already hold it, add one copy;
+// otherwise look it up online and create the book automatically.
+// -----------------------------------------------------------------------------
+router.post('/rapid', async (req, res) => {
+    try {
+        const isbn = (req.body.isbn || '').replace(/[^0-9Xx]/g, '');
+        if (!isbn) {
+            return res.status(400).json({ error: 'A valid ISBN is required' });
+        }
+
+        const existing = db.prepare(`
+      SELECT * FROM books WHERE REPLACE(REPLACE(COALESCE(isbn, ''), '-', ''), ' ', '') = ?
+    `).get(isbn);
+
+        if (existing) {
+            db.prepare('UPDATE books SET quantity = quantity + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+                .run(existing.id);
+            const updated = db.prepare('SELECT * FROM books WHERE id = ?').get(existing.id);
+            logActivity(req, {
+                action: 'book_copy_added', entity_type: 'book', entity_id: existing.id,
+                description: `Added a copy of "${existing.title}" (now ${updated.quantity})`
+            });
+            return res.json({ action: 'incremented', book: decorate(updated) });
+        }
+
+        const meta = await lookupIsbnMetadata(isbn);
+        if (!meta || !meta.title) {
+            return res.status(404).json({
+                error: `ISBN ${isbn} not found in online catalogues — add it manually via Add New Book.`
+            });
+        }
+
+        const bookNumber = generateBookNumber();
+        const result = db.prepare(`
+      INSERT INTO books (
+        book_number, title, author, isbn, category, publisher, published_year,
+        quantity, issued_quantity, shelf_location, campus, notes
+      ) VALUES (?, ?, ?, ?, NULL, ?, ?, 1, 0, NULL, '', NULL)
+    `).run(bookNumber, meta.title, meta.author || null, isbn, meta.publisher || null, meta.published_year);
+
+        const created = db.prepare('SELECT * FROM books WHERE id = ?').get(result.lastInsertRowid);
+        logActivity(req, {
+            action: 'book_created', entity_type: 'book', entity_id: created.id,
+            description: `Rapid-catalogued "${created.title}" (${created.book_number}) via ${meta.source}`
+        });
+        res.status(201).json({ action: 'created', book: decorate(created), source: meta.source });
+    } catch (error) {
+        res.status(502).json({ error: 'Rapid catalogue failed: ' + error.message });
     }
 });
 
@@ -311,6 +406,21 @@ router.post('/issue', (req, res) => {
         const borrower = db.prepare('SELECT * FROM borrowers WHERE id = ?').get(borrower_id);
         if (!borrower) {
             return res.status(404).json({ error: 'Borrower not found' });
+        }
+
+        // Enforce the configurable loan limit for this borrower type (0 = unlimited).
+        const settings = getLibrarySettings();
+        const limit = borrower.type === 'staff' ? settings.staff_limit : settings.student_limit;
+        if (limit > 0) {
+            const active = db.prepare(
+                "SELECT COALESCE(SUM(quantity), 0) as c FROM book_loans WHERE borrower_id = ? AND status = 'issued'"
+            ).get(borrower_id).c;
+            const requested = items.reduce((sum, i) => sum + Math.max(1, parseInt(i.quantity, 10) || 1), 0);
+            if (active + requested > limit) {
+                return res.status(400).json({
+                    error: `${borrower.name} already has ${active} book(s) on loan; the ${borrower.type} limit is ${limit}. Return some first or adjust the limit in library settings.`
+                });
+            }
         }
 
         const issuedBy = req.user?.id || null;

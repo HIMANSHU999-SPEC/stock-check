@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const db = require('./database');
 const { router: authRouter, getUserFromToken, licenseStatus } = require('./routes/auth');
 
@@ -93,6 +94,42 @@ function purgeRecycleBin() {
 
 purgeRecycleBin();
 setInterval(purgeRecycleBin, 24 * 60 * 60 * 1000);
+
+// Nightly database backup: one snapshot per day kept for 14 days.
+// Uses better-sqlite3's online backup API, which is safe while the app runs.
+// Keep the path logic in sync with server/database.js.
+const DB_FILE = process.env.DB_PATH || path.join(__dirname, 'stock-management.db');
+const BACKUP_DIR = path.join(path.dirname(DB_FILE), 'backups');
+const BACKUP_RETENTION_DAYS = 14;
+
+async function runDailyBackup() {
+    try {
+        fs.mkdirSync(BACKUP_DIR, { recursive: true });
+        const stamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        const target = path.join(BACKUP_DIR, `stock-management-${stamp}.db`);
+
+        if (!fs.existsSync(target)) {
+            await db.backup(target);
+            console.log(`Database backed up to ${target}`);
+        }
+
+        // Prune backups older than the retention window.
+        const cutoff = Date.now() - BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+        for (const file of fs.readdirSync(BACKUP_DIR)) {
+            if (!/^stock-management-\d{4}-\d{2}-\d{2}\.db$/.test(file)) continue;
+            const full = path.join(BACKUP_DIR, file);
+            if (fs.statSync(full).mtimeMs < cutoff) {
+                fs.unlinkSync(full);
+                console.log(`Pruned old backup ${file}`);
+            }
+        }
+    } catch (err) {
+        console.error('Daily backup failed', err);
+    }
+}
+
+runDailyBackup();
+setInterval(runDailyBackup, 24 * 60 * 60 * 1000);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {

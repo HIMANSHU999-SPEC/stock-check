@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { booksAPI, borrowersAPI } from '../services/api';
+import { generateOverdueEmail, openEmailDraft } from '../utils/emailTemplates';
 import CameraScanner from './CameraScanner';
 
 const NEW_BORROWER = {
@@ -44,11 +45,52 @@ export default function IssueDesk() {
     // Active loans (returns panel)
     const [loans, setLoans] = useState([]);
 
+    // Library settings (loan limits)
+    const [settings, setSettings] = useState(null);
+    const [savingSettings, setSavingSettings] = useState(false);
+
     useEffect(() => {
         loadBorrowers();
         loadLoans();
+        loadSettings();
         focusScan();
     }, []);
+
+    async function loadSettings() {
+        try {
+            const s = await booksAPI.getSettings();
+            setSettings(s);
+            // Align the default due date with the configured loan period.
+            if (s.loan_days) {
+                const d = new Date();
+                d.setDate(d.getDate() + s.loan_days);
+                setDueDate(d.toISOString().slice(0, 10));
+            }
+        } catch (e) {
+            // limits are optional UI; issue endpoint still enforces them
+        }
+    }
+
+    async function handleSaveSettings() {
+        setSavingSettings(true);
+        try {
+            const saved = await booksAPI.saveSettings(settings);
+            setSettings(saved);
+            alert('Loan limits saved.');
+        } catch (err) {
+            alert('Could not save limits: ' + err.message);
+        } finally {
+            setSavingSettings(false);
+        }
+    }
+
+    function remindBorrower(loan) {
+        const overdueForBorrower = loans.filter(
+            (l) => l.borrower_id === loan.borrower_id && l.is_overdue
+        );
+        const { subject, body } = generateOverdueEmail(loan.borrower_name, overdueForBorrower);
+        openEmailDraft(loan.borrower_email, subject, body);
+    }
 
     // Support ?book=<number> to preload a book (from Book details "Issue this Book")
     useEffect(() => {
@@ -475,9 +517,20 @@ export default function IssueDesk() {
                                             )}
                                         </td>
                                         <td>
-                                            <button onClick={() => handleReturn(loan.id)} className="btn btn-sm btn-primary">
-                                                Return
-                                            </button>
+                                            <div className="flex gap-1">
+                                                <button onClick={() => handleReturn(loan.id)} className="btn btn-sm btn-primary">
+                                                    Return
+                                                </button>
+                                                {loan.is_overdue && loan.borrower_email && (
+                                                    <button
+                                                        onClick={() => remindBorrower(loan)}
+                                                        className="btn btn-sm btn-secondary"
+                                                        title={`Email an overdue reminder to ${loan.borrower_email}`}
+                                                    >
+                                                        📧 Remind
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
@@ -486,6 +539,49 @@ export default function IssueDesk() {
                     </table>
                 </div>
             </div>
+
+            {/* Loan limits */}
+            {settings && (
+                <div className="card mt-3">
+                    <div className="card-header">
+                        <h3 className="card-title">Loan Limits</h3>
+                    </div>
+                    <div className="card-body">
+                        <div className="grid grid-3">
+                            <div className="form-group">
+                                <label className="form-label">Max books per student (0 = unlimited)</label>
+                                <input
+                                    type="number" min="0" className="form-control"
+                                    value={settings.student_limit}
+                                    onChange={(e) => setSettings({ ...settings, student_limit: parseInt(e.target.value, 10) || 0 })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Max books per staff (0 = unlimited)</label>
+                                <input
+                                    type="number" min="0" className="form-control"
+                                    value={settings.staff_limit}
+                                    onChange={(e) => setSettings({ ...settings, staff_limit: parseInt(e.target.value, 10) || 0 })}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Loan period (days)</label>
+                                <input
+                                    type="number" min="1" className="form-control"
+                                    value={settings.loan_days}
+                                    onChange={(e) => setSettings({ ...settings, loan_days: parseInt(e.target.value, 10) || 14 })}
+                                />
+                            </div>
+                        </div>
+                        <button className="btn btn-primary btn-sm" onClick={handleSaveSettings} disabled={savingSettings}>
+                            {savingSettings ? 'Saving…' : 'Save limits'}
+                        </button>
+                        <span className="text-muted" style={{ marginLeft: '0.75rem', fontSize: '0.85rem' }}>
+                            Only administrators can change these.
+                        </span>
+                    </div>
+                </div>
+            )}
 
             {showCamera && (
                 <CameraScanner

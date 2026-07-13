@@ -103,6 +103,9 @@ export default function BookList() {
                     <button onClick={handleExport} className="btn btn-secondary">
                         Export CSV
                     </button>
+                    <Link to="/library/rapid" className="btn btn-secondary">
+                        ⚡ Rapid Catalogue
+                    </Link>
                     <Link to="/books/new" className="btn btn-primary">
                         + Add New Book
                     </Link>

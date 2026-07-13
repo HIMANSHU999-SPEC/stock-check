@@ -67,6 +67,31 @@ Powered by JH Infotech Stock Management System`
     return templates[type] || templates.assignment;
 }
 
+export function generateOverdueEmail(borrowerName, loans) {
+    const lines = loans.map((l) => {
+        const due = l.due_at ? new Date(l.due_at).toLocaleDateString() : 'unknown date';
+        return `- "${l.title}" (${l.book_number}) — due ${due}`;
+    }).join('\n');
+
+    return {
+        subject: `Overdue library book reminder — LAAT Library`,
+        body: `Dear ${borrowerName},
+
+Our records show the following library item(s) issued to you are now overdue:
+
+${lines}
+
+Please return them to the library at your earliest convenience. If you have already returned them, kindly ignore this message.
+
+Best regards,
+London Academy for Applied Technology
+Library
+
+---
+Powered by JH Infotech Stock Management System`
+    };
+}
+
 export function openEmailDraft(to, subject, body, cc) {
     const encodedSubject = encodeURIComponent(subject);
     const encodedBody = encodeURIComponent(body);

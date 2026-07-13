@@ -19,6 +19,7 @@ import IssueDesk from './components/IssueDesk';
 import BookTagPrinter from './components/BookTagPrinter';
 import UserManagement from './components/UserManagement';
 import ActivityLog from './components/ActivityLog';
+import RapidCatalogue from './components/RapidCatalogue';
 import { authAPI, saveAuthToken, clearAuthToken } from './services/api';
 import './index.css';
 
@@ -374,6 +375,14 @@ function App() {
                                 element={
                                     <ProtectedRoute user={user} license={license} authLoading={authLoading}>
                                         <BookTagPrinter />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/library/rapid"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <RapidCatalogue />
                                     </ProtectedRoute>
                                 }
                             />
