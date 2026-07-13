@@ -37,10 +37,18 @@ function Navbar({ user, onLogout, license }) {
     return (
         <nav className="navbar">
             <div className="container navbar-content">
-                <div className="navbar-brand">
-                    <h1>Stock Management System</h1>
-                    <div className="navbar-subtitle">
-                        London Academy for Applied Technology — Built by JH Infotech
+                <div className="navbar-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <img
+                        src="/laat-logo.png"
+                        alt="London Academy for Applied Technology"
+                        style={{ height: '48px', width: 'auto', background: '#fff', borderRadius: '6px', padding: '3px' }}
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                    <div>
+                        <h1>Stock Management System</h1>
+                        <div className="navbar-subtitle">
+                            London Academy for Applied Technology — Built by JH Infotech
+                        </div>
                     </div>
                 </div>
                 <ul className="navbar-nav">
