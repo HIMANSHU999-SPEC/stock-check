@@ -290,6 +290,8 @@ router.post('/rapid', async (req, res) => {
         const isbn = (req.body.isbn || '').replace(/[^0-9Xx]/g, '');
         const category = (req.body.category || '').trim() || null;
         const campus = (req.body.campus || '').trim();
+        const quantity = Math.min(999, Math.max(1, parseInt(req.body.quantity, 10) || 1));
+        const manualTitle = (req.body.title || '').trim();
         if (!isbn) {
             return res.status(400).json({ error: 'A valid ISBN is required' });
         }
@@ -299,26 +301,35 @@ router.post('/rapid', async (req, res) => {
     `).get(isbn);
 
         if (existing) {
-            // Add a copy; fill in category/campus if the record didn't have them yet.
+            // Add copies; fill in category/campus if the record didn't have them yet.
             db.prepare(`
-        UPDATE books SET quantity = quantity + 1,
+        UPDATE books SET quantity = quantity + ?,
           category = COALESCE(category, ?),
           campus = CASE WHEN COALESCE(campus, '') = '' THEN ? ELSE campus END,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(category, campus, existing.id);
+      `).run(quantity, category, campus, existing.id);
             const updated = db.prepare('SELECT * FROM books WHERE id = ?').get(existing.id);
             logActivity(req, {
                 action: 'book_copy_added', entity_type: 'book', entity_id: existing.id,
-                description: `Added a copy of "${existing.title}" (now ${updated.quantity})`
+                description: `Added ${quantity} cop${quantity === 1 ? 'y' : 'ies'} of "${existing.title}" (now ${updated.quantity})`
             });
             return res.json({ action: 'incremented', book: decorate(updated) });
         }
 
-        const meta = await lookupIsbnMetadata(isbn);
+        let meta = await lookupIsbnMetadata(isbn);
+
+        // Not in the online catalogues: fall back to a manually supplied title
+        // so books can still be added without leaving the rapid page.
+        if ((!meta || !meta.title) && manualTitle) {
+            meta = { title: manualTitle, author: null, publisher: null, published_year: null, source: 'Manual entry' };
+        }
+
         if (!meta || !meta.title) {
             return res.status(404).json({
-                error: `ISBN ${isbn} not found in online catalogues — add it manually via Add New Book.`
+                error: `ISBN ${isbn} was not found in the online catalogues.`,
+                needs_title: true,
+                isbn
             });
         }
 
@@ -327,17 +338,48 @@ router.post('/rapid', async (req, res) => {
       INSERT INTO books (
         book_number, title, author, isbn, category, publisher, published_year,
         quantity, issued_quantity, shelf_location, campus, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0, NULL, ?, NULL)
-    `).run(bookNumber, meta.title, meta.author || null, isbn, category, meta.publisher || null, meta.published_year, campus);
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, NULL)
+    `).run(bookNumber, meta.title, meta.author || null, isbn, category, meta.publisher || null, meta.published_year, quantity, campus);
 
         const created = db.prepare('SELECT * FROM books WHERE id = ?').get(result.lastInsertRowid);
         logActivity(req, {
             action: 'book_created', entity_type: 'book', entity_id: created.id,
-            description: `Rapid-catalogued "${created.title}" (${created.book_number}) via ${meta.source}`
+            description: `Rapid-catalogued "${created.title}" (${created.book_number}) via ${meta.source}, ${quantity} cop${quantity === 1 ? 'y' : 'ies'}`
         });
         res.status(201).json({ action: 'created', book: decorate(created), source: meta.source });
     } catch (error) {
         res.status(502).json({ error: 'Rapid catalogue failed: ' + error.message });
+    }
+});
+
+// -----------------------------------------------------------------------------
+// Adjust a book's total copies by a delta (used by the rapid page +/- buttons).
+// Never drops below what is currently issued (or below 1).
+// -----------------------------------------------------------------------------
+router.post('/:id/quantity', (req, res) => {
+    try {
+        const delta = parseInt(req.body.delta, 10);
+        if (!delta || Math.abs(delta) > 999) {
+            return res.status(400).json({ error: 'A non-zero delta is required' });
+        }
+        const book = db.prepare('SELECT * FROM books WHERE id = ?').get(req.params.id);
+        if (!book) {
+            return res.status(404).json({ error: 'Book not found' });
+        }
+        const floor = Math.max(1, book.issued_quantity || 0);
+        const next = Math.max(floor, (book.quantity || 1) + delta);
+        if (next === book.quantity) {
+            return res.json({ book: decorate(book), message: `Quantity stays at ${next} (cannot go below ${floor})` });
+        }
+        db.prepare('UPDATE books SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(next, book.id);
+        const updated = db.prepare('SELECT * FROM books WHERE id = ?').get(book.id);
+        logActivity(req, {
+            action: 'book_quantity_adjusted', entity_type: 'book', entity_id: book.id,
+            description: `"${book.title}" copies ${book.quantity} -> ${next}`
+        });
+        res.json({ book: decorate(updated) });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 

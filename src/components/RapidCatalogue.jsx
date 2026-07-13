@@ -14,6 +14,11 @@ export default function RapidCatalogue() {
     const [session, setSession] = useState([]);
     const [category, setCategory] = useState('');
     const [campus, setCampus] = useState('');
+    const [copies, setCopies] = useState(1);
+    // Set when an ISBN is not in the online catalogues: the user can type just
+    // a title and add the book anyway without leaving this page.
+    const [pending, setPending] = useState(null); // { isbn }
+    const [pendingTitle, setPendingTitle] = useState('');
     const inputRef = useRef(null);
 
     useEffect(() => {
@@ -24,6 +29,42 @@ export default function RapidCatalogue() {
         setTimeout(() => inputRef.current?.focus(), 0);
     }
 
+    function recordResult(res) {
+        setSession((prev) => [{
+            key: Date.now(),
+            action: res.action,
+            title: res.book.title,
+            book_number: res.book.book_number,
+            quantity: res.book.quantity,
+            category: res.book.category,
+            campus: res.book.campus,
+            id: res.book.id
+        }, ...prev]);
+    }
+
+    async function addIsbn(value, extras = {}) {
+        setBusy(true);
+        setError('');
+        try {
+            const res = await booksAPI.rapidAdd(value, { category, campus, quantity: copies, ...extras });
+            recordResult(res);
+            setPending(null);
+            setPendingTitle('');
+        } catch (err) {
+            if (err.message.includes('not found in the online catalogues')) {
+                // Offer inline manual entry instead of a dead end.
+                setPending({ isbn: value });
+                setPendingTitle('');
+                setError('');
+            } else {
+                setError(`${value}: ${err.message}`);
+            }
+        } finally {
+            setBusy(false);
+            refocus();
+        }
+    }
+
     async function handleScan(e) {
         e.preventDefault();
         const value = isbn.trim();
@@ -32,30 +73,26 @@ export default function RapidCatalogue() {
             refocus();
             return;
         }
-        setBusy(true);
-        setError('');
+        await addIsbn(value);
+    }
+
+    async function handleManualAdd(e) {
+        e.preventDefault();
+        if (!pending || !pendingTitle.trim()) return;
+        await addIsbn(pending.isbn, { title: pendingTitle.trim() });
+    }
+
+    async function adjustRow(row, delta) {
         try {
-            const res = await booksAPI.rapidAdd(value, { category, campus });
-            setSession((prev) => [{
-                key: Date.now(),
-                action: res.action,
-                title: res.book.title,
-                book_number: res.book.book_number,
-                quantity: res.book.quantity,
-                category: res.book.category,
-                campus: res.book.campus,
-                id: res.book.id
-            }, ...prev]);
+            const res = await booksAPI.adjustQuantity(row.id, delta);
+            setSession((prev) => prev.map((s) => (s.id === row.id ? { ...s, quantity: res.book.quantity } : s)));
         } catch (err) {
-            setError(`${value}: ${err.message}`);
-        } finally {
-            setBusy(false);
-            refocus();
+            alert('Could not adjust copies: ' + err.message);
         }
     }
 
     const created = session.filter((s) => s.action === 'created').length;
-    const copies = session.filter((s) => s.action === 'incremented').length;
+    const extraCopies = session.filter((s) => s.action === 'incremented').length;
 
     return (
         <div>
@@ -66,7 +103,18 @@ export default function RapidCatalogue() {
 
             <div className="card mb-3">
                 <div className="card-body">
-                    <div className="grid grid-2 mb-2">
+                    <div className="grid grid-3 mb-2">
+                        <div className="form-group">
+                            <label className="form-label">Copies per scan</label>
+                            <input
+                                type="number"
+                                min="1"
+                                max="999"
+                                className="form-control"
+                                value={copies}
+                                onChange={(e) => setCopies(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                            />
+                        </div>
                         <div className="form-group">
                             <label className="form-label">Category for these scans</label>
                             <input
@@ -124,6 +172,37 @@ export default function RapidCatalogue() {
                             <Link to="/books/new" className="text-primary">Add manually →</Link>
                         </p>
                     )}
+
+                    {pending && (
+                        <form onSubmit={handleManualAdd} className="card mt-2" style={{ background: 'var(--bg-tertiary)' }}>
+                            <div className="card-body">
+                                <p style={{ marginBottom: '0.5rem' }}>
+                                    <strong>ISBN {pending.isbn}</strong> isn't in the online catalogues.
+                                    Type the title from the cover and it will be added with this ISBN:
+                                </p>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        className="form-control"
+                                        placeholder="Book title"
+                                        value={pendingTitle}
+                                        onChange={(e) => setPendingTitle(e.target.value)}
+                                        autoFocus
+                                    />
+                                    <button type="submit" className="btn btn-primary" disabled={busy || !pendingTitle.trim()}>
+                                        Add book
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary"
+                                        onClick={() => { setPending(null); setPendingTitle(''); refocus(); }}
+                                    >
+                                        Skip
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    )}
                 </div>
             </div>
 
@@ -132,7 +211,7 @@ export default function RapidCatalogue() {
                     <div className="flex justify-between items-center">
                         <h3 className="card-title">This session</h3>
                         <span className="badge badge-primary">
-                            {created} new · {copies} extra cop{copies === 1 ? 'y' : 'ies'}
+                            {created} new · {extraCopies} extra cop{extraCopies === 1 ? 'y' : 'ies'}
                         </span>
                     </div>
                 </div>
@@ -171,7 +250,27 @@ export default function RapidCatalogue() {
                                         <td>{s.title}</td>
                                         <td>{s.category || '—'}</td>
                                         <td>{s.campus || '—'}</td>
-                                        <td>{s.quantity}</td>
+                                        <td>
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-secondary"
+                                                    onClick={() => adjustRow(s, -1)}
+                                                    title="Remove one copy"
+                                                >
+                                                    −
+                                                </button>
+                                                <strong style={{ minWidth: '1.5rem', textAlign: 'center' }}>{s.quantity}</strong>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-sm btn-secondary"
+                                                    onClick={() => adjustRow(s, 1)}
+                                                    title="Add one copy"
+                                                >
+                                                    +
+                                                </button>
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))
                             )}
