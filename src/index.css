@@ -2,25 +2,29 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
 :root {
-  /* Color Palette */
-  --primary: #6366f1;
-  --primary-dark: #4f46e5;
-  --primary-light: #818cf8;
-  --secondary: #8b5cf6;
-  --accent: #ec4899;
-  --success: #10b981;
-  --warning: #f59e0b;
-  --danger: #ef4444;
-  --info: #3b82f6;
+  /* Color Palette — LAAT maroon & white */
+  --primary: #7a1f2b;
+  --primary-dark: #5c141c;
+  --primary-light: #9c3040;
+  --secondary: #a83246;
+  --accent: #a83246;
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --info: #2563eb;
 
-  /* Neutral Colors */
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --bg-tertiary: #334155;
-  --text-primary: #f1f5f9;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  --border: #334155;
+  /* Maroon navbar */
+  --maroon: #7a1f2b;
+  --maroon-dark: #5c141c;
+
+  /* Neutral Colors (light theme) */
+  --bg-primary: #f7f3f4;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f0e6e8;
+  --text-primary: #23181a;
+  --text-secondary: #574b4d;
+  --text-muted: #857578;
+  --border: #e7dadd;
 
   /* Light Mode */
   --light-bg-primary: #ffffff;
@@ -156,13 +160,12 @@ h6 {
 
 /* Navbar */
 .navbar {
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, var(--maroon), var(--maroon-dark));
+  border-bottom: 3px solid var(--maroon-dark);
   padding: var(--spacing-md) 0;
   position: sticky;
   top: 0;
   z-index: 100;
-  backdrop-filter: blur(10px);
   box-shadow: var(--shadow);
 }
 
@@ -181,15 +184,13 @@ h6 {
 .navbar-brand h1 {
   font-size: 1.5rem;
   margin: 0;
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
 }
 
 .navbar-subtitle {
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.75);
   font-weight: 500;
 }
 
@@ -201,7 +202,7 @@ h6 {
 }
 
 .nav-link {
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.85);
   text-decoration: none;
   padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-md);
@@ -211,13 +212,13 @@ h6 {
 }
 
 .nav-link:hover {
-  color: var(--primary);
-  background: var(--bg-tertiary);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .nav-link.active {
-  color: var(--primary);
-  background: var(--bg-tertiary);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.22);
 }
 
 /* Buttons */
@@ -474,7 +475,7 @@ textarea.form-control {
 }
 
 .badge-primary {
-  background: rgba(99, 102, 241, 0.2);
+  background: rgba(122, 31, 43, 0.14);
   color: var(--primary);
 }
 

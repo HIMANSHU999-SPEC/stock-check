@@ -24,15 +24,6 @@ import './index.css';
 
 function Navbar({ user, onLogout, license }) {
     const location = useLocation();
-    const [darkMode, setDarkMode] = React.useState(true);
-
-    React.useEffect(() => {
-        if (darkMode) {
-            document.body.classList.remove('light-mode');
-        } else {
-            document.body.classList.add('light-mode');
-        }
-    }, [darkMode]);
 
     const isActive = (path) => location.pathname === path;
 
@@ -115,15 +106,6 @@ function Navbar({ user, onLogout, license }) {
                         <Link to="/tags" className={`nav-link ${isActive('/tags') ? 'active' : ''}`}>
                             Print Tags
                         </Link>
-                    </li>
-                    <li>
-                        <button
-                            className="theme-toggle"
-                            onClick={() => setDarkMode(!darkMode)}
-                            title="Toggle theme"
-                        >
-                            {darkMode ? 'Dark' : 'Light'}
-                        </button>
                     </li>
                     {user ? (
                         <>
