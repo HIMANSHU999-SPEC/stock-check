@@ -37,6 +37,7 @@ export default function Dashboard() {
     const [statusStats, setStatusStats] = useState([]);
     const [categoryStats, setCategoryStats] = useState([]);
     const [bookSummary, setBookSummary] = useState(null);
+    const [loadError, setLoadError] = useState('');
     const [license, setLicense] = useState(null);
     const [showLicense, setShowLicense] = useState(true);
     const [campusModal, setCampusModal] = useState({ open: false, name: '', assets: [], loading: false });
@@ -48,24 +49,22 @@ export default function Dashboard() {
 
     async function loadData() {
         try {
-            const [summaryData, assetsData, campusData, statusData, categoryData] = await Promise.all([
-                reportsAPI.getSummary(),
-                assetsAPI.getAll(),
-                reportsAPI.getByCampus(),
+            // Each call is independent so one failure can't blank the whole dashboard.
+            const [summaryData, assetsData, campusData, statusData, categoryData, bookData] = await Promise.all([
+                reportsAPI.getSummary().catch((e) => { console.error('summary failed', e); return null; }),
+                assetsAPI.getAll().catch((e) => { console.error('assets failed', e); return []; }),
+                reportsAPI.getByCampus().catch(() => []),
                 reportsAPI.getByStatus().catch(() => []),
-                reportsAPI.getByCategory().catch(() => [])
+                reportsAPI.getByCategory().catch(() => []),
+                booksAPI.summary().catch(() => null)
             ]);
-            setStats(summaryData);
-            setRecentAssets(assetsData.slice(0, 5));
-            setCampusStats(campusData);
-            setStatusStats(statusData);
-            setCategoryStats(categoryData);
-            try {
-                const bs = await booksAPI.summary();
-                setBookSummary(bs);
-            } catch (e) {
-                // library summary optional
-            }
+            if (summaryData) setStats(summaryData);
+            else setLoadError('Could not load live totals — the server may be restarting. Try refreshing.');
+            setRecentAssets((assetsData || []).slice(0, 5));
+            setCampusStats(campusData || []);
+            setStatusStats(statusData || []);
+            setCategoryStats(categoryData || []);
+            setBookSummary(bookData);
             try {
                 const lic = await authAPI.license();
                 setLicense(lic);
@@ -102,6 +101,14 @@ export default function Dashboard() {
                     + Add New Asset
                 </Link>
             </div>
+
+            {loadError && (
+                <div className="card mb-3" style={{ borderLeft: '4px solid var(--danger)' }}>
+                    <div className="card-body" style={{ color: 'var(--danger)' }}>
+                        ⚠️ {loadError}
+                    </div>
+                </div>
+            )}
 
             <div className="flex justify-between items-center mb-3">
                 <div>
