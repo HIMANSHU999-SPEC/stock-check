@@ -178,6 +178,7 @@ export const reportsAPI = {
     getBySupplier: () => apiCall('/reports/by-supplier'),
     getByCampus: () => apiCall('/reports/by-campus'),
     getByModel: () => apiCall('/reports/by-model'),
+    getByBrand: () => apiCall('/reports/by-brand'),
     getCategories: () => apiCall('/categories'),
 };
 

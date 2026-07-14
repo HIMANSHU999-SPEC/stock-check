@@ -16,9 +16,11 @@ export default function AssetList() {
         status: '',
         category: '',
         campus: '',
-        model: ''
+        model: '',
+        brand: ''
     });
     const [models, setModels] = useState([]);
+    const [brands, setBrands] = useState([]);
     const location = useLocation();
     const navigate = useNavigate();
     const [assignModal, setAssignModal] = useState({ open: false, asset: null });
@@ -37,6 +39,7 @@ export default function AssetList() {
         loadEmployees();
         loadCampuses();
         loadModels();
+        loadBrands();
         const params = new URLSearchParams(location.search);
         const campusParam = params.get('campus');
         if (campusParam !== null) {
@@ -96,6 +99,48 @@ export default function AssetList() {
         } catch (error) {
             console.error('Error loading employees:', error);
         }
+    }
+
+    async function loadBrands() {
+        try {
+            const data = await reportsAPI.getByBrand();
+            setBrands(data.filter((b) => b.brand));
+        } catch (error) {
+            console.error('Error loading brands:', error);
+        }
+    }
+
+    // Export the currently filtered view as a real Excel workbook.
+    function exportExcel() {
+        if (assets.length === 0) {
+            alert('Nothing to export with the current filters.');
+            return;
+        }
+        const rows = assets.map((a) => ({
+            'Asset Number': a.asset_number,
+            'Name': a.name,
+            'Brand': a.brand || '',
+            'Category': a.category_name || '',
+            'Model': a.model || '',
+            'Serial Number': a.serial_number || '',
+            'Quantity': a.quantity || 1,
+            'Assigned Qty': a.assigned_quantity || 0,
+            'Status': a.status,
+            'Assigned To': a.employee_name || '',
+            'Supplier': a.supplier_name || '',
+            'Campus': a.campus || '',
+            'Location': a.location || '',
+            'Purchase Date': a.purchase_date || '',
+            'Purchase Price': a.purchase_price || '',
+            'Warranty (months)': a.warranty_period_months || 0,
+            'Date Added': a.created_at ? new Date(a.created_at).toLocaleDateString() : ''
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Assets');
+        const catName = categories.find((c) => `${c.id}` === `${filters.category}`)?.name;
+        const nameParts = ['assets', catName, filters.brand, filters.campus].filter(Boolean);
+        XLSX.writeFile(wb, `${nameParts.join('-').toLowerCase().replace(/\s+/g, '_')}.xlsx`);
     }
 
     async function loadAssets() {
@@ -215,9 +260,14 @@ export default function AssetList() {
         <div>
             <div className="flex justify-between items-center mb-3">
                 <h2>Asset Management</h2>
-                <Link to="/assets/new" className="btn btn-primary">
-                    + Add New Asset
-                </Link>
+                <div className="flex gap-2">
+                    <button onClick={exportExcel} className="btn btn-secondary">
+                        📥 Export Excel (filtered)
+                    </button>
+                    <Link to="/assets/new" className="btn btn-primary">
+                        + Add New Asset
+                    </Link>
+                </div>
             </div>
 
             <div className="card mb-3">
@@ -259,6 +309,20 @@ export default function AssetList() {
                                 {categories.map((cat) => (
                                     <option key={cat.id} value={cat.id}>
                                         {cat.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <select
+                                className="form-control"
+                                value={filters.brand}
+                                onChange={(e) => setFilters({ ...filters, brand: e.target.value })}
+                            >
+                                <option value="">All Brands</option>
+                                {brands.map((b) => (
+                                    <option key={b.brand} value={b.brand}>
+                                        {b.brand} ({b.asset_count})
                                     </option>
                                 ))}
                             </select>

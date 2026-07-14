@@ -17,6 +17,7 @@ export default function AssetForm() {
     const [formData, setFormData] = useState({
         name: '',
         category_id: '',
+        brand: '',
         model: '',
         serial_number: '',
         quantity: 1,
@@ -34,6 +35,7 @@ export default function AssetForm() {
         loadCategories();
         loadCampuses();
         loadModels();
+        loadBrands();
         if (isEdit) {
             loadAsset();
         }
@@ -46,6 +48,19 @@ export default function AssetForm() {
             setModels(names);
         } catch (error) {
             console.error('Error loading models:', error);
+        }
+    }
+
+    const COMMON_BRANDS = ['HP', 'Dell', 'Lenovo', 'Apple', 'Microsoft', 'Samsung', 'Acer', 'Asus', 'Logitech', 'Cisco'];
+    const [brands, setBrands] = useState(COMMON_BRANDS);
+
+    async function loadBrands() {
+        try {
+            const data = await reportsAPI.getByBrand();
+            const names = data.map((b) => b.brand).filter((n) => n && n !== 'Unspecified');
+            setBrands([...new Set([...names, ...COMMON_BRANDS])]);
+        } catch (error) {
+            // keep common suggestions
         }
     }
 
@@ -76,6 +91,7 @@ export default function AssetForm() {
             setFormData({
                 name: data.name || '',
                 category_id: data.category_id || '',
+                brand: data.brand || '',
                 model: data.model || '',
                 serial_number: data.serial_number || '',
                 quantity: data.quantity || 1,
@@ -159,6 +175,22 @@ export default function AssetForm() {
                                         </option>
                                     ))}
                                 </select>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Brand</label>
+                                <input
+                                    type="text"
+                                    name="brand"
+                                    className="form-control"
+                                    list="asset-brands"
+                                    placeholder="e.g. HP, Dell, Lenovo"
+                                    value={formData.brand}
+                                    onChange={handleChange}
+                                />
+                                <datalist id="asset-brands">
+                                    {brands.map((b) => <option key={b} value={b} />)}
+                                </datalist>
                             </div>
 
                             <div className="form-group">

@@ -43,7 +43,7 @@ function toCsv(rows) {
 // Get all assets with optional filtering
 router.get('/', (req, res) => {
     try {
-        const { status, category, search, supplier, campus, model } = req.query;
+        const { status, category, search, supplier, campus, model, brand } = req.query;
         let query = `
       SELECT a.*, c.name as category_name, e.name as employee_name, e.email as employee_email
       FROM assets a
@@ -86,6 +86,15 @@ router.get('/', (req, res) => {
             }
         }
 
+        if (brand) {
+            if (brand === 'Unspecified') {
+                query += " AND (a.brand IS NULL OR TRIM(a.brand) = '')";
+            } else {
+                query += " AND LOWER(TRIM(COALESCE(a.brand, ''))) = LOWER(TRIM(?))";
+                params.push(brand);
+            }
+        }
+
         if (search) {
             query += ' AND (a.name LIKE ? OR a.asset_number LIKE ? OR a.model LIKE ? OR a.serial_number LIKE ?)';
             const searchParam = `%${search}%`;
@@ -106,7 +115,7 @@ router.get('/export/by-category', (req, res) => {
     try {
         const { category } = req.query;
         let query = `
-      SELECT a.asset_number, a.name, a.model, a.serial_number, a.quantity, a.assigned_quantity,
+      SELECT a.asset_number, a.name, a.brand, a.model, a.serial_number, a.quantity, a.assigned_quantity,
              a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
              c.name as category, e.name as assigned_to, e.email as assigned_email, a.created_at as date_added
       FROM assets a
@@ -134,7 +143,7 @@ router.get('/export/by-supplier', (req, res) => {
     try {
         const { supplier } = req.query;
         let query = `
-      SELECT a.asset_number, a.name, a.model, a.serial_number, a.quantity, a.assigned_quantity,
+      SELECT a.asset_number, a.name, a.brand, a.model, a.serial_number, a.quantity, a.assigned_quantity,
              a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
              c.name as category, e.name as assigned_to, e.email as assigned_email, a.created_at as date_added
       FROM assets a
@@ -166,7 +175,7 @@ router.get('/export/by-model', (req, res) => {
     try {
         const { model } = req.query;
         let query = `
-      SELECT a.asset_number, a.name, a.model, a.serial_number, a.quantity, a.assigned_quantity,
+      SELECT a.asset_number, a.name, a.brand, a.model, a.serial_number, a.quantity, a.assigned_quantity,
              a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
              c.name as category, e.name as assigned_to, e.email as assigned_email, a.created_at as date_added
       FROM assets a
@@ -198,7 +207,7 @@ router.get('/export/by-campus', (req, res) => {
     try {
         const { campus } = req.query;
         let query = `
-      SELECT a.asset_number, a.name, a.model, a.serial_number, a.quantity, a.assigned_quantity,
+      SELECT a.asset_number, a.name, a.brand, a.model, a.serial_number, a.quantity, a.assigned_quantity,
              a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
              c.name as category, e.name as assigned_to, e.email as assigned_email, a.created_at as date_added
       FROM assets a
@@ -509,6 +518,7 @@ router.post('/', (req, res) => {
             category_id,
         model,
         serial_number,
+        brand,
         quantity = 1,
         purchase_date,
         purchase_price,
@@ -525,11 +535,11 @@ router.post('/', (req, res) => {
 
         const result = db.prepare(`
       INSERT INTO assets (
-        asset_number, name, category_id, model, serial_number, quantity, assigned_quantity,
+        asset_number, name, category_id, model, serial_number, brand, quantity, assigned_quantity,
         purchase_date, purchase_price, supplier_name, warranty_period_months, intune_price, status, campus, location, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-            assetNumber, name, category_id, model, serial_number, safeQuantity,
+            assetNumber, name, category_id, model, serial_number, brand || null, safeQuantity,
             purchase_date, purchase_price, supplier_name, Math.max(0, parseInt(warranty_period_months, 10) || 0), intune_price, status, campus, location, notes
         );
 
@@ -579,9 +589,9 @@ router.post('/import', (req, res) => {
 
         const insertStmt = db.prepare(`
       INSERT INTO assets (
-        asset_number, name, category_id, model, serial_number, quantity, assigned_quantity,
+        asset_number, name, category_id, model, serial_number, brand, quantity, assigned_quantity,
         purchase_date, purchase_price, supplier_name, warranty_period_months, intune_price, status, campus, location, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
         const importResult = db.transaction(() => {
@@ -598,6 +608,7 @@ router.post('/import', (req, res) => {
                     categoryId,
                     item.model || null,
                     item.serial_number || null,
+                    item.brand || item.manufacturer || null,
                     qty,
                     item.purchase_date || null,
                     item.purchase_price || null,
@@ -628,6 +639,7 @@ router.put('/:id', (req, res) => {
             category_id,
             model,
             serial_number,
+        brand,
         quantity = 1,
         purchase_date,
         purchase_price,
@@ -658,12 +670,12 @@ router.put('/:id', (req, res) => {
 
         db.prepare(`
       UPDATE assets SET
-        name = ?, category_id = ?, model = ?, serial_number = ?, quantity = ?,
+        name = ?, category_id = ?, model = ?, serial_number = ?, brand = ?, quantity = ?,
         purchase_date = ?, purchase_price = ?, supplier_name = ?, warranty_period_months = ?, intune_price = ?,
         status = ?, assigned_to = ?, assigned_quantity = ?, campus = ?, location = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
-            name, category_id, model, serial_number, safeQuantity,
+            name, category_id, model, serial_number, brand || null, safeQuantity,
             purchase_date, purchase_price, supplier_name, Math.max(0, parseInt(warranty_period_months, 10) || 0), intune_price,
             status, newAssignedTo, newAssignedQty, campus, location, notes, req.params.id
         );
@@ -854,7 +866,7 @@ router.post('/:id/restore', (req, res) => {
         const restoreTx = db.transaction(() => {
             db.prepare(`
         UPDATE assets SET
-          asset_number = ?, name = ?, category_id = ?, model = ?, serial_number = ?, quantity = ?,
+          asset_number = ?, name = ?, category_id = ?, model = ?, serial_number = ?, brand = ?, quantity = ?,
           assigned_quantity = ?, purchase_date = ?, purchase_price = ?, supplier_name = ?, warranty_period_months = ?,
           intune_price = ?, status = ?, assigned_to = ?, campus = ?, location = ?, notes = ?,
           deleted_at = NULL, deleted_by = NULL, updated_at = CURRENT_TIMESTAMP
@@ -865,6 +877,7 @@ router.post('/:id/restore', (req, res) => {
                 payload.category_id,
                 payload.model,
                 payload.serial_number,
+                payload.brand || null,
                 payload.quantity || 1,
                 payload.assigned_quantity || 0,
                 payload.purchase_date || null,

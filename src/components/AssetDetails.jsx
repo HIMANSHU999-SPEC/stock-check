@@ -189,6 +189,11 @@ export default function AssetDetails() {
                             </div>
 
                             <div className="form-group">
+                                <label className="form-label">Brand</label>
+                                <div>{asset.brand || 'N/A'}</div>
+                            </div>
+
+                            <div className="form-group">
                                 <label className="form-label">Model</label>
                                 <div>{asset.model || 'N/A'}</div>
                             </div>

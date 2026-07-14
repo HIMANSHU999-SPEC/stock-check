@@ -127,6 +127,9 @@ function initializeDatabase() {
   if (!columnNames.includes('campus')) {
     db.exec(`ALTER TABLE assets ADD COLUMN campus TEXT DEFAULT ''`);
   }
+  if (!columnNames.includes('brand')) {
+    db.exec(`ALTER TABLE assets ADD COLUMN brand TEXT`);
+  }
 
   // Normalize existing rows where assignment exists but assigned_quantity is zero
   db.exec(`
