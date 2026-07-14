@@ -352,13 +352,14 @@ export default function AssetList() {
                                     <th>Qty</th>
                                     <th>Status</th>
                                     <th>Assigned To</th>
+                                    <th>Added</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {assets.length === 0 ? (
                                     <tr>
-                                        <td colSpan="9" className="text-center text-muted">
+                                        <td colSpan="11" className="text-center text-muted">
                                             No assets found
                                         </td>
                                     </tr>
@@ -382,6 +383,9 @@ export default function AssetList() {
                                                 </span>
                                             </td>
                                             <td>{asset.employee_name || '-'}</td>
+                                            <td style={{ whiteSpace: 'nowrap' }}>
+                                                {asset.created_at ? new Date(asset.created_at).toLocaleDateString() : '—'}
+                                            </td>
                                             <td>
                                                 <div className="flex gap-1">
                                                     <Link to={`/assets/${asset.id}`} className="btn btn-sm btn-secondary">

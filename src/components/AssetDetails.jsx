@@ -271,6 +271,13 @@ export default function AssetDetails() {
                                     {asset.purchase_price ? `£${parseFloat(asset.purchase_price).toFixed(2)}` : 'N/A'}
                                 </div>
                             </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Added to System</label>
+                                <div>
+                                    {asset.created_at ? new Date(asset.created_at).toLocaleDateString() : 'N/A'}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

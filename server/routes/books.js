@@ -426,7 +426,7 @@ router.get('/export', (req, res) => {
         const rows = db.prepare(`
       SELECT book_number, title, author, isbn, category, publisher, published_year,
              quantity, issued_quantity, (quantity - issued_quantity) as available,
-             shelf_location, campus
+             shelf_location, campus, created_at as date_added
       FROM books
       ORDER BY title
     `).all();

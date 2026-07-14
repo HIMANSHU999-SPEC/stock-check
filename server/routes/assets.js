@@ -108,7 +108,7 @@ router.get('/export/by-category', (req, res) => {
         let query = `
       SELECT a.asset_number, a.name, a.model, a.serial_number, a.quantity, a.assigned_quantity,
              a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
-             c.name as category, e.name as assigned_to, e.email as assigned_email
+             c.name as category, e.name as assigned_to, e.email as assigned_email, a.created_at as date_added
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN employees e ON a.assigned_to = e.id
@@ -136,7 +136,7 @@ router.get('/export/by-supplier', (req, res) => {
         let query = `
       SELECT a.asset_number, a.name, a.model, a.serial_number, a.quantity, a.assigned_quantity,
              a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
-             c.name as category, e.name as assigned_to, e.email as assigned_email
+             c.name as category, e.name as assigned_to, e.email as assigned_email, a.created_at as date_added
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN employees e ON a.assigned_to = e.id
@@ -168,7 +168,7 @@ router.get('/export/by-model', (req, res) => {
         let query = `
       SELECT a.asset_number, a.name, a.model, a.serial_number, a.quantity, a.assigned_quantity,
              a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
-             c.name as category, e.name as assigned_to, e.email as assigned_email
+             c.name as category, e.name as assigned_to, e.email as assigned_email, a.created_at as date_added
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN employees e ON a.assigned_to = e.id
@@ -200,7 +200,7 @@ router.get('/export/by-campus', (req, res) => {
         let query = `
       SELECT a.asset_number, a.name, a.model, a.serial_number, a.quantity, a.assigned_quantity,
              a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
-             c.name as category, e.name as assigned_to, e.email as assigned_email
+             c.name as category, e.name as assigned_to, e.email as assigned_email, a.created_at as date_added
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN employees e ON a.assigned_to = e.id

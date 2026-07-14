@@ -73,6 +73,7 @@ export default function BookDetails() {
                         <p><strong>Published Year:</strong> {book.published_year || 'N/A'}</p>
                         <p><strong>Shelf Location:</strong> {book.shelf_location || 'N/A'}</p>
                         <p><strong>Campus:</strong> {book.campus || 'N/A'}</p>
+                        <p><strong>Added to Library:</strong> {book.created_at ? new Date(book.created_at).toLocaleDateString() : 'N/A'}</p>
                         <p>
                             <strong>Availability:</strong>{' '}
                             <span className={`badge badge-${book.available_quantity > 0 ? 'success' : 'danger'}`}>
