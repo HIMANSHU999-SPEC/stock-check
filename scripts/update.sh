@@ -65,9 +65,16 @@ export DB_PATH
 
 if command -v pm2 >/dev/null 2>&1; then
   echo "==> Restarting with pm2..."
-  pm2 startOrReload ecosystem.config.js --update-env 2>/dev/null \
-    || pm2 restart stock-management --update-env 2>/dev/null \
-    || pm2 start server/index.js --name stock-management --update-env
+  # Restart whichever backend app already exists rather than launching a new
+  # one from ecosystem.config.js (which would duplicate the server under a
+  # different name and fight over the port).
+  if pm2 describe stock-backend >/dev/null 2>&1; then
+    pm2 restart stock-backend --update-env
+  elif pm2 describe stock-management >/dev/null 2>&1; then
+    pm2 restart stock-management --update-env
+  else
+    pm2 start server/index.js --name stock-backend --update-env
+  fi
   pm2 save
 elif systemctl list-units --type=service 2>/dev/null | grep -q stock-management; then
   echo "==> Restarting systemd service stock-management..."
