@@ -47,6 +47,15 @@ npm ci || npm install
 echo "==> Building frontend..."
 npm run build
 
+# Publish the build to nginx's web root when this server uses one
+# (the LAAT production box serves the SPA from /var/www/stock-frontend).
+WEB_ROOT="${WEB_ROOT:-/var/www/stock-frontend}"
+if [ -d "$WEB_ROOT" ]; then
+  echo "==> Publishing build to $WEB_ROOT..."
+  sudo rm -rf "${WEB_ROOT:?}"/*
+  sudo cp -r dist/* "$WEB_ROOT"/
+fi
+
 # 4. Restart the server. Uses pm2 if available, otherwise systemd, otherwise
 #    prints how to start it manually. Migrations are additive (CREATE TABLE IF
 #    NOT EXISTS / ADD COLUMN guards), so existing data is preserved on boot.
