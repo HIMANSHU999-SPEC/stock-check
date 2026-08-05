@@ -172,11 +172,13 @@ export default function AssetList() {
 
     function openAssign(asset) {
         const available = Math.max(0, (asset.quantity || 1) - (asset.assigned_quantity || 0));
-        if (available === 0) {
+        const isReassign = Boolean(asset.assigned_to);
+        if (!isReassign && available === 0) {
             alert('No available quantity to assign for this asset.');
             return;
         }
-        setAssignQuantity(Math.max(1, available || 1));
+        // Reassigning moves the current assignment, so default to that amount.
+        setAssignQuantity(isReassign ? (asset.assigned_quantity || 1) : Math.max(1, available));
         setSelectedEmployee('');
         setShowNewEmployeeForm(false);
         setAssignModal({ open: true, asset });
@@ -185,12 +187,13 @@ export default function AssetList() {
     async function submitAssign() {
         if (!assignModal.asset) return;
         const available = Math.max(0, (assignModal.asset.quantity || 1) - (assignModal.asset.assigned_quantity || 0));
+        const maxQty = assignModal.asset.assigned_to ? (assignModal.asset.quantity || 1) : available;
         if (!selectedEmployee) {
             alert('Select an employee');
             return;
         }
-        if (assignQuantity < 1 || assignQuantity > available) {
-            alert(`Select a quantity between 1 and ${available}`);
+        if (assignQuantity < 1 || assignQuantity > maxQty) {
+            alert(`Select a quantity between 1 and ${maxQty}`);
             return;
         }
         try {
@@ -458,14 +461,12 @@ export default function AssetList() {
                                                     <Link to={`/assets/${asset.id}/edit`} className="btn btn-sm btn-secondary">
                                                         Edit
                                                     </Link>
-                                                    {!asset.assigned_to && (
-                                                        <button
-                                                            onClick={() => openAssign(asset)}
-                                                            className="btn btn-sm btn-primary"
-                                                        >
-                                                            Assign
-                                                        </button>
-                                                    )}
+                                                    <button
+                                                        onClick={() => openAssign(asset)}
+                                                        className={`btn btn-sm ${asset.assigned_to ? 'btn-secondary' : 'btn-primary'}`}
+                                                    >
+                                                        {asset.assigned_to ? 'Reassign' : 'Assign'}
+                                                    </button>
                                                     <button
                                                         onClick={() => handleDelete(asset.id)}
                                                         className="btn btn-sm btn-danger"
@@ -492,7 +493,13 @@ export default function AssetList() {
                     }}
                 >
                     <div className="modal" onClick={(e) => e.stopPropagation()}>
-                        <h3>Assign Asset</h3>
+                        <h3>{assignModal.asset?.assigned_to ? 'Reassign Asset' : 'Assign Asset'}</h3>
+                        {assignModal.asset?.assigned_to && (
+                            <p className="text-muted" style={{ marginTop: '0.5rem' }}>
+                                Currently with <strong>{assignModal.asset.employee_name}</strong> — assigning moves it
+                                to the selected employee.
+                            </p>
+                        )}
                         <div className="form-group mt-2">
                             <label className="form-label">Employee</label>
                             <select
@@ -513,13 +520,17 @@ export default function AssetList() {
                             <input
                                 type="number"
                                 min="1"
-                                max={Math.max(1, (assignModal.asset?.quantity || 1) - (assignModal.asset?.assigned_quantity || 0))}
+                                max={assignModal.asset?.assigned_to
+                                    ? (assignModal.asset?.quantity || 1)
+                                    : Math.max(1, (assignModal.asset?.quantity || 1) - (assignModal.asset?.assigned_quantity || 0))}
                                 className="form-control"
                                 value={assignQuantity}
                                 onChange={(e) => setAssignQuantity(parseInt(e.target.value, 10) || 1)}
                             />
                             <div className="text-muted" style={{ fontSize: '0.85rem' }}>
-                                Available: {Math.max(0, (assignModal.asset?.quantity || 1) - (assignModal.asset?.assigned_quantity || 0))}
+                                {assignModal.asset?.assigned_to
+                                    ? `Total quantity: ${assignModal.asset?.quantity || 1}`
+                                    : `Available: ${Math.max(0, (assignModal.asset?.quantity || 1) - (assignModal.asset?.assigned_quantity || 0))}`}
                             </div>
                         </div>
                         <div className="form-group">

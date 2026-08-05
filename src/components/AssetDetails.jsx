@@ -62,9 +62,12 @@ export default function AssetDetails() {
             alert('Please select an employee');
             return;
         }
+        // Reassigning moves the assignment, so the whole quantity is in play;
+        // a fresh assignment can only use what's not already assigned.
         const available = Math.max(0, (asset?.quantity || 0) - (asset?.assigned_quantity || 0));
-        if (assignQuantity < 1 || assignQuantity > available) {
-            alert(`Select a quantity between 1 and ${available}`);
+        const maxQty = asset?.assigned_to ? (asset?.quantity || 1) : available;
+        if (assignQuantity < 1 || assignQuantity > maxQty) {
+            alert(`Select a quantity between 1 and ${maxQty}`);
             return;
         }
 
@@ -321,7 +324,13 @@ export default function AssetDetails() {
                                     <button onClick={() => handleEmailEmployee('return')} className="btn btn-secondary">
                                         Email Return Notice
                                     </button>
-                                    <button onClick={() => setShowAssignModal(true)} className="btn btn-secondary">
+                                    <button
+                                        onClick={() => {
+                                            setAssignQuantity(asset.assigned_quantity || 1);
+                                            setShowAssignModal(true);
+                                        }}
+                                        className="btn btn-secondary"
+                                    >
                                         Reassign
                                     </button>
                                 </div>
@@ -404,7 +413,13 @@ export default function AssetDetails() {
                     }}
                 >
                     <div className="modal" onClick={(e) => e.stopPropagation()}>
-                        <h3>Assign Asset to Employee</h3>
+                        <h3>{asset.assigned_to ? 'Reassign Asset' : 'Assign Asset to Employee'}</h3>
+                        {asset.assigned_to && (
+                            <p className="text-muted" style={{ marginTop: '0.5rem' }}>
+                                Currently with <strong>{asset.employee_name}</strong> — assigning moves it to the
+                                selected employee.
+                            </p>
+                        )}
                         <div className="form-group mt-3">
                             <label className="form-label">Select Employee</label>
                             <select
@@ -426,12 +441,14 @@ export default function AssetDetails() {
                                 type="number"
                                 className="form-control"
                                 min="1"
-                                max={Math.max(availableQuantity, 1)}
+                                max={asset.assigned_to ? (asset.quantity || 1) : Math.max(availableQuantity, 1)}
                                 value={assignQuantity}
                                 onChange={(e) => setAssignQuantity(parseInt(e.target.value, 10) || 1)}
                             />
                             <div className="text-muted" style={{ fontSize: '0.85rem' }}>
-                                Available: {availableQuantity}
+                                {asset.assigned_to
+                                    ? `Total quantity: ${asset.quantity || 1}`
+                                    : `Available: ${availableQuantity}`}
                             </div>
                         </div>
 

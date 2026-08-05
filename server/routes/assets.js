@@ -755,6 +755,9 @@ router.post('/:id/assign', (req, res) => {
         if (!employee_id) {
             return res.status(400).json({ error: 'Employee is required for assignment' });
         }
+        // The frontend sends the employee id as a string (select value); the DB
+        // stores a number. Coerce so the same-employee comparison below works.
+        const empId = Number(employee_id);
 
         const asset = db.prepare('SELECT quantity, assigned_quantity, assigned_to FROM assets WHERE id = ? AND deleted_at IS NULL').get(req.params.id);
         if (!asset) {
@@ -769,7 +772,7 @@ router.post('/:id/assign', (req, res) => {
         let action = 'assigned';
         let note = notes || `Assigned quantity ${requestedQty}`;
 
-        if (asset.assigned_to && asset.assigned_to === employee_id) {
+        if (asset.assigned_to && asset.assigned_to === empId) {
             if (requestedQty > available) {
                 return res.status(400).json({ error: `Only ${available} available to assign` });
             }
@@ -782,7 +785,7 @@ router.post('/:id/assign', (req, res) => {
             }
             action = asset.assigned_to ? 'reassigned' : 'assigned';
             note = asset.assigned_to
-                ? notes || `Reassigned from employee ${asset.assigned_to} to ${employee_id} (qty ${requestedQty})`
+                ? notes || `Reassigned from employee ${asset.assigned_to} to ${empId} (qty ${requestedQty})`
                 : note;
         }
 
@@ -791,12 +794,12 @@ router.post('/:id/assign', (req, res) => {
       UPDATE assets SET
         assigned_to = ?, status = 'assigned', assigned_quantity = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(employee_id, newAssignedQty, req.params.id);
+    `).run(empId, newAssignedQty, req.params.id);
 
         db.prepare(`
       INSERT INTO asset_history (asset_id, action, employee_id, notes)
       VALUES (?, ?, ?, ?)
-    `).run(req.params.id, action, employee_id, note);
+    `).run(req.params.id, action, empId, note);
 
         const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.id);
         res.json(updatedAsset);
