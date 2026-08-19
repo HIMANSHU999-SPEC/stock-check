@@ -943,6 +943,214 @@ router.post('/:id/restore', (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Invoice import: upload a supplier invoice PDF (e.g. Amazon Business),
+// extract the line items, and after user review create the assets with the
+// invoice attached. Parsing is heuristic — the frontend always shows a
+// review/edit step before anything is created.
+// ---------------------------------------------------------------------------
+const pdfjs = require('pdfjs-dist/legacy/build/pdf.js');
+
+// Extract text from a PDF, reconstructing visual lines by grouping text
+// fragments that share a y-coordinate (invoice tables rely on this).
+async function extractPdfText(buffer) {
+    const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer), useSystemFonts: true }).promise;
+    let text = '';
+    for (let p = 1; p <= doc.numPages; p++) {
+        const page = await doc.getPage(p);
+        const content = await page.getTextContent();
+        const rows = new Map();
+        for (const item of content.items) {
+            if (!item.str || !item.str.trim()) continue;
+            const y = Math.round(item.transform[5] / 2) * 2; // tolerate tiny baseline jitter
+            if (!rows.has(y)) rows.set(y, []);
+            rows.get(y).push({ x: item.transform[4], str: item.str });
+        }
+        const ordered = [...rows.entries()].sort((a, b) => b[0] - a[0]);
+        for (const [, parts] of ordered) {
+            text += parts.sort((a, b) => a.x - b.x).map((t) => t.str).join(' ') + '\n';
+        }
+    }
+    return { text, numpages: doc.numPages };
+}
+
+const invoiceUpload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+        filename: (req, file, cb) =>
+            cb(null, `invoice-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.pdf`)
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'application/pdf') return cb(null, true);
+        cb(new Error('Invoices must be PDF files'));
+    }
+});
+
+const CATEGORY_RULES = [
+    [/laptop|notebook|elitebook|thinkpad|ideapad|vivobook|macbook|chromebook|zbook|latitude|inspiron/i, 'Laptop'],
+    [/\bmonitor\b|(\d{2}["”]?\s*(inch)?\s*(led|lcd|ips).*(screen|display))/i, 'Monitor'],
+    [/\btablet\b|ipad|surface go/i, 'Tablet'],
+    [/printer|toner|ink cartridge/i, 'Printer'],
+    [/mouse|keyboard|headset|headphone|earbud|webcam|speaker|microphone/i, 'Peripheral'],
+    [/cable|adapter|charger|\bhub\b|dock|usb[- ]?c|hdmi|power supply|extension lead|surge/i, 'Accessory'],
+    [/router|switch|access point|ethernet|wi-?fi extender/i, 'Network'],
+    [/\bssd\b|\bram\b|hard drive|\bhdd\b|memory card|\busb stick\b|flash drive/i, 'Storage & Components'],
+    [/phone|iphone|galaxy s|pixel \d/i, 'Phone']
+];
+
+const KNOWN_BRANDS = [
+    'Amazon Basics', 'HP', 'Dell', 'Lenovo', 'Apple', 'Microsoft', 'Samsung', 'Asus', 'Acer', 'Logitech',
+    'Anker', 'Ugreen', 'Belkin', 'Kensington', 'TP-Link', 'Netgear', 'Cisco', 'Canon',
+    'Epson', 'Brother', 'Jabra', 'Sony', 'LG', 'Philips', 'Sandisk', 'Kingston', 'Crucial',
+    'Seagate', 'Toshiba', 'Duracell', 'Trust', 'Targus'
+];
+
+function guessCategoryAndBrand(name) {
+    let category = 'Electronics';
+    for (const [re, cat] of CATEGORY_RULES) {
+        if (re.test(name)) { category = cat; break; }
+    }
+    const lower = name.toLowerCase();
+    const brand = KNOWN_BRANDS.find((b) => lower.includes(b.toLowerCase())) || '';
+    return { category, brand };
+}
+
+// Best-effort extraction of item lines from invoice text: a line qualifies if
+// it carries a price and isn't a totals/header/address line. The user reviews
+// and corrects everything before import.
+function parseInvoiceItems(text) {
+    const lines = String(text || '')
+        .split(/\n+/)
+        .map((l) => l.replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+
+    const skip = /sub-?total|grand total|^total|total\b.*£|vat|tax|shipping|postage|delivery|promotion|discount|gift|invoice|receipt|order (number|#|id|date|total)|payment|billing|dispatch|address|amazon\.(co|com|de|eu)|www\.amazon|amazon (eu|services|payments)|sold by|supplied by|thank you|balance|account|page \d|qty unit|unit price|item price|description price|£?\d+\.\d{2} £?\d+\.\d{2} £?\d+\.\d{2} £?\d+\.\d{2}/i;
+    const priceToken = /(?:£\s?)?(\d{1,3}(?:,\d{3})*\.\d{2})(?:\s*(?:GBP|EUR|USD))?/g;
+
+    const items = [];
+    for (const line of lines) {
+        if (skip.test(line)) continue;
+        const prices = [...line.matchAll(priceToken)].map((m) => parseFloat(m[1].replace(/,/g, '')));
+        if (!prices.length) continue;
+
+        let name = line.replace(priceToken, ' ').replace(/\s+/g, ' ').trim();
+        let quantity = 1;
+        const qm = name.match(/^(\d{1,2})\s*(?:x\s+)?(.+)$/i);
+        if (qm) {
+            quantity = Math.max(1, parseInt(qm[1], 10));
+            name = qm[2];
+        }
+        name = name.replace(/[|,;:\-–—]+$/, '').replace(/^[|,;:\-–—]+/, '').trim();
+        if (name.length < 4 || !/[a-zA-Z]{3}/.test(name)) continue;
+
+        // With "unit price ... line total" columns the unit price is the smaller.
+        const unit_price = Math.min(...prices);
+        items.push({
+            name: name.slice(0, 150),
+            quantity,
+            unit_price,
+            ...guessCategoryAndBrand(name)
+        });
+    }
+
+    // Collapse exact duplicates (same name + price) by summing quantities.
+    const merged = new Map();
+    for (const it of items) {
+        const key = `${it.name.toLowerCase()}|${it.unit_price}`;
+        if (merged.has(key)) merged.get(key).quantity += it.quantity;
+        else merged.set(key, { ...it });
+    }
+    return [...merged.values()];
+}
+
+router.post('/parse-invoice', (req, res) => {
+    invoiceUpload.single('file')(req, res, async (err) => {
+        try {
+            if (err) return res.status(400).json({ error: err.message });
+            if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+            const data = await extractPdfText(fs.readFileSync(req.file.path));
+            const items = parseInvoiceItems(data.text);
+
+            res.json({
+                items,
+                file_token: req.file.filename,
+                file_name: req.file.originalname,
+                pages: data.numpages
+            });
+        } catch (error) {
+            if (req.file) fs.unlink(req.file.path, () => {});
+            res.status(400).json({ error: 'Could not read that PDF: ' + error.message });
+        }
+    });
+});
+
+router.post('/import-invoice', (req, res) => {
+    try {
+        const { items, file_token, file_name } = req.body;
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ error: 'No items to import' });
+        }
+
+        // The invoice PDF was stashed by /parse-invoice; validate the token.
+        let storedFile = null;
+        if (file_token) {
+            const safe = path.basename(String(file_token));
+            if (/^invoice-[\w.-]+\.pdf$/.test(safe) && fs.existsSync(path.join(UPLOAD_DIR, safe))) {
+                storedFile = safe;
+            }
+        }
+
+        const catId = (name) => {
+            const clean = (name || 'Electronics').trim() || 'Electronics';
+            const row = db.prepare('SELECT id FROM categories WHERE LOWER(name) = LOWER(?)').get(clean);
+            if (row) return row.id;
+            return db.prepare('INSERT INTO categories (name, description) VALUES (?, ?)').run(clean, '').lastInsertRowid;
+        };
+
+        const created = [];
+        db.transaction(() => {
+            for (const it of items) {
+                const name = String(it.name || '').trim();
+                if (!name) continue;
+                const quantity = Math.min(999, Math.max(1, parseInt(it.quantity, 10) || 1));
+                const price = it.unit_price === '' || it.unit_price == null ? null : Math.max(0, parseFloat(it.unit_price) || 0);
+                const assetNumber = generateAssetNumber();
+                const result = db.prepare(`
+          INSERT INTO assets (
+            asset_number, name, category_id, brand, model, serial_number, quantity, assigned_quantity,
+            purchase_date, purchase_price, status, campus, notes
+          ) VALUES (?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, 'available', '', ?)
+        `).run(
+                    assetNumber, name.slice(0, 150), catId(it.category),
+                    (it.brand || '').trim() || null, (it.model || '').trim() || null,
+                    quantity, it.purchase_date || null, price,
+                    `Imported from invoice${file_name ? ` "${file_name}"` : ''}`
+                );
+
+                if (storedFile) {
+                    db.prepare(`
+            INSERT INTO asset_documents (asset_id, stored_name, original_name, mimetype, size, uploaded_by)
+            VALUES (?, ?, ?, 'application/pdf', ?, ?)
+          `).run(result.lastInsertRowid, storedFile, file_name || 'invoice.pdf',
+                        fs.statSync(path.join(UPLOAD_DIR, storedFile)).size, req.user?.id || null);
+                }
+                created.push({ id: result.lastInsertRowid, asset_number: assetNumber, name, quantity, purchase_price: price });
+            }
+        })();
+
+        logActivity(req, {
+            action: 'invoice_imported', entity_type: 'asset', entity_id: null,
+            description: `Imported ${created.length} item(s) from invoice${file_name ? ` "${file_name}"` : ''}`
+        });
+
+        res.status(201).json({ message: `Imported ${created.length} item(s)`, created });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ---------------------------------------------------------------------------
 // Asset documents: list / upload / download / delete
 // ---------------------------------------------------------------------------
 router.get('/:id/documents', (req, res) => {
@@ -1019,7 +1227,14 @@ router.delete('/:id/documents/:docId', (req, res) => {
             return res.status(404).json({ error: 'Document not found' });
         }
         db.prepare('DELETE FROM asset_documents WHERE id = ?').run(doc.id);
-        fs.unlink(path.join(UPLOAD_DIR, doc.stored_name), () => {});
+        // Invoice imports share one stored PDF across several assets — only
+        // remove the file from disk when no other document row references it.
+        const stillReferenced = db.prepare(
+            'SELECT COUNT(*) as c FROM asset_documents WHERE stored_name = ?'
+        ).get(doc.stored_name).c;
+        if (!stillReferenced) {
+            fs.unlink(path.join(UPLOAD_DIR, doc.stored_name), () => {});
+        }
         logActivity(req, {
             action: 'document_deleted', entity_type: 'asset', entity_id: Number(req.params.id),
             description: `Removed document "${doc.original_name}"`

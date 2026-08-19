@@ -23,6 +23,7 @@
     "html5-qrcode": "^2.3.8",
     "jsbarcode": "^3.12.1",
     "multer": "^2.2.0",
+    "pdfjs-dist": "^3.11.174",
     "pdfkit": "^0.15.0",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",

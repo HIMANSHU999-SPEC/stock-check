@@ -267,6 +267,9 @@ export default function AssetList() {
                     <button onClick={exportExcel} className="btn btn-secondary">
                         📥 Export Excel (filtered)
                     </button>
+                    <Link to="/assets/import-invoice" className="btn btn-secondary">
+                        📄 Import Invoice
+                    </Link>
                     <Link to="/assets/new" className="btn btn-primary">
                         + Add New Asset
                     </Link>

@@ -225,6 +225,24 @@ export const borrowersAPI = {
     delete: (id) => apiCall(`/borrowers/${id}`, { method: 'DELETE' }),
 };
 
+// Invoice import: parse a supplier invoice PDF, then create the reviewed items
+export const invoiceAPI = {
+    parse: async (file) => {
+        const token = getAuthToken();
+        const form = new FormData();
+        form.append('file', file);
+        const response = await fetch(`${API_BASE}/assets/parse-invoice`, {
+            method: 'POST',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            body: form
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || 'Could not parse the invoice');
+        return data;
+    },
+    import: (payload) => apiCall('/assets/import-invoice', { method: 'POST', body: JSON.stringify(payload) })
+};
+
 // Asset documents (purchase invoices etc.)
 export const documentsAPI = {
     list: (assetId) => apiCall(`/assets/${assetId}/documents`),

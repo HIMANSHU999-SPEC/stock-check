@@ -20,6 +20,7 @@ import BookTagPrinter from './components/BookTagPrinter';
 import UserManagement from './components/UserManagement';
 import ActivityLog from './components/ActivityLog';
 import RapidCatalogue from './components/RapidCatalogue';
+import InvoiceImport from './components/InvoiceImport';
 import { authAPI, saveAuthToken, clearAuthToken } from './services/api';
 import './index.css';
 
@@ -255,6 +256,14 @@ function App() {
                                 element={
                                     <ProtectedRoute user={user} license={license} authLoading={authLoading}>
                                         <AssetForm />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/assets/import-invoice"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <InvoiceImport />
                                     </ProtectedRoute>
                                 }
                             />
