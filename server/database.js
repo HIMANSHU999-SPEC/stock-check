@@ -241,6 +241,21 @@ function initializeDatabase() {
     )
   `);
 
+  // Documents attached to assets (purchase invoices, warranty papers, photos)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS asset_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_id INTEGER NOT NULL,
+      stored_name TEXT NOT NULL,
+      original_name TEXT NOT NULL,
+      mimetype TEXT,
+      size INTEGER,
+      uploaded_by INTEGER,
+      uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (asset_id) REFERENCES assets(id)
+    )
+  `);
+
   // Activity log (audit trail) — records key actions across the system
   db.exec(`
     CREATE TABLE IF NOT EXISTS activity_log (

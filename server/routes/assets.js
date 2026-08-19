@@ -2,10 +2,44 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const { generateAssetNumber } = require('../utils/assetNumber');
+const { logActivity } = require('../utils/activity');
 const PDFDocument = require('pdfkit');
 const archiver = require('archiver');
 const { PassThrough } = require('stream');
 const crypto = require('crypto');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+
+// ---------------------------------------------------------------------------
+// Document uploads (purchase invoices etc.) — stored on disk under uploads/,
+// metadata in the asset_documents table. Uploads live outside the DB backup,
+// but the directory is gitignored so code deploys never touch it.
+// ---------------------------------------------------------------------------
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '..', '..', 'uploads');
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const ALLOWED_DOC_TYPES = {
+    'application/pdf': '.pdf',
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp'
+};
+
+const upload = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+        filename: (req, file, cb) => {
+            const ext = ALLOWED_DOC_TYPES[file.mimetype] || path.extname(file.originalname) || '';
+            cb(null, `asset-${req.params.id}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`);
+        }
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+    fileFilter: (req, file, cb) => {
+        if (ALLOWED_DOC_TYPES[file.mimetype]) return cb(null, true);
+        cb(new Error('Only PDF, JPG, PNG or WEBP files are allowed'));
+    }
+});
 
 // Recycle-bin restore protection. If RESTORE_PASSWORD is set in the
 // environment, that password is required; otherwise restores are allowed for
@@ -903,6 +937,94 @@ router.post('/:id/restore', (req, res) => {
 
         const restored = db.prepare('SELECT * FROM assets WHERE id = ?').get(binItem.entity_id);
         res.json({ message: 'Asset restored successfully', asset: restored });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ---------------------------------------------------------------------------
+// Asset documents: list / upload / download / delete
+// ---------------------------------------------------------------------------
+router.get('/:id/documents', (req, res) => {
+    try {
+        const docs = db.prepare(`
+      SELECT d.id, d.original_name, d.mimetype, d.size, d.uploaded_at, u.email as uploaded_by_email
+      FROM asset_documents d
+      LEFT JOIN users u ON d.uploaded_by = u.id
+      WHERE d.asset_id = ?
+      ORDER BY d.uploaded_at DESC, d.id DESC
+    `).all(req.params.id);
+        res.json(docs);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/:id/documents', (req, res) => {
+    upload.single('file')(req, res, (err) => {
+        try {
+            if (err) {
+                return res.status(400).json({ error: err.message });
+            }
+            if (!req.file) {
+                return res.status(400).json({ error: 'No file provided' });
+            }
+            const asset = db.prepare('SELECT id, asset_number, name FROM assets WHERE id = ? AND deleted_at IS NULL').get(req.params.id);
+            if (!asset) {
+                fs.unlink(req.file.path, () => {});
+                return res.status(404).json({ error: 'Asset not found' });
+            }
+
+            const result = db.prepare(`
+        INSERT INTO asset_documents (asset_id, stored_name, original_name, mimetype, size, uploaded_by)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(asset.id, req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.user?.id || null);
+
+            logActivity(req, {
+                action: 'document_uploaded', entity_type: 'asset', entity_id: asset.id,
+                description: `Attached "${req.file.originalname}" to ${asset.asset_number} (${asset.name})`
+            });
+
+            const doc = db.prepare('SELECT id, original_name, mimetype, size, uploaded_at FROM asset_documents WHERE id = ?').get(result.lastInsertRowid);
+            res.status(201).json(doc);
+        } catch (error) {
+            res.status(500).json({ error: error.message });
+        }
+    });
+});
+
+router.get('/:id/documents/:docId/download', (req, res) => {
+    try {
+        const doc = db.prepare('SELECT * FROM asset_documents WHERE id = ? AND asset_id = ?').get(req.params.docId, req.params.id);
+        if (!doc) {
+            return res.status(404).json({ error: 'Document not found' });
+        }
+        const filePath = path.join(UPLOAD_DIR, doc.stored_name);
+        if (!fs.existsSync(filePath)) {
+            return res.status(410).json({ error: 'File is missing from storage' });
+        }
+        // Images and PDFs open inline in the browser; everything else downloads.
+        res.setHeader('Content-Type', doc.mimetype || 'application/octet-stream');
+        res.setHeader('Content-Disposition', `inline; filename="${doc.original_name.replace(/"/g, '')}"`);
+        fs.createReadStream(filePath).pipe(res);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.delete('/:id/documents/:docId', (req, res) => {
+    try {
+        const doc = db.prepare('SELECT * FROM asset_documents WHERE id = ? AND asset_id = ?').get(req.params.docId, req.params.id);
+        if (!doc) {
+            return res.status(404).json({ error: 'Document not found' });
+        }
+        db.prepare('DELETE FROM asset_documents WHERE id = ?').run(doc.id);
+        fs.unlink(path.join(UPLOAD_DIR, doc.stored_name), () => {});
+        logActivity(req, {
+            action: 'document_deleted', entity_type: 'asset', entity_id: Number(req.params.id),
+            description: `Removed document "${doc.original_name}"`
+        });
+        res.json({ message: 'Document deleted' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
-import { assetsAPI, employeesAPI } from '../services/api';
+import { assetsAPI, employeesAPI, documentsAPI } from '../services/api';
 import { generateEmailDraft, openEmailDraft } from '../utils/emailTemplates';
 import QRCode from 'react-qr-code';
 
@@ -12,6 +12,42 @@ export default function AssetDetails() {
     const [asset, setAsset] = useState(null);
     const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [documents, setDocuments] = useState([]);
+    const [uploadingDoc, setUploadingDoc] = useState(false);
+
+    async function loadDocuments() {
+        try {
+            const docs = await documentsAPI.list(id);
+            setDocuments(docs);
+        } catch (e) {
+            // documents are non-critical; don't block the page
+        }
+    }
+
+    async function handleDocUpload(e) {
+        const file = e.target.files?.[0];
+        e.target.value = '';
+        if (!file) return;
+        setUploadingDoc(true);
+        try {
+            await documentsAPI.upload(id, file);
+            await loadDocuments();
+        } catch (err) {
+            alert('Upload failed: ' + err.message);
+        } finally {
+            setUploadingDoc(false);
+        }
+    }
+
+    async function handleDocDelete(doc) {
+        if (!confirm(`Delete "${doc.original_name}"?`)) return;
+        try {
+            await documentsAPI.delete(id, doc.id);
+            await loadDocuments();
+        } catch (err) {
+            alert('Delete failed: ' + err.message);
+        }
+    }
     const [showAssignModal, setShowAssignModal] = useState(false);
     const [selectedEmployee, setSelectedEmployee] = useState('');
     const [assignQuantity, setAssignQuantity] = useState(1);
@@ -25,6 +61,7 @@ export default function AssetDetails() {
 
     useEffect(() => {
         loadAsset();
+        loadDocuments();
         loadEmployees();
     }, [id]);
 
@@ -287,6 +324,71 @@ export default function AssetDetails() {
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <div className="card">
+                    <div className="card-header">
+                        <div className="flex justify-between items-center">
+                            <h3 className="card-title">📎 Invoices & Documents</h3>
+                            <label className="btn btn-sm btn-primary" style={{ cursor: 'pointer', marginBottom: 0 }}>
+                                {uploadingDoc ? 'Uploading…' : '+ Attach file'}
+                                <input
+                                    type="file"
+                                    accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                                    style={{ display: 'none' }}
+                                    onChange={handleDocUpload}
+                                    disabled={uploadingDoc}
+                                />
+                            </label>
+                        </div>
+                    </div>
+                    <div className="card-body">
+                        {documents.length === 0 ? (
+                            <p className="text-muted">
+                                No documents yet. Attach the purchase invoice (PDF or photo, max 10&nbsp;MB).
+                            </p>
+                        ) : (
+                            <div className="table-container">
+                                <table className="table">
+                                    <thead>
+                                        <tr>
+                                            <th>File</th>
+                                            <th>Size</th>
+                                            <th>Uploaded</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {documents.map((doc) => (
+                                            <tr key={doc.id}>
+                                                <td>{doc.original_name}</td>
+                                                <td>{doc.size ? `${Math.max(1, Math.round(doc.size / 1024))} KB` : '—'}</td>
+                                                <td>{doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : '—'}</td>
+                                                <td>
+                                                    <div className="flex gap-1">
+                                                        <a
+                                                            href={documentsAPI.viewUrl(id, doc.id)}
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="btn btn-sm btn-secondary"
+                                                        >
+                                                            View
+                                                        </a>
+                                                        <button
+                                                            onClick={() => handleDocDelete(doc)}
+                                                            className="btn btn-sm btn-danger"
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
                 </div>
 

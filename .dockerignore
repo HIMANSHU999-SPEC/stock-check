@@ -6,6 +6,7 @@ dist
 *.sqlite
 *.sqlite3
 server/backups
+uploads
 .vscode
 .idea
 .DS_Store

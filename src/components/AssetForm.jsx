@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { assetsAPI, reportsAPI } from '../services/api';
+import { assetsAPI, reportsAPI, documentsAPI } from '../services/api';
 import { CAMPUSES } from '../constants';
 
 export default function AssetForm() {
@@ -14,6 +14,7 @@ export default function AssetForm() {
     const [addingCampus, setAddingCampus] = useState(false);
     const [newCampus, setNewCampus] = useState('');
     const [loading, setLoading] = useState(false);
+    const [invoiceFile, setInvoiceFile] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
         category_id: '',
@@ -121,6 +122,14 @@ export default function AssetForm() {
             } else {
                 const created = await assetsAPI.create(formData);
                 newAssetId = created.id;
+            }
+            if (invoiceFile && newAssetId) {
+                try {
+                    await documentsAPI.upload(newAssetId, invoiceFile);
+                } catch (err) {
+                    alert('Asset saved, but the invoice upload failed: ' + err.message +
+                        '\nYou can attach it from the asset page.');
+                }
             }
             if (!isEdit && newAssetId) {
                 navigate(`/assets/${newAssetId}?assign=1`);
@@ -258,6 +267,21 @@ export default function AssetForm() {
                                     step="0.01"
                                     min="0"
                                 />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Invoice (PDF or photo, optional)</label>
+                                <input
+                                    type="file"
+                                    className="form-control"
+                                    accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                                    onChange={(e) => setInvoiceFile(e.target.files?.[0] || null)}
+                                />
+                                {invoiceFile && (
+                                    <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                        Will attach: {invoiceFile.name}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="form-group">

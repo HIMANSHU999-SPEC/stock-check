@@ -225,6 +225,28 @@ export const borrowersAPI = {
     delete: (id) => apiCall(`/borrowers/${id}`, { method: 'DELETE' }),
 };
 
+// Asset documents (purchase invoices etc.)
+export const documentsAPI = {
+    list: (assetId) => apiCall(`/assets/${assetId}/documents`),
+    upload: async (assetId, file) => {
+        const token = getAuthToken();
+        const form = new FormData();
+        form.append('file', file);
+        const response = await fetch(`${API_BASE}/assets/${assetId}/documents`, {
+            method: 'POST',
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            body: form
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.error || 'Upload failed');
+        }
+        return data;
+    },
+    delete: (assetId, docId) => apiCall(`/assets/${assetId}/documents/${docId}`, { method: 'DELETE' }),
+    viewUrl: (assetId, docId) => `${API_BASE}${withTokenQuery(`/assets/${assetId}/documents/${docId}/download`)}`
+};
+
 // Users API (admin-only)
 export const usersAPI = {
     getAll: () => apiCall('/users'),
