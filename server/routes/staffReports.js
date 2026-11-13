@@ -72,14 +72,15 @@ router.get('/leavers', async (req, res) => {
           ORDER BY e.name
         `).all();
         const result = await directory.accountStates(staff.map((s) => s.email), { refresh: req.query.refresh === '1' });
-        const people = staff
-            .map((s) => ({ ...s, account: result.states.get(String(s.email).trim().toLowerCase()) || 'unknown' }))
-            .filter((s) => s.account === 'disabled' || s.account === 'not_found');
+        const all = staff
+            .map((s) => ({ ...s, account: result.states.get(String(s.email).trim().toLowerCase()) || 'unknown' }));
+        const people = all.filter((s) => ['disabled', 'no_licence', 'not_found'].includes(s.account));
         res.json({
             available: result.available,
             checked_at: result.checked_at,
             checked: staff.length,
-            unknown: staff.length - [...result.states.values()].filter((v) => v !== 'unknown').length,
+            unknown: all.filter((s) => s.account === 'unknown').length,
+            staff_licence: directory.STAFF_LICENCE,
             people
         });
     } catch (error) {

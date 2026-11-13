@@ -42,9 +42,11 @@ export default function StaffReports() {
     }
 
     async function markInactive(person) {
-        const reason = person.account === 'disabled'
-            ? 'Microsoft 365 account is disabled'
-            : 'No Microsoft 365 account with this email';
+        const reason = {
+            disabled: 'Microsoft 365 account is blocked',
+            no_licence: 'Microsoft 365 account has no A5 faculty licence',
+            not_found: 'No Microsoft 365 account with this email'
+        }[person.account];
         if (!window.confirm(`Mark ${person.name} inactive? Their record and history are kept, and they can be reactivated.`)) return;
         try {
             await employeesAPI.deactivate(person.employee_id, `${reason} — marked inactive from Staff reports`);
@@ -170,8 +172,9 @@ export default function StaffReports() {
                             )}
                         </h3>
                         <div className="text-muted" style={{ fontSize: '0.9rem' }}>
-                            Active on the staff list here, but their Microsoft 365 account is disabled or does not
-                            exist, so they cannot sign in to confirm anything.
+                            Active on the staff list here, but their Microsoft 365 account is blocked, has no A5
+                            faculty licence, or does not exist. Treat them as leavers: collect or reassign what
+                            they hold, then mark them inactive.
                         </div>
                     </div>
                     <button type="button" className="btn btn-sm btn-secondary" onClick={() => loadLeavers(true)} disabled={leaversBusy}>
@@ -201,9 +204,14 @@ export default function StaffReports() {
                                             <div className="text-muted" style={{ fontSize: '0.85rem' }}>{p.email}</div>
                                         </td>
                                         <td>
-                                            {p.account === 'disabled'
-                                                ? <span className="badge badge-danger">Disabled</span>
-                                                : <span className="badge badge-warning">No account</span>}
+                                            {p.account === 'disabled' && <span className="badge badge-danger">Blocked</span>}
+                                            {p.account === 'no_licence' && <span className="badge badge-danger">No staff licence</span>}
+                                            {p.account === 'not_found' && <span className="badge badge-warning">No account</span>}
+                                            {p.account === 'no_licence' && (
+                                                <div className="text-muted" style={{ fontSize: '0.8rem' }}>
+                                                    Signed-in account without the A5 faculty licence
+                                                </div>
+                                            )}
                                             {p.account === 'not_found' && (
                                                 <div className="text-muted" style={{ fontSize: '0.8rem' }}>
                                                     A department or shared name, or a deleted account
