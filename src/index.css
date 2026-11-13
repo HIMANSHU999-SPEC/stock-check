@@ -1701,3 +1701,44 @@ a:focus-visible {
 .table tbody tr.row-selected:hover {
   background: #fbf1f2;
 }
+
+/* ---- Campus overview: readable on the light theme ----------------------- */
+/* The rules further up were written for a dark theme that is never switched
+   on, which left dark text on a navy table. */
+body:not(.light-mode) .campus-table th {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+body:not(.light-mode) .campus-table td {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.campus-table td:not(:first-child),
+.campus-table th:not(:first-child) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+body:not(.light-mode) .campus-badge {
+  background: var(--bg-tertiary);
+  color: var(--primary-dark);
+}
+
+.campus-badge:hover,
+body:not(.light-mode) .campus-badge:hover {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* Reference links in a table's first column never break mid-number. */
+.table td:first-child a {
+  white-space: nowrap;
+}
+
+.modal .table td:first-child {
+  white-space: nowrap;
+}

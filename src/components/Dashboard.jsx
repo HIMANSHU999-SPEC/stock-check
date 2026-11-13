@@ -238,8 +238,10 @@ export default function Dashboard() {
                                 </tr>
                             ) : (
                                 campusStats.map((c, idx) => {
-                                    const displayName = c.campus && c.campus.trim() ? c.campus : 'Unassigned';
-                                    const campusValue = c.campus && c.campus.trim() ? c.campus : '';
+                                    // The report labels assets without a campus "Unspecified".
+                                    const named = c.campus && c.campus.trim() && c.campus !== 'Unspecified';
+                                    const displayName = named ? c.campus : 'No campus yet';
+                                    const campusValue = named ? c.campus : '';
                                     return (
                                         <tr key={idx}>
                                             <td>
@@ -291,8 +293,8 @@ export default function Dashboard() {
                                                         {asset.asset_number}
                                                     </Link>
                                                 </td>
-                                                <td>{asset.name}</td>
-                                                <td>{asset.category_name || 'N/A'}</td>
+                                                <td><div className="cell-clamp" title={asset.name}>{asset.name}</div></td>
+                                                <td>{asset.category_name || '—'}</td>
                                                 <td>
                                                     <span className={`badge badge-${getStatusColor(asset.status)}`}>
                                                         {asset.status}
