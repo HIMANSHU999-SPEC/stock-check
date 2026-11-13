@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import AssetList from './components/AssetList';
 import AssetDetails from './components/AssetDetails';
@@ -21,6 +21,10 @@ import UserManagement from './components/UserManagement';
 import ActivityLog from './components/ActivityLog';
 import RapidCatalogue from './components/RapidCatalogue';
 import InvoiceImport from './components/InvoiceImport';
+import Inventory from './components/Inventory';
+import Scan from './components/Scan';
+import Settings from './components/Settings';
+import SsoComplete from './components/SsoComplete';
 import { authAPI, saveAuthToken, clearAuthToken } from './services/api';
 import './index.css';
 
@@ -55,6 +59,16 @@ function Navbar({ user, onLogout, license }) {
                     <li>
                         <Link to="/assets" className={`nav-link ${isActive('/assets') ? 'active' : ''}`}>
                             Assets
+                        </Link>
+                    </li>
+                    <li>
+                        <Link to="/inventory" className={`nav-link ${isActive('/inventory') ? 'active' : ''}`}>
+                            Inventory
+                        </Link>
+                    </li>
+                    <li>
+                        <Link to="/scan" className={`nav-link ${isActive('/scan') ? 'active' : ''}`}>
+                            Scan
                         </Link>
                     </li>
                     <li>
@@ -106,9 +120,16 @@ function Navbar({ user, onLogout, license }) {
                     </li>
                     <li>
                         <Link to="/tags" className={`nav-link ${isActive('/tags') ? 'active' : ''}`}>
-                            Print Tags
+                            Print Stickers
                         </Link>
                     </li>
+                    {user?.role === 'admin' && (
+                        <li>
+                            <Link to="/settings" className={`nav-link ${isActive('/settings') ? 'active' : ''}`}>
+                                Settings
+                            </Link>
+                        </li>
+                    )}
                     {user ? (
                         <>
                             <li className="text-muted" style={{ padding: '0 0.5rem' }}>
@@ -152,19 +173,38 @@ function Footer() {
 }
 
 function ProtectedRoute({ user, license, authLoading, children }) {
+    const location = useLocation();
+
     if (authLoading) {
         return <div className="spinner"></div>;
     }
 
-    if (!license || license.expired) {
-        return <Navigate to="/login" replace />;
-    }
-
-    if (!user) {
-        return <Navigate to="/login" replace />;
+    // Remember where they were heading (e.g. a scanned sticker's link) so
+    // signing in takes them straight there.
+    if (!license || license.expired || !user) {
+        return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
     }
 
     return children;
+}
+
+function LoggedInRedirect() {
+    const location = useLocation();
+    return <Navigate to={location.state?.from || '/'} replace />;
+}
+
+// Finishes a Microsoft sign-in: the token is already stored, so load the
+// user and move on to where they were going.
+function SsoLanding({ onSignedIn }) {
+    const navigate = useNavigate();
+    return (
+        <SsoComplete
+            onSignedIn={async (returnTo) => {
+                await onSignedIn();
+                navigate(returnTo, { replace: true });
+            }}
+        />
+    );
 }
 
 function App() {
@@ -201,6 +241,12 @@ function App() {
         return res;
     }
 
+    async function handleSsoSignedIn() {
+        const me = await authAPI.me();
+        setUser(me.user);
+        setLicense(await authAPI.license());
+    }
+
     async function handleActivate(code) {
         const res = await authAPI.activate(code);
         if (res.license) setLicense(res.license);
@@ -224,7 +270,7 @@ function App() {
                                 path="/login"
                                 element={
                                     user && license && !license.expired ? (
-                                        <Navigate to="/" replace />
+                                        <LoggedInRedirect />
                                     ) : (
                                         <Login
                                             onLogin={handleLogin}
@@ -235,11 +281,45 @@ function App() {
                                     )
                                 }
                             />
+                            <Route path="/sso-complete" element={<SsoLanding onSignedIn={handleSsoSignedIn} />} />
                             <Route
                                 path="/"
                                 element={
                                     <ProtectedRoute user={user} license={license} authLoading={authLoading}>
                                         <Dashboard />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/inventory"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <Inventory />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/scan"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <Scan />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            {/* The link printed in every sticker's QR code */}
+                            <Route
+                                path="/s/:code"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <Scan />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/settings"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <Settings currentUser={user} />
                                     </ProtectedRoute>
                                 }
                             />

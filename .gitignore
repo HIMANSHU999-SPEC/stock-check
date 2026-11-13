@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Local configuration and secrets (see .env.example)
+.env
+
 # Database files
 *.db
 *.sqlite

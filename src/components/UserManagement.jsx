@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { usersAPI } from '../services/api';
+import { usersAPI, authAPI } from '../services/api';
 
 const EMPTY = { name: '', email: '', role: 'subadmin', password: '' };
 
@@ -10,12 +10,15 @@ export default function UserManagement({ currentUser }) {
     const [editing, setEditing] = useState(null);
     const [formData, setFormData] = useState(EMPTY);
     const [error, setError] = useState('');
+    // With Microsoft sign-in on, an account needs no password of its own.
+    const [ssoEnabled, setSsoEnabled] = useState(false);
 
     const isAdmin = currentUser?.role === 'admin';
 
     useEffect(() => {
         if (isAdmin) loadUsers();
         else setLoading(false);
+        authAPI.ssoConfig().then((c) => setSsoEnabled(Boolean(c.enabled))).catch(() => {});
     }, [isAdmin]);
 
     async function loadUsers() {
@@ -50,7 +53,8 @@ export default function UserManagement({ currentUser }) {
                 await usersAPI.update(editing.id, {
                     name: formData.name,
                     role: formData.role,
-                    password: formData.password || undefined
+                    password: formData.password || undefined,
+                    remove_password: formData.remove_password || undefined
                 });
             } else {
                 await usersAPI.create(formData);
@@ -101,6 +105,7 @@ export default function UserManagement({ currentUser }) {
                                 <th>Name</th>
                                 <th>Email</th>
                                 <th>Role</th>
+                                <th>Signs in with</th>
                                 <th>Created</th>
                                 <th>Actions</th>
                             </tr>
@@ -111,6 +116,7 @@ export default function UserManagement({ currentUser }) {
                                     <td>{u.name || '—'}</td>
                                     <td>{u.email}{String(u.id) === String(currentUser.id) && <span className="text-muted"> (you)</span>}</td>
                                     <td><span className={`badge badge-${u.role === 'admin' ? 'info' : 'primary'}`}>{u.role}</span></td>
+                                    <td>{u.has_password ? 'Password' : 'Microsoft only'}{u.has_password && ssoEnabled ? ' or Microsoft' : ''}</td>
                                     <td>{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
                                     <td>
                                         <div className="flex gap-1">
@@ -150,10 +156,29 @@ export default function UserManagement({ currentUser }) {
                                 </select>
                             </div>
                             <div className="form-group">
-                                <label className="form-label">{editing ? 'Reset password (leave blank to keep)' : 'Password *'}</label>
+                                <label className="form-label">
+                                    {editing
+                                        ? 'Reset password (leave blank to keep)'
+                                        : ssoEnabled ? 'Password (optional)' : 'Password *'}
+                                </label>
                                 <input type="password" className="form-control" value={formData.password}
-                                    required={!editing}
+                                    required={!editing && !ssoEnabled}
+                                    disabled={Boolean(formData.remove_password)}
+                                    autoComplete="new-password"
                                     onChange={(e) => setFormData({ ...formData, password: e.target.value })} />
+                                {ssoEnabled && !editing && (
+                                    <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                        Leave blank and they sign in with their Microsoft account — use their work
+                                        email address above.
+                                    </div>
+                                )}
+                                {ssoEnabled && editing?.has_password ? (
+                                    <label className="flex items-center gap-1 mt-1">
+                                        <input type="checkbox" checked={Boolean(formData.remove_password)}
+                                            onChange={(e) => setFormData({ ...formData, remove_password: e.target.checked, password: '' })} />
+                                        <span>Remove the password — Microsoft sign-in only</span>
+                                    </label>
+                                ) : null}
                             </div>
                             {error && <p style={{ color: 'var(--danger,#ef4444)' }}>{error}</p>}
                             <div className="flex gap-2 mt-3">

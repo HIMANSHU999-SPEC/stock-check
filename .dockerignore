@@ -10,3 +10,4 @@ uploads
 .vscode
 .idea
 .DS_Store
+.env

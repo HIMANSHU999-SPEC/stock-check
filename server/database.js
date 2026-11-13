@@ -1,3 +1,5 @@
+// Loaded first so a DB_PATH set in the optional .env file is honoured.
+require('./config');
 const Database = require('better-sqlite3');
 const path = require('path');
 const crypto = require('crypto');
@@ -129,6 +131,9 @@ function initializeDatabase() {
   }
   if (!columnNames.includes('brand')) {
     db.exec(`ALTER TABLE assets ADD COLUMN brand TEXT`);
+  }
+  if (!columnNames.includes('sharepoint_item_id')) {
+    db.exec(`ALTER TABLE assets ADD COLUMN sharepoint_item_id TEXT`);
   }
 
   // Normalize existing rows where assignment exists but assigned_quantity is zero
@@ -267,6 +272,90 @@ function initializeDatabase() {
       entity_id INTEGER,
       description TEXT,
       timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // ---------------------------------------------------------------------------
+  // Assignments — who (or which room) currently holds how many of an asset.
+  // One asset can have several open rows, so bulk stock (chairs, tables,
+  // cables) can be split across people and rooms. assets.assigned_to and
+  // assets.assigned_quantity are kept as a summary of the open rows here.
+  // ---------------------------------------------------------------------------
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS asset_assignments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_id INTEGER NOT NULL,
+      employee_id INTEGER,
+      location_label TEXT,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      assigned_by INTEGER,
+      returned_at DATETIME,
+      returned_by INTEGER,
+      return_condition TEXT,
+      notes TEXT,
+      FOREIGN KEY (asset_id) REFERENCES assets(id),
+      FOREIGN KEY (employee_id) REFERENCES employees(id)
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_asset_assignments_open ON asset_assignments (asset_id, returned_at)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_asset_assignments_employee ON asset_assignments (employee_id, returned_at)`);
+
+  // One-off backfill: carry every existing single-holder assignment over.
+  const backfilled = db.prepare("SELECT value FROM settings WHERE key = 'migration_asset_assignments'").get();
+  if (!backfilled) {
+    db.transaction(() => {
+      db.exec(`
+        INSERT INTO asset_assignments (asset_id, employee_id, quantity, assigned_at)
+        SELECT a.id, a.assigned_to, MAX(COALESCE(a.assigned_quantity, 0), 1), COALESCE(a.updated_at, CURRENT_TIMESTAMP)
+        FROM assets a
+        WHERE a.assigned_to IS NOT NULL
+          AND EXISTS (SELECT 1 FROM employees e WHERE e.id = a.assigned_to)
+          AND NOT EXISTS (SELECT 1 FROM asset_assignments x WHERE x.asset_id = a.id)
+      `);
+      db.prepare("INSERT INTO settings (key, value) VALUES ('migration_asset_assignments', ?)")
+        .run(JSON.stringify({ done_at: new Date().toISOString() }));
+    })();
+  }
+
+  // Editable email templates (subject + plain-text body with {{placeholders}})
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_templates (
+      key TEXT PRIMARY KEY,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_by INTEGER
+    )
+  `);
+
+  // Every email the system tried to send, so a failure is never silent
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_key TEXT,
+      to_email TEXT NOT NULL,
+      cc_email TEXT,
+      subject TEXT,
+      status TEXT NOT NULL,
+      error TEXT,
+      entity_type TEXT,
+      entity_id INTEGER,
+      user_id INTEGER,
+      user_email TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Assets waiting to be pushed to the SharePoint list
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sharepoint_outbox (
+      asset_id INTEGER PRIMARY KEY,
+      revision INTEGER NOT NULL DEFAULT 1,
+      queued_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT
     )
   `);
 

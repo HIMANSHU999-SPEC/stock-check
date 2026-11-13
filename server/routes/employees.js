@@ -3,6 +3,22 @@ const router = express.Router();
 const db = require('../database');
 const PDFDocument = require('pdfkit');
 
+// What a person currently holds comes from the open assignment records, so an
+// employee sharing bulk stock with others (or a room) is still counted.
+const HELD_ASSETS_SQL = `
+      SELECT a.*, c.name as category_name, x.id as assignment_id, x.quantity as held_quantity, x.assigned_at
+      FROM asset_assignments x
+      JOIN assets a ON x.asset_id = a.id
+      LEFT JOIN categories c ON a.category_id = c.id
+      WHERE x.employee_id = ? AND x.returned_at IS NULL AND a.deleted_at IS NULL
+      ORDER BY x.assigned_at DESC
+    `;
+const HELD_COUNT_SQL = `
+      SELECT COUNT(*) as count
+      FROM asset_assignments x JOIN assets a ON x.asset_id = a.id
+      WHERE x.employee_id = ? AND x.returned_at IS NULL AND a.deleted_at IS NULL
+    `;
+
 // Get all employees
 router.get('/', (req, res) => {
     try {
@@ -10,7 +26,7 @@ router.get('/', (req, res) => {
 
         // Add asset count for each employee
         const employeesWithAssets = employees.map(emp => {
-            const assetCount = db.prepare('SELECT COUNT(*) as count FROM assets WHERE assigned_to = ?').get(emp.id);
+            const assetCount = db.prepare(HELD_COUNT_SQL).get(emp.id);
             return { ...emp, asset_count: assetCount.count };
         });
 
@@ -30,12 +46,7 @@ router.get('/:id', (req, res) => {
         }
 
         // Get assigned assets
-        const assets = db.prepare(`
-      SELECT a.*, c.name as category_name
-      FROM assets a
-      LEFT JOIN categories c ON a.category_id = c.id
-      WHERE a.assigned_to = ?
-    `).all(req.params.id);
+        const assets = db.prepare(HELD_ASSETS_SQL).all(req.params.id);
 
         // Get history for this employee (any asset interactions)
         const history = db.prepare(`
@@ -90,16 +101,19 @@ router.put('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
     try {
         // Check if employee has assigned assets
-        const assignedAssets = db.prepare('SELECT COUNT(*) as count FROM assets WHERE assigned_to = ?').get(req.params.id);
+        const assignedAssets = db.prepare(HELD_COUNT_SQL).get(req.params.id);
 
         if (assignedAssets.count > 0) {
             return res.status(400).json({ error: 'Cannot delete employee with assigned assets' });
         }
 
-        // Clean up history rows referencing this employee
-        db.prepare('DELETE FROM asset_history WHERE employee_id = ?').run(req.params.id);
-
-        db.prepare('DELETE FROM employees WHERE id = ?').run(req.params.id);
+        db.transaction(() => {
+            // Clean up history and closed assignment rows referencing this employee
+            db.prepare('DELETE FROM asset_history WHERE employee_id = ?').run(req.params.id);
+            db.prepare('DELETE FROM asset_assignments WHERE employee_id = ?').run(req.params.id);
+            db.prepare('UPDATE assets SET assigned_to = NULL WHERE assigned_to = ?').run(req.params.id);
+            db.prepare('DELETE FROM employees WHERE id = ?').run(req.params.id);
+        })();
         res.json({ message: 'Employee deleted successfully' });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -114,12 +128,7 @@ router.get('/:id/report', (req, res) => {
             return res.status(404).json({ error: 'Employee not found' });
         }
 
-        const assets = db.prepare(`
-      SELECT a.*, c.name as category_name
-      FROM assets a
-      LEFT JOIN categories c ON a.category_id = c.id
-      WHERE a.assigned_to = ?
-    `).all(req.params.id);
+        const assets = db.prepare(HELD_ASSETS_SQL).all(req.params.id);
 
         const history = db.prepare(`
       SELECT ah.*, a.asset_number, a.name as asset_name

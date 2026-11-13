@@ -1,54 +1,57 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
-import { assetsAPI, reportsAPI, employeesAPI } from '../services/api';
+import { assetsAPI, reportsAPI } from '../services/api';
+import { statusColor } from '../utils/scan';
+import { useAssetActions } from './AssetActions';
+
+const EMPTY_FILTERS = { search: '', status: '', category: '', campus: '', model: '', brand: '' };
+
+// Filters can be preset from a link (dashboard, inventory page).
+function filtersFromUrl(search) {
+    const params = new URLSearchParams(search);
+    const preset = {};
+    for (const key of Object.keys(EMPTY_FILTERS)) {
+        if (params.get(key) !== null) preset[key] = params.get(key);
+    }
+    return preset;
+}
 
 export default function AssetList() {
+    const location = useLocation();
+    const navigate = useNavigate();
     const [assets, setAssets] = useState([]);
     const [categories, setCategories] = useState([]);
     const [campuses, setCampuses] = useState([]);
-    const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [notice, setNotice] = useState('');
     const [importing, setImporting] = useState(false);
     const [createMissingCategories, setCreateMissingCategories] = useState(true);
-    const [filters, setFilters] = useState({
-        search: '',
-        status: '',
-        category: '',
-        campus: '',
-        model: '',
-        brand: ''
-    });
+    const [filters, setFilters] = useState(() => ({ ...EMPTY_FILTERS, ...filtersFromUrl(location.search) }));
     const [models, setModels] = useState([]);
     const [brands, setBrands] = useState([]);
-    const location = useLocation();
-    const navigate = useNavigate();
-    const [assignModal, setAssignModal] = useState({ open: false, asset: null });
-    const [selectedEmployee, setSelectedEmployee] = useState('');
-    const [assignQuantity, setAssignQuantity] = useState(1);
-    const [showNewEmployeeForm, setShowNewEmployeeForm] = useState(false);
-    const [newEmployee, setNewEmployee] = useState({
-        name: '',
-        email: '',
-        department: '',
-        phone: ''
+    // Only the most recent request may fill the table: a slower earlier one
+    // must not overwrite the results of the filters now on screen.
+    const latestLoad = useRef(0);
+    const actions = useAssetActions((message) => {
+        setNotice(message);
+        loadAssets();
     });
 
     useEffect(() => {
         loadCategories();
-        loadEmployees();
         loadCampuses();
         loadModels();
         loadBrands();
-        const params = new URLSearchParams(location.search);
-        const campusParam = params.get('campus');
-        if (campusParam !== null) {
-            setFilters((prev) => ({ ...prev, campus: campusParam }));
-        }
-        const modelParam = params.get('model');
-        if (modelParam !== null) {
-            setFilters((prev) => ({ ...prev, model: modelParam }));
-        }
+    }, []);
+
+    // Following another link to this page while it is open re-applies its filters.
+    useEffect(() => {
+        const preset = filtersFromUrl(location.search);
+        setFilters((prev) => {
+            const next = { ...prev, ...preset };
+            return Object.keys(next).every((key) => next[key] === prev[key]) ? prev : next;
+        });
     }, [location.search]);
 
     async function loadModels() {
@@ -92,15 +95,6 @@ export default function AssetList() {
         }
     }
 
-    async function loadEmployees() {
-        try {
-            const data = await employeesAPI.getAll();
-            setEmployees(data);
-        } catch (error) {
-            console.error('Error loading employees:', error);
-        }
-    }
-
     async function loadBrands() {
         try {
             const data = await reportsAPI.getByBrand();
@@ -126,7 +120,7 @@ export default function AssetList() {
             'Quantity': a.quantity || 1,
             'Assigned Qty': a.assigned_quantity || 0,
             'Status': a.status,
-            'Assigned To': a.employee_name || '',
+            'Assigned To': a.holders || '',
             'Supplier': a.supplier_name || '',
             'Campus': a.campus || '',
             'Location': a.location || '',
@@ -144,18 +138,15 @@ export default function AssetList() {
     }
 
     async function loadAssets() {
+        const request = ++latestLoad.current;
         try {
             setLoading(true);
-            const params = {
-                ...filters,
-                campus: filters.campus === '__unassigned__' ? '' : filters.campus
-            };
-            const data = await assetsAPI.getAll(params);
-            setAssets(data);
+            const data = await assetsAPI.getAll(filters);
+            if (request === latestLoad.current) setAssets(data);
         } catch (error) {
             console.error('Error loading assets:', error);
         } finally {
-            setLoading(false);
+            if (request === latestLoad.current) setLoading(false);
         }
     }
 
@@ -167,44 +158,6 @@ export default function AssetList() {
             loadAssets();
         } catch (error) {
             alert('Error deleting asset: ' + error.message);
-        }
-    }
-
-    function openAssign(asset) {
-        const available = Math.max(0, (asset.quantity || 1) - (asset.assigned_quantity || 0));
-        const isReassign = Boolean(asset.assigned_to);
-        if (!isReassign && available === 0) {
-            alert('No available quantity to assign for this asset.');
-            return;
-        }
-        // Reassigning moves the current assignment, so default to that amount.
-        setAssignQuantity(isReassign ? (asset.assigned_quantity || 1) : Math.max(1, available));
-        setSelectedEmployee('');
-        setShowNewEmployeeForm(false);
-        setAssignModal({ open: true, asset });
-    }
-
-    async function submitAssign() {
-        if (!assignModal.asset) return;
-        const available = Math.max(0, (assignModal.asset.quantity || 1) - (assignModal.asset.assigned_quantity || 0));
-        const maxQty = assignModal.asset.assigned_to ? (assignModal.asset.quantity || 1) : available;
-        if (!selectedEmployee) {
-            alert('Select an employee');
-            return;
-        }
-        if (assignQuantity < 1 || assignQuantity > maxQty) {
-            alert(`Select a quantity between 1 and ${maxQty}`);
-            return;
-        }
-        try {
-            await assetsAPI.assign(assignModal.asset.id, {
-                employee_id: selectedEmployee,
-                quantity: assignQuantity
-            });
-            setAssignModal({ open: false, asset: null });
-            loadAssets();
-        } catch (error) {
-            alert('Error assigning asset: ' + error.message);
         }
     }
 
@@ -276,6 +229,13 @@ export default function AssetList() {
                 </div>
             </div>
 
+            {notice && (
+                <div className="alert alert-info flex justify-between items-center">
+                    <span>{notice}</span>
+                    <button className="btn btn-sm btn-secondary" onClick={() => setNotice('')}>Dismiss</button>
+                </div>
+            )}
+
             <div className="card mb-3">
                 <div className="card-body">
                     <div className="grid grid-3">
@@ -283,7 +243,7 @@ export default function AssetList() {
                             <input
                                 type="text"
                                 className="form-control"
-                                placeholder="Search assets..."
+                                placeholder="Search by name, number, serial or holder..."
                                 value={filters.search}
                                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                             />
@@ -446,13 +406,17 @@ export default function AssetList() {
                                             <td>{asset.model || 'N/A'}</td>
                                             <td>{asset.supplier_name || 'N/A'}</td>
                                             <td>{asset.campus || 'N/A'}</td>
-                                            <td>{asset.quantity || 1}</td>
+                                            <td style={{ whiteSpace: 'nowrap' }}>
+                                                {(asset.quantity || 1) > 1
+                                                    ? `${asset.assigned_quantity || 0} / ${asset.quantity} out`
+                                                    : 1}
+                                            </td>
                                             <td>
-                                                <span className={`badge badge-${getStatusColor(asset.status)}`}>
+                                                <span className={`badge badge-${statusColor(asset.status)}`}>
                                                     {asset.status}
                                                 </span>
                                             </td>
-                                            <td>{asset.employee_name || '-'}</td>
+                                            <td>{asset.holders || '-'}</td>
                                             <td style={{ whiteSpace: 'nowrap' }}>
                                                 {asset.created_at ? new Date(asset.created_at).toLocaleDateString() : '—'}
                                             </td>
@@ -464,12 +428,30 @@ export default function AssetList() {
                                                     <Link to={`/assets/${asset.id}/edit`} className="btn btn-sm btn-secondary">
                                                         Edit
                                                     </Link>
-                                                    <button
-                                                        onClick={() => openAssign(asset)}
-                                                        className={`btn btn-sm ${asset.assigned_to ? 'btn-secondary' : 'btn-primary'}`}
-                                                    >
-                                                        {asset.assigned_to ? 'Reassign' : 'Assign'}
-                                                    </button>
+                                                    {canAssign(asset) && (
+                                                        <button
+                                                            onClick={() => actions.open('assign', asset.id)}
+                                                            className="btn btn-sm btn-primary"
+                                                        >
+                                                            Assign
+                                                        </button>
+                                                    )}
+                                                    {asset.holder_count > 0 && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => actions.open('reassign', asset.id)}
+                                                                className="btn btn-sm btn-secondary"
+                                                            >
+                                                                Reassign
+                                                            </button>
+                                                            <button
+                                                                onClick={() => actions.open('return', asset.id)}
+                                                                className="btn btn-sm btn-secondary"
+                                                            >
+                                                                Return
+                                                            </button>
+                                                        </>
+                                                    )}
                                                     <button
                                                         onClick={() => handleDelete(asset.id)}
                                                         className="btn btn-sm btn-danger"
@@ -487,159 +469,12 @@ export default function AssetList() {
                 </div>
             )}
 
-            {assignModal.open && (
-                <div
-                    className="modal-overlay"
-                    onClick={() => {
-                        setAssignModal({ open: false, asset: null });
-                        setShowNewEmployeeForm(false);
-                    }}
-                >
-                    <div className="modal" onClick={(e) => e.stopPropagation()}>
-                        <h3>{assignModal.asset?.assigned_to ? 'Reassign Asset' : 'Assign Asset'}</h3>
-                        {assignModal.asset?.assigned_to && (
-                            <p className="text-muted" style={{ marginTop: '0.5rem' }}>
-                                Currently with <strong>{assignModal.asset.employee_name}</strong> — assigning moves it
-                                to the selected employee.
-                            </p>
-                        )}
-                        <div className="form-group mt-2">
-                            <label className="form-label">Employee</label>
-                            <select
-                                className="form-control"
-                                value={selectedEmployee}
-                                onChange={(e) => setSelectedEmployee(e.target.value)}
-                            >
-                                <option value="">Choose an employee...</option>
-                                {employees.map((emp) => (
-                                    <option key={emp.id} value={emp.id}>
-                                        {emp.name} ({emp.department || 'No department'})
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">Quantity</label>
-                            <input
-                                type="number"
-                                min="1"
-                                max={assignModal.asset?.assigned_to
-                                    ? (assignModal.asset?.quantity || 1)
-                                    : Math.max(1, (assignModal.asset?.quantity || 1) - (assignModal.asset?.assigned_quantity || 0))}
-                                className="form-control"
-                                value={assignQuantity}
-                                onChange={(e) => setAssignQuantity(parseInt(e.target.value, 10) || 1)}
-                            />
-                            <div className="text-muted" style={{ fontSize: '0.85rem' }}>
-                                {assignModal.asset?.assigned_to
-                                    ? `Total quantity: ${assignModal.asset?.quantity || 1}`
-                                    : `Available: ${Math.max(0, (assignModal.asset?.quantity || 1) - (assignModal.asset?.assigned_quantity || 0))}`}
-                            </div>
-                        </div>
-                        <div className="form-group">
-                            <button
-                                type="button"
-                                className="btn btn-secondary"
-                                onClick={() => setShowNewEmployeeForm((v) => !v)}
-                            >
-                                {showNewEmployeeForm ? 'Cancel new employee' : 'Create new employee'}
-                            </button>
-                        </div>
-                        {showNewEmployeeForm && (
-                            <form onSubmit={async (e) => {
-                                e.preventDefault();
-                                try {
-                                    const created = await employeesAPI.create(newEmployee);
-                                    await loadEmployees();
-                                    setSelectedEmployee(created.id);
-                                    setShowNewEmployeeForm(false);
-                                    setNewEmployee({ name: '', email: '', department: '', phone: '' });
-                                } catch (error) {
-                                    alert('Error creating employee: ' + error.message);
-                                }
-                            }} className="card mt-2">
-                                <div className="card-body">
-                                    <div className="grid grid-2">
-                                        <div className="form-group">
-                                            <label className="form-label">Name *</label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={newEmployee.name}
-                                                onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
-                                                required
-                                            />
-                                        </div>
-                                        <div className="form-group">
-                                            <label className="form-label">Email *</label>
-                                            <input
-                                                type="email"
-                                                className="form-control"
-                                                value={newEmployee.email}
-                                                onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-2">
-                                        <div className="form-group">
-                                            <label className="form-label">Department</label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={newEmployee.department}
-                                                onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })}
-                                            />
-                                        </div>
-                                        <div className="form-group">
-                                            <label className="form-label">Phone</label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={newEmployee.phone}
-                                                onChange={(e) => setNewEmployee({ ...newEmployee, phone: e.target.value })}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="card-footer">
-                                    <button type="submit" className="btn btn-primary">
-                                        Save & select
-                                    </button>
-                                </div>
-                            </form>
-                        )}
-                        <div className="flex gap-2 mt-3">
-                            <button
-                                onClick={() => {
-                                    setAssignModal({ open: false, asset: null });
-                                    setShowNewEmployeeForm(false);
-                                }}
-                                className="btn btn-secondary"
-                            >
-                                Cancel
-                            </button>
-                            <button onClick={submitAssign} className="btn btn-primary">
-                                Assign
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {actions.dialogs}
         </div>
     );
 }
 
-function getStatusColor(status) {
-    const colors = {
-        available: 'success',
-        assigned: 'info',
-        maintenance: 'warning',
-        repair: 'warning',
-        damaged: 'danger',
-        lost: 'danger',
-        stolen: 'danger',
-        retired: 'danger'
-    };
-    return colors[status] || 'primary';
+function canAssign(asset) {
+    return ['available', 'assigned'].includes(asset.status)
+        && (asset.quantity || 1) > (asset.assigned_quantity || 0);
 }

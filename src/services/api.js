@@ -108,6 +108,15 @@ export const assetsAPI = {
     delete: (id) => apiCall(`/assets/${id}`, { method: 'DELETE' }),
     assign: (id, data) => apiCall(`/assets/${id}/assign`, { method: 'POST', body: JSON.stringify(data) }),
     return: (id, data) => apiCall(`/assets/${id}/return`, { method: 'POST', body: JSON.stringify(data) }),
+    reassign: (id, data) => apiCall(`/assets/${id}/reassign`, { method: 'POST', body: JSON.stringify(data) }),
+    transfer: (id, data) => apiCall(`/assets/${id}/transfer`, { method: 'POST', body: JSON.stringify(data) }),
+    // Resolve a scanned sticker (link or bare number) or a typed serial number
+    lookup: (code) => apiCall(`/assets/lookup?code=${encodeURIComponent(code)}`),
+    sendEmail: (id, template, assignmentId) =>
+        apiCall(`/assets/${id}/email`, {
+            method: 'POST',
+            body: JSON.stringify({ template, assignment_id: assignmentId })
+        }),
     importBulk: (items, createMissingCategories = true) =>
         apiCall('/assets/import', { method: 'POST', body: JSON.stringify({ items, createMissingCategories }) }),
     restore: (id, password) =>
@@ -281,10 +290,56 @@ export const activityAPI = {
     },
 };
 
+// Campus-wise stock position
+export const inventoryAPI = {
+    summary: () => apiCall('/inventory/summary'),
+    locations: (campus) =>
+        apiCall(`/inventory/locations${campus !== undefined ? `?campus=${encodeURIComponent(campus)}` : ''}`),
+};
+
+// Settings: integrations, email templates, SharePoint sync
+let publicSettingsPromise = null;
+export const settingsAPI = {
+    // Needed on most screens, so fetched once and shared.
+    getPublic: () => {
+        if (!publicSettingsPromise) {
+            publicSettingsPromise = apiCall('/settings/public').catch((err) => {
+                publicSettingsPromise = null;
+                throw err;
+            });
+        }
+        return publicSettingsPromise;
+    },
+    clearPublicCache: () => { publicSettingsPromise = null; },
+    getIntegrations: () => apiCall('/settings/integrations'),
+    saveIntegrations: (data) => apiCall('/settings/integrations', { method: 'PUT', body: JSON.stringify(data) }),
+    getTemplates: () => apiCall('/settings/email-templates'),
+    saveTemplate: (key, data) =>
+        apiCall(`/settings/email-templates/${key}`, { method: 'PUT', body: JSON.stringify(data) }),
+    resetTemplate: (key) => apiCall(`/settings/email-templates/${key}/reset`, { method: 'POST' }),
+    previewTemplate: (key, data) =>
+        apiCall(`/settings/email-templates/${key}/preview`, { method: 'POST', body: JSON.stringify(data) }),
+    sendTestEmail: (data) => apiCall('/settings/email-test', { method: 'POST', body: JSON.stringify(data) }),
+    getEmailLog: (limit = 100) => apiCall(`/settings/email-log?limit=${limit}`),
+    testSharePoint: () => apiCall('/settings/sharepoint/test', { method: 'POST' }),
+    syncSharePoint: () => apiCall('/settings/sharepoint/sync-all', { method: 'POST' }),
+    retrySharePoint: () => apiCall('/settings/sharepoint/retry-failed', { method: 'POST' }),
+};
+
+// Emails that are not about a single asset
+export const mailAPI = {
+    libraryOverdue: (borrowerId) =>
+        apiCall('/mail/library-overdue', { method: 'POST', body: JSON.stringify({ borrower_id: borrowerId }) }),
+};
+
 // Auth & license
 export const authAPI = {
     login: (email, password) => apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
     me: () => apiCall('/auth/me'),
     license: () => apiCall('/auth/license'),
     activate: (code) => apiCall('/auth/activate', { method: 'POST', body: JSON.stringify({ code }) }),
+    ssoConfig: () => apiCall('/auth/sso/config'),
+    // A full-page navigation, not a fetch: the browser has to follow the
+    // redirect to Microsoft and back.
+    ssoLoginUrl: (returnTo = '/') => `${API_BASE}/auth/sso/login?returnTo=${encodeURIComponent(returnTo)}`,
 };

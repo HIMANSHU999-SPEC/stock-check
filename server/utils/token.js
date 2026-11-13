@@ -1,6 +1,12 @@
 const crypto = require('crypto');
 
-const SECRET = process.env.AUTH_SECRET || 'stock-management-secret';
+require('../config');
+
+const DEFAULT_SECRET = 'stock-management-secret';
+const SECRET = process.env.AUTH_SECRET || DEFAULT_SECRET;
+// The fallback is public in the repository, so tokens signed with it can be
+// forged. Features that depend on trustworthy sessions check this.
+const usingDefaultSecret = SECRET === DEFAULT_SECRET;
 
 function signToken(payload, expiresInDays = 7) {
   const exp = Date.now() + expiresInDays * 24 * 60 * 60 * 1000;
@@ -25,4 +31,4 @@ function verifyToken(token) {
   }
 }
 
-module.exports = { signToken, verifyToken };
+module.exports = { signToken, verifyToken, usingDefaultSecret };

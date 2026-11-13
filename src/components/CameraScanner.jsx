@@ -7,7 +7,12 @@ import { Html5Qrcode } from 'html5-qrcode';
 // scanned in a row; a short debounce prevents the same code firing repeatedly.
 const VIEW_ID = 'camera-scanner-view';
 
-export default function CameraScanner({ onScan, onClose }) {
+export default function CameraScanner({
+    onScan,
+    onClose,
+    title = 'Scan a book',
+    hint = "Point the camera at a book's printed QR tag. Each scan adds it to the issue list."
+}) {
     const [error, setError] = useState('');
     const [ready, setReady] = useState(false);
     const scannerRef = useRef(null);
@@ -60,7 +65,7 @@ export default function CameraScanner({ onScan, onClose }) {
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '420px' }}>
                 <div className="flex justify-between items-center mb-2">
-                    <h3>Scan a book</h3>
+                    <h3>{title}</h3>
                     <button className="btn btn-sm btn-secondary" onClick={onClose}>Close</button>
                 </div>
 
@@ -76,7 +81,7 @@ export default function CameraScanner({ onScan, onClose }) {
                     <p className="mt-2" style={{ color: 'var(--danger, #ef4444)' }}>{error}</p>
                 )}
                 <p className="text-muted mt-2" style={{ fontSize: '0.85rem' }}>
-                    Point the camera at a book's printed QR tag. Each scan adds it to the issue list.
+                    {hint}
                 </p>
             </div>
         </div>

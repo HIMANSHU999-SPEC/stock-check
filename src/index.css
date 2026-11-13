@@ -773,3 +773,353 @@ body:not(.light-mode) .campus-badge {
   color: #f1f5f9;
 }
 
+
+/* Alerts */
+.alert {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  margin-bottom: var(--spacing-md);
+  gap: var(--spacing-md);
+}
+
+.alert-danger {
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.3);
+  color: #991b1b;
+}
+
+.alert-success {
+  background: rgba(22, 163, 74, 0.08);
+  border-color: rgba(22, 163, 74, 0.3);
+  color: #166534;
+}
+
+.alert-warning {
+  background: rgba(217, 119, 6, 0.08);
+  border-color: rgba(217, 119, 6, 0.3);
+  color: #92400e;
+}
+
+.alert-info {
+  background: rgba(37, 99, 235, 0.07);
+  border-color: rgba(37, 99, 235, 0.25);
+  color: #1e40af;
+}
+
+.w-100 {
+  width: 100%;
+  justify-content: center;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+code {
+  background: var(--bg-tertiary);
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.9em;
+}
+
+.plain-list {
+  margin: 0 0 var(--spacing-md) 1.25rem;
+}
+
+/* Microsoft sign-in */
+.btn-microsoft {
+  background: #ffffff;
+  color: #2f2f2f;
+  border: 1px solid #8c8c8c;
+  padding: 0.65rem var(--spacing-lg);
+}
+
+.btn-microsoft:hover {
+  background: #f3f3f3;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: var(--spacing-lg) 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+
+/* Person / room toggle in the assign dialog */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.segmented button {
+  border: none;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  padding: 0.45rem 0.9rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.segmented button.active {
+  background: var(--primary);
+  color: #ffffff;
+}
+
+.inline-form {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+}
+
+.inline-form .grid {
+  gap: var(--spacing-sm);
+}
+
+/* One holder of an asset, with its actions */
+.holder-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.holder-row:last-child {
+  border-bottom: none;
+}
+
+.email-menu {
+  width: auto;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* Key facts shown after a scan / in status panels */
+.scan-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--spacing-sm) var(--spacing-lg);
+}
+
+.scan-facts > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.scan-facts .text-muted {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Stock by campus */
+.campus-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stock-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(127, 127, 127, 0.15);
+}
+
+.stock-bar span {
+  display: block;
+  height: 100%;
+}
+
+.stock-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.stock-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 0.3rem;
+}
+
+/* Settings */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+  border-bottom: 2px solid var(--border);
+}
+
+.tab {
+  border: none;
+  background: none;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font: inherit;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+}
+
+.tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.template-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-lg);
+  align-items: flex-start;
+}
+
+.template-list {
+  flex: 0 1 18rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.template-item {
+  text-align: left;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.template-item.active {
+  border-color: var(--primary);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.chip {
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.email-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  color: #222222;
+  padding: var(--spacing-md);
+  font-size: 0.92rem;
+}
+
+.email-preview-subject {
+  font-weight: 700;
+  padding-bottom: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+  border-bottom: 1px solid #e5e5e5;
+}
+
+/* Printed stickers — sized in millimetres so the preview is true to paper */
+.sticker-preview {
+  background: #e9e9e9;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  overflow-x: auto;
+}
+
+.sticker {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 2mm;
+  padding: 2mm 2.5mm;
+  background: #ffffff;
+  color: #000000;
+  overflow: hidden;
+  outline: 1px dashed #b5b5b5;
+  outline-offset: -1px;
+  break-inside: avoid;
+  font-family: Arial, Helvetica, sans-serif;
+  line-height: 1.15;
+}
+
+.sticker-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.sticker-org {
+  font-size: 5pt;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.4mm;
+}
+
+.sticker-number {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sticker-name {
+  font-size: 7pt;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.sticker-line,
+.sticker-foot {
+  font-size: 6pt;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sticker-foot {
+  margin-top: 0.6mm;
+}

@@ -1,8 +1,11 @@
+// Must come first: loads the optional .env file before anything reads it.
+require('./config');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const db = require('./database');
+const sharepoint = require('./services/sharepoint');
 const { router: authRouter, getUserFromToken, licenseStatus } = require('./routes/auth');
 
 const app = express();
@@ -63,6 +66,12 @@ app.use('/api/books', require('./routes/books'));
 app.use('/api/borrowers', require('./routes/borrowers'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/activity', require('./routes/activity'));
+app.use('/api/inventory', require('./routes/inventory'));
+app.use('/api/settings', require('./routes/settings'));
+app.use('/api/mail', require('./routes/mail'));
+
+// Keep in sync with server/routes/assets.js.
+const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '..', 'uploads');
 
 // Daily purge for recycle bin (assets older than 90 days)
 function purgeRecycleBin() {
@@ -72,17 +81,35 @@ function purgeRecycleBin() {
       WHERE entity_type = 'asset' AND can_restore_until <= datetime('now','localtime')
     `).all();
 
+        // Everything that references the asset has to go first (foreign keys).
+        const documentsStmt = db.prepare('SELECT stored_name FROM asset_documents WHERE asset_id = ?');
+        const deleteDocumentsStmt = db.prepare('DELETE FROM asset_documents WHERE asset_id = ?');
+        const documentInUseStmt = db.prepare('SELECT COUNT(*) as c FROM asset_documents WHERE stored_name = ?');
+        const orphanedFiles = [];
         const deleteHistoryStmt = db.prepare('DELETE FROM asset_history WHERE asset_id = ?');
+        const deleteAssignmentsStmt = db.prepare('DELETE FROM asset_assignments WHERE asset_id = ?');
+        const deleteOutboxStmt = db.prepare('DELETE FROM sharepoint_outbox WHERE asset_id = ?');
         const deleteAssetStmt = db.prepare('DELETE FROM assets WHERE id = ?');
         const deleteBinStmt = db.prepare('DELETE FROM recycle_bin WHERE id = ?');
 
         db.transaction(() => {
             expired.forEach((item) => {
+                const files = documentsStmt.all(item.entity_id).map((d) => d.stored_name);
+                deleteDocumentsStmt.run(item.entity_id);
+                // An invoice PDF can be shared by several assets — only remove
+                // it once nothing else points at it.
+                files.forEach((name) => {
+                    if (!documentInUseStmt.get(name).c) orphanedFiles.push(name);
+                });
                 deleteHistoryStmt.run(item.entity_id);
+                deleteAssignmentsStmt.run(item.entity_id);
+                deleteOutboxStmt.run(item.entity_id);
                 deleteAssetStmt.run(item.entity_id);
                 deleteBinStmt.run(item.id);
             });
         })();
+
+        orphanedFiles.forEach((name) => fs.unlink(path.join(UPLOAD_DIR, path.basename(name)), () => {}));
 
         if (expired.length > 0) {
             console.log(`Purged ${expired.length} expired recycle bin item(s)`);
@@ -130,6 +157,9 @@ async function runDailyBackup() {
 
 runDailyBackup();
 setInterval(runDailyBackup, 24 * 60 * 60 * 1000);
+
+// Push queued asset changes to SharePoint (no-op until it is switched on).
+sharepoint.startWorker();
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {

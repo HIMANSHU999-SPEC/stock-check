@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { booksAPI, borrowersAPI } from '../services/api';
-import { generateOverdueEmail, openEmailDraft } from '../utils/emailTemplates';
+import { booksAPI, borrowersAPI, mailAPI } from '../services/api';
+import { handleEmailResult } from '../utils/emailTemplates';
 import CameraScanner from './CameraScanner';
 
 const NEW_BORROWER = {
@@ -84,12 +84,15 @@ export default function IssueDesk() {
         }
     }
 
-    function remindBorrower(loan) {
-        const overdueForBorrower = loans.filter(
-            (l) => l.borrower_id === loan.borrower_id && l.is_overdue
-        );
-        const { subject, body } = generateOverdueEmail(loan.borrower_name, overdueForBorrower);
-        openEmailDraft(loan.borrower_email, subject, body);
+    // Sent by the server from the IT mailbox when one is configured;
+    // otherwise opens a draft in the user's own mail app.
+    async function remindBorrower(loan) {
+        try {
+            const line = handleEmailResult(await mailAPI.libraryOverdue(loan.borrower_id));
+            if (line) alert(line);
+        } catch (err) {
+            alert('Could not send the reminder: ' + err.message);
+        }
     }
 
     // Support ?book=<number> to preload a book (from Book details "Issue this Book")

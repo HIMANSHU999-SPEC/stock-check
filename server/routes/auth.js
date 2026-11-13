@@ -1,9 +1,33 @@
 const express = require('express');
 const crypto = require('crypto');
 const db = require('../database');
-const { signToken, verifyToken } = require('../utils/token');
+const { signToken, verifyToken, usingDefaultSecret } = require('../utils/token');
+const config = require('../config');
+const sso = require('../services/sso');
 
 const router = express.Router();
+
+// Single sign-on is only offered when sessions can be trusted: with the
+// public fallback AUTH_SECRET anyone could forge a login token anyway.
+const ssoEnabled = config.sso.enabled && !usingDefaultSecret;
+const passwordLoginEnabled = !(ssoEnabled && config.sso.passwordLoginDisabled);
+const SSO_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: 'lax',
+  secure: config.appBaseUrl.startsWith('https://'),
+  path: '/api/auth/sso'
+};
+
+function readCookie(req, name) {
+  const header = req.headers.cookie || '';
+  for (const part of header.split(';')) {
+    const index = part.indexOf('=');
+    if (index > -1 && part.slice(0, index).trim() === name) {
+      return decodeURIComponent(part.slice(index + 1).trim());
+    }
+  }
+  return null;
+}
 
 const TRIAL_CODE = 'jhinfotech31@gmail.com';
 const TRIAL_EXTENSION_CODE = 'sales@jhinfo.tech';
@@ -58,6 +82,9 @@ function getUserFromToken(req) {
 
 router.post('/login', (req, res) => {
   const { email, password } = req.body;
+  if (!passwordLoginEnabled) {
+    return res.status(403).json({ error: 'Password sign-in is turned off — use "Sign in with Microsoft"' });
+  }
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
   }
@@ -72,6 +99,62 @@ router.post('/login', (req, res) => {
 
   const token = signToken({ userId: user.id, role: user.role }, 7);
   res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+});
+
+// What the login screen should offer
+router.get('/sso/config', (req, res) => {
+  res.json({ enabled: ssoEnabled, password_login: passwordLoginEnabled });
+});
+
+// Step 1: send the browser to Microsoft
+router.get('/sso/login', (req, res) => {
+  if (!ssoEnabled) {
+    return res.redirect('/login?sso_error=' + encodeURIComponent('Single sign-on is not set up on this server'));
+  }
+  const { url, cookie } = sso.beginLogin(req.query.returnTo);
+  res.cookie(sso.TX_COOKIE, cookie, { ...SSO_COOKIE_OPTIONS, maxAge: sso.TX_LIFETIME_MINUTES * 60 * 1000 });
+  res.redirect(url);
+});
+
+// Step 2: Microsoft sends the browser back here with a one-time code
+router.get('/sso/callback', async (req, res) => {
+  const fail = (message) => res.redirect(`${config.appBaseUrl}/login?sso_error=${encodeURIComponent(message)}`);
+  if (!ssoEnabled) {
+    return fail('Single sign-on is not set up on this server');
+  }
+  try {
+    const identity = await sso.completeLogin(req.query, readCookie(req, sso.TX_COOKIE));
+    res.clearCookie(sso.TX_COOKIE, SSO_COOKIE_OPTIONS);
+
+    // Signing in with Microsoft proves who someone is; whether they may use
+    // this system is still decided by the Users list here.
+    const placeholders = identity.emails.map(() => '?').join(',');
+    const user = db
+      .prepare(`SELECT * FROM users WHERE LOWER(email) IN (${placeholders})`)
+      .get(...identity.emails);
+    if (!user) {
+      return fail(`${identity.emails[0]} has not been given access. Ask an administrator to add you under Users.`);
+    }
+    if (!user.name && identity.name) {
+      db.prepare('UPDATE users SET name = ? WHERE id = ?').run(identity.name, user.id);
+    }
+
+    db.prepare(`
+      INSERT INTO activity_log (user_id, user_email, action, entity_type, entity_id, description)
+      VALUES (?, ?, 'sso_login', 'user', ?, 'Signed in with Microsoft')
+    `).run(user.id, user.email, user.id);
+
+    const token = signToken({ userId: user.id, role: user.role }, 7);
+    // The token travels in the URL fragment, which browsers never send to a
+    // server or include in a Referer header.
+    const fragment = new URLSearchParams({ token, returnTo: identity.returnTo });
+    res.redirect(`${config.appBaseUrl}/sso-complete#${fragment}`);
+  } catch (error) {
+    if (!(error instanceof sso.SsoError)) {
+      console.error('SSO callback failed:', error);
+    }
+    fail(error instanceof sso.SsoError ? error.message : 'Sign-in could not be completed — please try again');
+  }
 });
 
 router.get('/me', (req, res) => {
@@ -190,4 +273,4 @@ router.post('/change-password', (req, res) => {
   return res.json({ message: 'Password updated successfully' });
 });
 
-module.exports = { router, getUserFromToken, licenseStatus };
+module.exports = { router, getUserFromToken, licenseStatus, ssoEnabled, passwordLoginEnabled };

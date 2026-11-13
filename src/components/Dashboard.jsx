@@ -81,7 +81,7 @@ export default function Dashboard() {
     async function handleCampusClick(displayName, campusValue) {
         setCampusModal({ open: true, name: displayName || 'Unassigned', assets: [], loading: true });
         try {
-            const assets = await assetsAPI.getAll({ campus: campusValue || '' });
+            const assets = await assetsAPI.getAll({ campus: campusValue || '__unassigned__' });
             setCampusModal({ open: true, name: displayName || 'Unassigned', assets, loading: false });
         } catch (error) {
             setCampusModal({ open: true, name: displayName || 'Unassigned', assets: [], loading: false });
