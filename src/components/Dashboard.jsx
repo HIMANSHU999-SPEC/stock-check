@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { reportsAPI, assetsAPI, authAPI, booksAPI } from '../services/api';
+import { reportsAPI, assetsAPI, authAPI, booksAPI, staffReportsAPI } from '../services/api';
 
 // Lightweight horizontal bar chart (no external chart library).
 function BarChart({ data, unit = '' }) {
@@ -39,8 +39,13 @@ export default function Dashboard() {
     const [bookSummary, setBookSummary] = useState(null);
     const [loadError, setLoadError] = useState('');
     const [license, setLicense] = useState(null);
+    const [openReports, setOpenReports] = useState(0);
     const [campusModal, setCampusModal] = useState({ open: false, name: '', assets: [], loading: false });
     const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        staffReportsAPI.count().then((r) => setOpenReports(r.open || 0)).catch(() => {});
+    }, []);
 
     useEffect(() => {
         loadData();
@@ -106,6 +111,14 @@ export default function Dashboard() {
                     <div className="card-body" style={{ color: 'var(--danger)' }}>
                         ⚠️ {loadError}
                     </div>
+                </div>
+            )}
+
+            {openReports > 0 && (
+                <div className="alert alert-warning">
+                    {openReports === 1 ? 'A member of staff has' : `${openReports} members of staff have`} reported a
+                    problem with the assets recorded against them.{' '}
+                    <Link to="/staff-reports" className="text-primary">Review staff reports</Link>
                 </div>
             )}
 

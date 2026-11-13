@@ -141,7 +141,10 @@ function findOpenRowFor(assetId, holder) {
 function giveToHolder(assetId, holder, quantity, userId, notes) {
     const existing = findOpenRowFor(assetId, holder);
     if (existing) {
-        db.prepare('UPDATE asset_assignments SET quantity = quantity + ? WHERE id = ?').run(quantity, existing.id);
+        // The holder confirmed the old amount, not this one.
+        db.prepare(`
+          UPDATE asset_assignments SET quantity = quantity + ?, confirmed_at = NULL, confirmed_by = NULL WHERE id = ?
+        `).run(quantity, existing.id);
         return existing.id;
     }
     return db.prepare(`

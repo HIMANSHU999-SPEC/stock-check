@@ -1804,3 +1804,22 @@ body:not(.light-mode) .campus-badge:hover {
 .grid > * {
   min-width: 0;
 }
+
+/* ---------- My assets (staff self-service) ---------- */
+.my-asset-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.9rem 1.25rem;
+    border-top: 1px solid var(--border, #e5e7eb);
+}
+.my-asset-row:first-child { border-top: 0; }
+.my-asset-main { min-width: 0; }
+.my-asset-name { font-weight: 600; }
+.my-asset-meta { font-size: 0.85rem; overflow-wrap: anywhere; }
+.my-asset-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; }
+@media (max-width: 640px) {
+    .my-asset-row { flex-direction: column; align-items: stretch; }
+    .my-asset-actions { justify-content: flex-start; }
+}

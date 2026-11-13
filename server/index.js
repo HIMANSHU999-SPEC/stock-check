@@ -6,7 +6,7 @@ const path = require('path');
 const fs = require('fs');
 const db = require('./database');
 const sharepoint = require('./services/sharepoint');
-const { router: authRouter, getUserFromToken, licenseStatus } = require('./routes/auth');
+const { router: authRouter, getUserFromToken, getPersonFromToken, licenseStatus } = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -26,6 +26,27 @@ app.use(express.json());
 
 // Auth & license routes
 app.use('/api/auth', authRouter);
+
+// "My assets": the one part of the API open to every member of staff, so it
+// sits in front of the gate below and checks the licence and the person
+// itself. Everything it returns is limited to the person signed in.
+app.use('/api/my', (req, res, next) => {
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    const license = licenseStatus();
+    if (license.expired) {
+        return res.status(403).json({ error: 'License expired or not activated' });
+    }
+    const person = getPersonFromToken(req);
+    if (!person) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    req.person = person;
+    // For the audit trail: staff have no user id, only their email.
+    req.user = person.user || { id: null, name: person.employee.name, email: person.employee.email, role: 'staff' };
+    next();
+}, require('./routes/my'));
 
 // License and auth gate for all other API routes
 app.use((req, res, next) => {
@@ -69,6 +90,7 @@ app.use('/api/activity', require('./routes/activity'));
 app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/mail', require('./routes/mail'));
+app.use('/api/staff-reports', require('./routes/staffReports'));
 
 // Deleted assets stay in the recycle bin for good. Nothing is purged
 // automatically: an asset's history, past holders and documents are part of

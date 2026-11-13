@@ -64,12 +64,46 @@ function getUserFromToken(req) {
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : (queryToken || null);
   if (!token) return null;
   const payload = verifyToken(token);
-  if (!payload) return null;
+  // A staff session (see getPersonFromToken) is not a user of the system
+  // and must never pass for one.
+  if (!payload || !payload.userId || payload.employeeId) return null;
 
   const user = db
     .prepare('SELECT id, name, email, role FROM users WHERE id = ?')
     .get(payload.userId);
   return user || null;
+}
+
+const STAFF_SESSION_DAYS = 1;
+
+/**
+ * Who is asking, for the "My assets" pages, which are open to every member
+ * of staff and not only to the people who run the system.
+ *
+ * Returns { user, employee, role } or null:
+ *  - an administrator / sub-administrator: `user` is set, and `employee` is
+ *    their own staff record when one exists with the same email;
+ *  - anyone else on the staff list: `user` is null and role is 'staff'. Such
+ *    a session opens nothing but /api/my.
+ * Looked up afresh on every request, so marking someone inactive ends their
+ * access straight away.
+ */
+function getPersonFromToken(req) {
+  const user = getUserFromToken(req);
+  if (user) {
+    const employee = db
+      .prepare("SELECT * FROM employees WHERE LOWER(email) = LOWER(?) AND status != 'inactive'")
+      .get(user.email);
+    return { user, employee: employee || null, role: user.role };
+  }
+
+  const auth = req.headers.authorization || '';
+  const payload = auth.startsWith('Bearer ') ? verifyToken(auth.slice(7)) : null;
+  if (!payload || !payload.employeeId || payload.userId) return null;
+  const employee = db
+    .prepare("SELECT * FROM employees WHERE id = ? AND status != 'inactive'")
+    .get(payload.employeeId);
+  return employee ? { user: null, employee, role: 'staff' } : null;
 }
 
 router.post('/login', (req, res) => {
@@ -125,7 +159,25 @@ router.get('/sso/callback', async (req, res) => {
       .prepare(`SELECT * FROM users WHERE LOWER(email) IN (${placeholders})`)
       .get(...identity.emails);
     if (!user) {
-      return fail(`${identity.emails[0]} has not been given access. Ask an administrator to add you under Users.`);
+      // Not someone who runs the system. Anyone on the staff list may still
+      // sign in to see, and confirm, what is recorded against their own name.
+      const employee = db
+        .prepare(`SELECT * FROM employees WHERE LOWER(email) IN (${placeholders})`)
+        .get(...identity.emails);
+      if (!employee) {
+        return fail(`${identity.emails[0]} is not on the staff list in this system. If you have been given equipment, ask IT Support to add you.`);
+      }
+      if (employee.status === 'inactive') {
+        return fail(`${identity.emails[0]} is marked as no longer active. Please contact IT Support.`);
+      }
+      db.prepare(`
+        INSERT INTO activity_log (user_id, user_email, action, entity_type, entity_id, description)
+        VALUES (NULL, ?, 'sso_login', 'employee', ?, 'Staff member signed in with Microsoft to view their assets')
+      `).run(employee.email, employee.id);
+
+      const staffToken = signToken({ employeeId: employee.id, role: 'staff' }, STAFF_SESSION_DAYS);
+      const staffFragment = new URLSearchParams({ token: staffToken, returnTo: '/my-assets' });
+      return res.redirect(`${config.appBaseUrl}/sso-complete#${staffFragment}`);
     }
     if (!user.name && identity.name) {
       db.prepare('UPDATE users SET name = ? WHERE id = ?').run(identity.name, user.id);
@@ -150,11 +202,23 @@ router.get('/sso/callback', async (req, res) => {
 });
 
 router.get('/me', (req, res) => {
-  const user = getUserFromToken(req);
-  if (!user) {
+  const person = getPersonFromToken(req);
+  if (!person) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  res.json({ user });
+  if (person.user) {
+    return res.json({ user: person.user });
+  }
+  // A member of staff: no account in Users, only their own staff record.
+  res.json({
+    user: {
+      id: null,
+      employee_id: person.employee.id,
+      name: person.employee.name,
+      email: person.employee.email,
+      role: 'staff'
+    }
+  });
 });
 
 // The licence is set on the server only (scripts/set-licence.js); nothing in
@@ -205,4 +269,4 @@ router.post('/change-password', (req, res) => {
   return res.json({ message: 'Password updated successfully' });
 });
 
-module.exports = { router, getUserFromToken, licenseStatus, ssoEnabled, passwordLoginEnabled };
+module.exports = { router, getUserFromToken, getPersonFromToken, licenseStatus, ssoEnabled, passwordLoginEnabled };

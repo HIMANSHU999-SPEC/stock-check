@@ -4,8 +4,13 @@ import { Link, useLocation } from 'react-router-dom';
 // The menu, grouped so it fits on one line. An entry with `items` is a
 // drop-down; `match` lists the path prefixes that light it up.
 function buildMenu(user) {
+    // Staff who do not run the system see their own assets and nothing else.
+    if (user?.role === 'staff') {
+        return [{ to: '/my-assets', label: 'My assets' }];
+    }
     const isAdmin = user?.role === 'admin';
     const admin = [
+        { to: '/staff-reports', label: 'Staff reports' },
         { to: '/activity', label: 'Activity' },
         ...(isAdmin ? [{ to: '/users', label: 'Users' }, { to: '/settings', label: 'Settings' }] : [])
     ];
@@ -33,8 +38,8 @@ function buildMenu(user) {
             ]
         },
         { to: '/reports', label: 'Reports' },
-        // With only one entry there is nothing to drop down.
-        admin.length > 1 ? { label: 'Admin', items: admin } : admin[0]
+        { label: 'Admin', items: admin },
+        { to: '/my-assets', label: 'My assets' }
     ];
 }
 
@@ -78,7 +83,7 @@ export default function Navbar({ user, onLogout, license }) {
     return (
         <nav className="navbar" ref={navRef}>
             <div className="container navbar-content">
-                <Link to="/" className="navbar-brand">
+                <Link to={user?.role === 'staff' ? '/my-assets' : '/'} className="navbar-brand">
                     <img
                         src="/laat-shield.png"
                         alt="London Academy for Applied Technology"
@@ -151,7 +156,7 @@ export default function Navbar({ user, onLogout, license }) {
                         {license?.expired && <span className="badge badge-danger">Licence expired</span>}
                         <div className="navbar-user-name">
                             <span>{user?.name || user?.email}</span>
-                            <small>{user?.role === 'admin' ? 'Administrator' : 'Sub-administrator'}</small>
+                            <small>{{ admin: 'Administrator', subadmin: 'Sub-administrator' }[user?.role] || 'Staff'}</small>
                         </div>
                         <button type="button" className="btn btn-sm navbar-logout" onClick={onLogout}>
                             Log out

@@ -337,6 +337,20 @@ export const mailAPI = {
         apiCall('/mail/library-overdue', { method: 'POST', body: JSON.stringify({ borrower_id: borrowerId }) }),
 };
 
+// What is recorded against the person signed in (open to all staff)
+export const myAPI = {
+    assets: () => apiCall('/my/assets'),
+    confirm: (assignmentId) => apiCall(`/my/assets/${assignmentId}/confirm`, { method: 'POST' }),
+    report: (data) => apiCall('/my/reports', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// Problems staff have raised, for IT
+export const staffReportsAPI = {
+    list: () => apiCall('/staff-reports'),
+    count: () => apiCall('/staff-reports/count'),
+    resolve: (id, note) => apiCall(`/staff-reports/${id}/resolve`, { method: 'POST', body: JSON.stringify({ note }) }),
+};
+
 // Auth & license
 export const authAPI = {
     login: (email, password) => apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),

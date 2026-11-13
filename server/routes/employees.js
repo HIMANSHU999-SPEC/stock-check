@@ -7,7 +7,8 @@ const { logActivity } = require('../utils/activity');
 // What a person currently holds comes from the open assignment records, so an
 // employee sharing bulk stock with others (or a room) is still counted.
 const HELD_ASSETS_SQL = `
-      SELECT a.*, c.name as category_name, x.id as assignment_id, x.quantity as held_quantity, x.assigned_at
+      SELECT a.*, c.name as category_name, x.id as assignment_id, x.quantity as held_quantity, x.assigned_at,
+             x.confirmed_at
       FROM asset_assignments x
       JOIN assets a ON x.asset_id = a.id
       LEFT JOIN categories c ON a.category_id = c.id

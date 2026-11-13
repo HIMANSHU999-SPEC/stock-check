@@ -435,6 +435,39 @@ function initializeDatabase() {
     db.exec(`ALTER TABLE asset_history ADD COLUMN performed_by TEXT`);
   }
 
+  // Staff confirm for themselves that they hold what is recorded against
+  // them. Cleared whenever more is added to the same assignment.
+  const assignmentColumns = db.prepare(`PRAGMA table_info('asset_assignments')`).all().map((col) => col.name);
+  if (!assignmentColumns.includes('confirmed_at')) {
+    db.exec(`ALTER TABLE asset_assignments ADD COLUMN confirmed_at DATETIME`);
+  }
+  if (!assignmentColumns.includes('confirmed_by')) {
+    db.exec(`ALTER TABLE asset_assignments ADD COLUMN confirmed_by TEXT`);
+  }
+
+  // Problems staff raise about their own list ("I don't have this",
+  // "something is missing"). Kept after they are resolved, as a record. The
+  // person's name and email are copied in so the entry reads the same later.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS staff_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employee_id INTEGER,
+      employee_name TEXT,
+      employee_email TEXT,
+      assignment_id INTEGER,
+      asset_id INTEGER,
+      reason TEXT NOT NULL,
+      message TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      email_status TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      resolved_at DATETIME,
+      resolved_by TEXT,
+      resolution_note TEXT
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_staff_reports_status ON staff_reports (status, created_at)`);
+
   // Seed default license state
   ensureSetting('license', {
     status: 'not_activated',

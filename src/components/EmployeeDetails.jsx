@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { formatStamp } from './MyAssets';
 import { employeesAPI, assetsAPI } from '../services/api';
 import { outcomeLabel } from '../utils/scan';
 
@@ -114,12 +115,13 @@ export default function EmployeeDetails() {
                                 <th>Name</th>
                                 <th>Category</th>
                                 <th>Status</th>
+                                <th>Confirmed by holder</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {(employee.assets || []).length === 0 ? (
-                                <tr><td colSpan="5" className="text-center text-muted">No assets assigned</td></tr>
+                                <tr><td colSpan="6" className="text-center text-muted">No assets assigned</td></tr>
                             ) : (
                                 employee.assets.map((a) => (
                                     <tr key={a.id}>
@@ -127,6 +129,11 @@ export default function EmployeeDetails() {
                                         <td>{a.name}</td>
                                         <td>{a.category_name || 'N/A'}</td>
                                         <td><span className={`badge badge-${getStatusColor(a.status)}`}>{a.status}</span></td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>
+                                            {a.confirmed_at
+                                                ? <span className="badge badge-success">✓ {formatStamp(a.confirmed_at)}</span>
+                                                : <span className="text-muted">Not yet</span>}
+                                        </td>
                                         <td>
                                             <div className="flex gap-1">
                                                 <Link to={`/assets/${a.id}`} className="btn btn-sm btn-secondary">View</Link>

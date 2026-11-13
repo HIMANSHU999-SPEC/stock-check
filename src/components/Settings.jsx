@@ -200,6 +200,16 @@ function Integrations() {
                         <div className="text-muted" style={{ fontSize: '0.85rem' }}>Separate several addresses with commas.</div>
                     </div>
                     <div className="form-group">
+                        <label className="form-label">Send staff reports to (optional)</label>
+                        <input
+                            type="email" className="form-control" placeholder="Leave empty to use the sending mailbox"
+                            value={form.support_email || ''} onChange={set('support_email')}
+                        />
+                        <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                            Where a message goes when a member of staff reports a problem from “My assets”.
+                        </div>
+                    </div>
+                    <div className="form-group">
                         <label className="form-label">Organisation name (used in emails and on stickers)</label>
                         <input type="text" className="form-control" value={form.org_name} onChange={set('org_name')} />
                     </div>

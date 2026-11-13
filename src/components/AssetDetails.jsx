@@ -374,6 +374,9 @@ export default function AssetDetails() {
                                                 : 'Room / location'}
                                             {' · since '}
                                             {new Date(row.assigned_at.replace(' ', 'T') + 'Z').toLocaleDateString()}
+                                            {row.employee_id && (row.confirmed_at
+                                                ? ` · ✓ confirmed by holder ${new Date(row.confirmed_at.replace(' ', 'T') + 'Z').toLocaleDateString()}`
+                                                : ' · not yet confirmed by holder')}
                                         </div>
                                     </div>
                                     <div className="flex gap-1" style={{ flexWrap: 'wrap' }}>

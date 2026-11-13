@@ -26,6 +26,8 @@ import Scan from './components/Scan';
 import Settings from './components/Settings';
 import SsoComplete from './components/SsoComplete';
 import Navbar from './components/Navbar';
+import MyAssets from './components/MyAssets';
+import StaffReports from './components/StaffReports';
 import { authAPI, saveAuthToken, clearAuthToken } from './services/api';
 import './index.css';
 
@@ -42,7 +44,7 @@ function Footer() {
     );
 }
 
-function ProtectedRoute({ user, license, authLoading, children }) {
+function ProtectedRoute({ user, license, authLoading, children, staffAllowed = false }) {
     const location = useLocation();
 
     if (authLoading) {
@@ -55,11 +57,18 @@ function ProtectedRoute({ user, license, authLoading, children }) {
         return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
     }
 
+    // Staff who do not run the system have one page: their own assets. The
+    // server refuses them everything else in any case.
+    if (user.role === 'staff' && !staffAllowed) {
+        return <Navigate to="/my-assets" replace />;
+    }
+
     return children;
 }
 
-function LoggedInRedirect() {
+function LoggedInRedirect({ user }) {
     const location = useLocation();
+    if (user?.role === 'staff') return <Navigate to="/my-assets" replace />;
     return <Navigate to={location.state?.from || '/'} replace />;
 }
 
@@ -137,7 +146,7 @@ function App() {
                                 path="/login"
                                 element={
                                     user && license && !license.expired ? (
-                                        <LoggedInRedirect />
+                                        <LoggedInRedirect user={user} />
                                     ) : (
                                         <Login
                                             onLogin={handleLogin}
@@ -154,6 +163,22 @@ function App() {
                                 element={
                                     <ProtectedRoute user={user} license={license} authLoading={authLoading}>
                                         <Dashboard />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/my-assets"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading} staffAllowed>
+                                        <MyAssets />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/staff-reports"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <StaffReports />
                                     </ProtectedRoute>
                                 }
                             />

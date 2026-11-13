@@ -12,7 +12,7 @@ const ASSET_PLACEHOLDERS = [
     'employee_name', 'employee_email', 'department',
     'asset_number', 'asset_name', 'category', 'brand', 'model', 'serial_number',
     'campus', 'location', 'quantity', 'previous_holder', 'new_holder',
-    'condition', 'notes', 'date', 'sent_by', 'asset_url', 'org_name', 'support_email'
+    'condition', 'notes', 'date', 'sent_by', 'asset_url', 'my_assets_url', 'org_name', 'support_email'
 ];
 const LIBRARY_PLACEHOLDERS = ['borrower_name', 'items', 'date', 'sent_by', 'org_name', 'support_email'];
 
@@ -42,6 +42,8 @@ The following item has been assigned to you on {{date}}:
 ${ASSET_BLOCK}
 
 Please look after it and keep it secure. It remains the property of {{org_name}} and must be returned to IT Support when requested or when you leave.
+
+You can see everything recorded against your name, and confirm that you have it, at {{my_assets_url}}
 
 If any of these details are wrong, or the item is lost or damaged, reply to this email straight away.
 
@@ -271,7 +273,8 @@ function assetContext(asset, { employee, previousHolder, newHolder, quantity, co
         new_holder: newHolder || '',
         condition: (condition || 'good').replace('_', ' '),
         notes: notes || '',
-        asset_url: appBaseUrl ? `${appBaseUrl}/s/${encodeURIComponent(asset.asset_number)}` : ''
+        asset_url: appBaseUrl ? `${appBaseUrl}/s/${encodeURIComponent(asset.asset_number)}` : '',
+        my_assets_url: appBaseUrl ? `${appBaseUrl}/my-assets` : ''
     };
 }
 
@@ -306,7 +309,8 @@ function sampleContext(key) {
         new_holder: 'Sam Patel',
         condition: 'good',
         notes: '',
-        asset_url: `${appBaseUrl || 'https://stock.example.ac.uk'}/s/AST-2026-0123`
+        asset_url: `${appBaseUrl || 'https://stock.example.ac.uk'}/s/AST-2026-0123`,
+        my_assets_url: `${appBaseUrl || 'https://stock.example.ac.uk'}/my-assets`
     };
 }
 
@@ -342,7 +346,7 @@ const recipients = (value) => String(value || '')
  * so callers can report the outcome without failing the action that
  * triggered the email.
  */
-async function sendMail({ to, subject, body, templateKey, entity, user }) {
+async function sendMail({ to, subject, body, templateKey, entity, user, replyTo }) {
     const status = mailStatus();
     if (!status.configured) {
         return { status: 'not_configured', to, error: status.problems.join('; ') };
@@ -361,7 +365,8 @@ async function sendMail({ to, subject, body, templateKey, entity, user }) {
                     subject,
                     body: { contentType: 'HTML', content: toHtml(body) },
                     toRecipients: [{ emailAddress: { address: toAddress } }],
-                    ...(cc.length ? { ccRecipients: cc } : {})
+                    ...(cc.length ? { ccRecipients: cc } : {}),
+                    ...(replyTo && EMAIL_RE.test(replyTo) ? { replyTo: [{ emailAddress: { address: replyTo } }] } : {})
                 }
             }
         });

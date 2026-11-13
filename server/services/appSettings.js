@@ -10,6 +10,9 @@ const FIELDS = {
     org_name: { type: 'string', fallback: () => 'London Academy for Applied Technology' },
     mail_from: { type: 'email', fallback: () => defaults.mailFrom },
     mail_cc: { type: 'emails', fallback: () => defaults.mailCc },
+    // Where staff reports about their own assets are sent. Empty means the
+    // sending mailbox itself.
+    support_email: { type: 'email', fallback: () => '' },
     mail_on_assign: { type: 'boolean', fallback: () => true },
     mail_on_return: { type: 'boolean', fallback: () => true },
     sharepoint_enabled: { type: 'boolean', fallback: () => Boolean(defaults.sharepointSite) },
