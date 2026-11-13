@@ -129,13 +129,13 @@ export default function AssetDetails() {
             <div className="flex justify-between items-center mb-3">
                 <h2>Asset Details</h2>
                 <div className="flex gap-2">
-                    <button onClick={() => actions.open('transfer', id)} className="btn btn-secondary">
+                    <button onClick={() => actions.open('transfer', id)} className="write-only btn btn-secondary">
                         Move campus
                     </button>
-                    <Link to={`/assets/${id}/edit`} className="btn btn-secondary">
+                    <Link to={`/assets/${id}/edit`} className="write-only btn btn-secondary">
                         Edit
                     </Link>
-                    <button onClick={handleDelete} className="btn btn-danger">
+                    <button onClick={handleDelete} className="write-only btn btn-danger">
                         Delete
                     </button>
                 </div>
@@ -275,7 +275,7 @@ export default function AssetDetails() {
                     <div className="card-header">
                         <div className="flex justify-between items-center">
                             <h3 className="card-title">📎 Invoices & Documents</h3>
-                            <label className="btn btn-sm btn-primary" style={{ cursor: 'pointer', marginBottom: 0 }}>
+                            <label className="write-only btn btn-sm btn-primary" style={{ cursor: 'pointer', marginBottom: 0 }}>
                                 {uploadingDoc ? 'Uploading…' : '+ Attach file'}
                                 <input
                                     type="file"
@@ -315,13 +315,13 @@ export default function AssetDetails() {
                                                             href={documentsAPI.viewUrl(id, doc.id)}
                                                             target="_blank"
                                                             rel="noreferrer"
-                                                            className="btn btn-sm btn-secondary"
+                                                            className="download-only btn btn-sm btn-secondary"
                                                         >
                                                             View
                                                         </a>
                                                         <button
                                                             onClick={() => handleDocDelete(doc)}
-                                                            className="btn btn-sm btn-danger"
+                                                            className="write-only btn btn-sm btn-danger"
                                                         >
                                                             Delete
                                                         </button>
@@ -341,7 +341,7 @@ export default function AssetDetails() {
                         <div className="flex justify-between items-center">
                             <h3 className="card-title">Assignment</h3>
                             {inService && availableQuantity > 0 && (
-                                <button onClick={() => actions.open('assign', id)} className="btn btn-sm btn-primary">
+                                <button onClick={() => actions.open('assign', id)} className="write-only btn btn-sm btn-primary">
                                     {holders.length > 0 ? `Assign more (${availableQuantity} left)` : 'Assign'}
                                 </button>
                             )}
@@ -380,15 +380,15 @@ export default function AssetDetails() {
                                         </div>
                                     </div>
                                     <div className="flex gap-1" style={{ flexWrap: 'wrap' }}>
-                                        <button onClick={() => actions.open('return', id, row.id)} className="btn btn-sm btn-primary">
+                                        <button onClick={() => actions.open('return', id, row.id)} className="write-only btn btn-sm btn-primary">
                                             Return
                                         </button>
-                                        <button onClick={() => actions.open('reassign', id, row.id)} className="btn btn-sm btn-secondary">
+                                        <button onClick={() => actions.open('reassign', id, row.id)} className="write-only btn btn-sm btn-secondary">
                                             Reassign
                                         </button>
                                         {row.employee_id && (
                                             <select
-                                                className="form-control email-menu"
+                                                className="write-only form-control email-menu"
                                                 value=""
                                                 onChange={(e) => e.target.value && handleEmail(e.target.value, row.id)}
                                                 aria-label="Send an email"

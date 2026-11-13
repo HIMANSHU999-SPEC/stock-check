@@ -174,7 +174,7 @@ function initializeDatabase() {
       name TEXT,
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('admin', 'subadmin')),
+      role TEXT NOT NULL CHECK (role IN ('admin', 'subadmin', 'inventory', 'viewer')),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -408,6 +408,30 @@ function initializeDatabase() {
   insertCategory.run('Other Electronics', 'Other electronic devices');
   insertCategory.run('Furniture', 'Office furniture');
   insertCategory.run('Other', 'Miscellaneous items');
+
+  // Older databases only allow the first two roles. SQLite cannot alter a
+  // CHECK in place, so the table is rebuilt with the same columns and every
+  // row carried over, inside one transaction that fails as a whole.
+  const usersSql = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'users'").get().sql;
+  const OLD_ROLE_CHECK = "CHECK (role IN ('admin', 'subadmin'))";
+  if (usersSql.includes(OLD_ROLE_CHECK)) {
+    db.transaction(() => {
+      const before = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+      const seq = db.prepare("SELECT seq FROM sqlite_sequence WHERE name = 'users'").get();
+      db.exec(usersSql
+        .replace(/CREATE TABLE\s+("?)users\1/i, 'CREATE TABLE users_rebuild')
+        .replace(OLD_ROLE_CHECK, "CHECK (role IN ('admin', 'subadmin', 'inventory', 'viewer'))"));
+      const columns = db.prepare("PRAGMA table_info('users')").all().map((col) => col.name).join(', ');
+      db.exec(`INSERT INTO users_rebuild (${columns}) SELECT ${columns} FROM users`);
+      const after = db.prepare('SELECT COUNT(*) AS n FROM users_rebuild').get().n;
+      if (after !== before) throw new Error(`users rebuild copied ${after} of ${before} rows`);
+      db.exec('DROP TABLE users');
+      db.exec('ALTER TABLE users_rebuild RENAME TO users');
+      // Never hand out the id of a deleted account again.
+      if (seq) db.prepare("UPDATE sqlite_sequence SET seq = ? WHERE name = 'users'").run(seq.seq);
+    })();
+    console.log('Users table updated to allow the viewer and inventory roles');
+  }
 
   // Create the first admin only when the users table is empty (fresh install).
   // Existing databases keep their accounts exactly as they are.

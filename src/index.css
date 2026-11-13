@@ -1823,3 +1823,11 @@ body:not(.light-mode) .campus-badge:hover {
     .my-asset-row { flex-direction: column; align-items: stretch; }
     .my-asset-actions { justify-content: flex-start; }
 }
+
+/* ---------- Access levels ----------
+   The server decides what an account may do; these only keep buttons that
+   would be refused off the screen. App.jsx sets data-access on <body>. */
+body[data-access="viewer"] .write-only,
+body[data-access="inventory"] .write-only,
+body[data-access="viewer"] .download-only { display: none !important; }
+.role-key { display: grid; gap: 0.4rem; font-size: 0.9rem; }

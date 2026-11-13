@@ -5,7 +5,10 @@ const db = require('../database');
 const { logActivity } = require('../utils/activity');
 const { ssoEnabled } = require('./auth');
 
-const ALLOWED_ROLES = ['admin', 'subadmin'];
+// admin: everything. subadmin: day-to-day work, no users or settings.
+// inventory: look at everything and download it, change nothing.
+// viewer: look only.
+const ALLOWED_ROLES = ['admin', 'subadmin', 'inventory', 'viewer'];
 // Stored in place of a hash for accounts that only sign in with Microsoft.
 // It is not a valid SHA-256 digest, so no password can ever match it.
 const NO_PASSWORD = '!sso-only';
@@ -35,10 +38,27 @@ router.get('/', (req, res) => {
     }
 });
 
+// People on the staff list who have no account here yet. They can already
+// sign in to see their own assets; picking one gives them more.
+router.get('/staff-candidates', (req, res) => {
+    try {
+        const staff = db.prepare(`
+          SELECT e.id, e.name, e.email, e.department
+          FROM employees e
+          WHERE e.status != 'inactive'
+            AND NOT EXISTS (SELECT 1 FROM users u WHERE LOWER(u.email) = LOWER(e.email))
+          ORDER BY e.name
+        `).all();
+        res.json(staff);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Create a user
 router.post('/', (req, res) => {
     try {
-        const { name, email, role = 'subadmin', password } = req.body;
+        const { name, email, role = 'viewer', password } = req.body;
         if (!email) {
             return res.status(400).json({ error: 'Email is required' });
         }
@@ -46,7 +66,8 @@ router.post('/', (req, res) => {
         if (!password && !ssoEnabled) {
             return res.status(400).json({ error: 'Email and password are required' });
         }
-        const safeRole = ALLOWED_ROLES.includes(role) ? role : 'subadmin';
+        // An unrecognised role gets the least access, never more.
+        const safeRole = ALLOWED_ROLES.includes(role) ? role : 'viewer';
 
         const existing = db.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').get(email);
         if (existing) {
@@ -105,7 +126,7 @@ router.put('/:id', (req, res) => {
             action: 'user_updated',
             entity_type: 'user',
             entity_id: user.id,
-            description: `Updated user ${user.email}${password ? ' (password reset)' : remove_password ? ' (password removed — Microsoft sign-in only)' : ''}`
+            description: `Updated user ${user.email}${safeRole !== user.role ? ` (role ${user.role} → ${safeRole})` : ''}${password ? ' (password reset)' : remove_password ? ' (password removed — Microsoft sign-in only)' : ''}`
         });
 
         const updated = db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).get(user.id);

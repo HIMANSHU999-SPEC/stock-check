@@ -44,6 +44,11 @@ function Footer() {
     );
 }
 
+// Pages that exist to change something, or to run the system. View-only
+// accounts are sent back to the dashboard; the server refuses them anyway.
+const READ_ONLY_ROLES = ['viewer', 'inventory'];
+const NOT_FOR_READ_ONLY = /^\/(assets\/(new|import-invoice)|assets\/[^/]+\/edit|books\/new|books\/[^/]+\/edit|library\/(issue|rapid)|recycle-bin|activity|users|settings|staff-reports)\/?$/;
+
 function ProtectedRoute({ user, license, authLoading, children, staffAllowed = false }) {
     const location = useLocation();
 
@@ -61,6 +66,10 @@ function ProtectedRoute({ user, license, authLoading, children, staffAllowed = f
     // server refuses them everything else in any case.
     if (user.role === 'staff' && !staffAllowed) {
         return <Navigate to="/my-assets" replace />;
+    }
+
+    if (READ_ONLY_ROLES.includes(user.role) && NOT_FOR_READ_ONLY.test(location.pathname)) {
+        return <Navigate to="/" replace />;
     }
 
     return children;
@@ -110,6 +119,13 @@ function App() {
         }
         bootstrap();
     }, []);
+
+    // Lets the stylesheet hide the buttons an account cannot use
+    // (see .write-only / .download-only in index.css).
+    React.useEffect(() => {
+        if (user?.role) document.body.dataset.access = user.role;
+        else delete document.body.dataset.access;
+    }, [user]);
 
     async function handleLogin(email, password) {
         const res = await authAPI.login(email, password);

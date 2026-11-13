@@ -140,10 +140,10 @@ export default function Scan() {
                                     )}
                                 </div>
                                 <div className="flex gap-1">
-                                    <button className="btn btn-sm btn-primary" onClick={() => actions.open('return', asset.id, row.id)}>
+                                    <button className="write-only btn btn-sm btn-primary" onClick={() => actions.open('return', asset.id, row.id)}>
                                         Return
                                     </button>
-                                    <button className="btn btn-sm btn-secondary" onClick={() => actions.open('reassign', asset.id, row.id)}>
+                                    <button className="write-only btn btn-sm btn-secondary" onClick={() => actions.open('reassign', asset.id, row.id)}>
                                         Reassign
                                     </button>
                                 </div>
@@ -153,15 +153,15 @@ export default function Scan() {
 
                     <div className="flex gap-2 mt-3" style={{ flexWrap: 'wrap' }}>
                         {inService && available > 0 && (
-                            <button className="btn btn-primary" onClick={() => actions.open('assign', asset.id)}>
+                            <button className="write-only btn btn-primary" onClick={() => actions.open('assign', asset.id)}>
                                 {holders.length > 0 ? `Assign more (${available} left)` : 'Assign'}
                             </button>
                         )}
-                        <button className="btn btn-secondary" onClick={() => actions.open('transfer', asset.id)}>
+                        <button className="write-only btn btn-secondary" onClick={() => actions.open('transfer', asset.id)}>
                             Move campus
                         </button>
                         <Link to={`/assets/${asset.id}`} className="btn btn-secondary">Full details</Link>
-                        <Link to={`/assets/${asset.id}/edit`} className="btn btn-secondary">Edit / change status</Link>
+                        <Link to={`/assets/${asset.id}/edit`} className="write-only btn btn-secondary">Edit / change status</Link>
                     </div>
                 </div>
             )}

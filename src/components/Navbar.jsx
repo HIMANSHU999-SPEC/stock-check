@@ -8,6 +8,32 @@ function buildMenu(user) {
     if (user?.role === 'staff') {
         return [{ to: '/my-assets', label: 'My assets' }];
     }
+    // View-only accounts: the pages they can read, without the ones that
+    // exist to change things.
+    if (user?.role === 'viewer' || user?.role === 'inventory') {
+        return [
+            { to: '/', label: 'Dashboard', exact: true },
+            {
+                label: 'Assets',
+                items: [
+                    { to: '/assets', label: 'All assets' },
+                    { to: '/inventory', label: 'Inventory' },
+                    { to: '/categories', label: 'Categories' }
+                ]
+            },
+            { to: '/scan', label: 'Scan' },
+            { to: '/employees', label: 'Employees' },
+            {
+                label: 'Library',
+                items: [
+                    { to: '/books', label: 'Books' },
+                    { to: '/borrowers', label: 'Borrowers' }
+                ]
+            },
+            { to: '/reports', label: 'Reports' },
+            { to: '/my-assets', label: 'My assets' }
+        ];
+    }
     const isAdmin = user?.role === 'admin';
     const admin = [
         { to: '/staff-reports', label: 'Staff reports' },
@@ -156,7 +182,7 @@ export default function Navbar({ user, onLogout, license }) {
                         {license?.expired && <span className="badge badge-danger">Licence expired</span>}
                         <div className="navbar-user-name">
                             <span>{user?.name || user?.email}</span>
-                            <small>{{ admin: 'Administrator', subadmin: 'Sub-administrator' }[user?.role] || 'Staff'}</small>
+                            <small>{{ admin: 'Administrator', subadmin: 'Sub-administrator', inventory: 'Viewer + downloads', viewer: 'Viewer' }[user?.role] || 'Staff'}</small>
                         </div>
                         <button type="button" className="btn btn-sm navbar-logout" onClick={onLogout}>
                             Log out

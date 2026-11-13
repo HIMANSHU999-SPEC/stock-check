@@ -75,7 +75,7 @@ export default function CategoryManagement() {
         <div>
             <div className="flex justify-between items-center mb-3">
                 <h2>Category Management</h2>
-                <button onClick={() => openModal()} className="btn btn-primary">
+                <button onClick={() => openModal()} className="write-only btn btn-primary">
                     + Add Category
                 </button>
             </div>
@@ -114,13 +114,13 @@ export default function CategoryManagement() {
                                             <div className="flex gap-1">
                                                 <button
                                                     onClick={() => openModal(category)}
-                                                    className="btn btn-sm btn-secondary"
+                                                    className="write-only btn btn-sm btn-secondary"
                                                 >
                                                     Edit
                                                 </button>
                                                 <button
                                                     onClick={() => handleDelete(category.id)}
-                                                    className="btn btn-sm btn-danger"
+                                                    className="write-only btn btn-sm btn-danger"
                                                 >
                                                     Delete
                                                 </button>

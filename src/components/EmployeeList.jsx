@@ -120,7 +120,7 @@ export default function EmployeeList() {
         <div>
             <div className="flex justify-between items-center mb-3">
                 <h2>Employee Management</h2>
-                <button onClick={() => openModal()} className="btn btn-primary">
+                <button onClick={() => openModal()} className="write-only btn btn-primary">
                     + Add Employee
                 </button>
             </div>
@@ -201,21 +201,21 @@ export default function EmployeeList() {
                                                 <div className="flex gap-1">
                                                     <button
                                                         onClick={() => openModal(employee)}
-                                                        className="btn btn-sm btn-secondary"
+                                                        className="write-only btn btn-sm btn-secondary"
                                                     >
                                                         Edit
                                                     </button>
                                                     {inactive ? (
                                                         <button
                                                             onClick={() => handleReactivate(employee)}
-                                                            className="btn btn-sm btn-secondary"
+                                                            className="write-only btn btn-sm btn-secondary"
                                                         >
                                                             Reactivate
                                                         </button>
                                                     ) : (
                                                         <button
                                                             onClick={() => { setLeaving(employee); setLeavingNote(''); }}
-                                                            className="btn btn-sm btn-secondary"
+                                                            className="write-only btn btn-sm btn-secondary"
                                                         >
                                                             Mark inactive
                                                         </button>
@@ -223,7 +223,7 @@ export default function EmployeeList() {
                                                     {!employee.has_history && (
                                                         <button
                                                             onClick={() => handleDelete(employee)}
-                                                            className="btn btn-sm btn-danger"
+                                                            className="write-only btn btn-sm btn-danger"
                                                         >
                                                             Delete
                                                         </button>

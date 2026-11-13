@@ -56,6 +56,11 @@ app.use('/api/my', (req, res, next) => {
     next();
 }, require('./routes/my'));
 
+const READ_ONLY_ROLES = ['viewer', 'inventory'];
+const CLOSED_TO_READ_ONLY = ['/api/users', '/api/settings', '/api/activity', '/api/staff-reports', '/api/mail'];
+// Exports, the per-employee PDF and stored documents.
+const DOWNLOAD_PATH = /\/export(\/|$)|^\/api\/employees\/[^/]+\/report$|\/documents\/[^/]+\/(download|view)$/;
+
 // License and auth gate for all other API routes
 app.use((req, res, next) => {
     if (!req.path.startsWith('/api/')) {
@@ -83,6 +88,22 @@ app.use((req, res, next) => {
     }
 
     req.user = user;
+
+    // View-only accounts: they can read, never change, and the areas that
+    // are about running the system stay closed. Downloads need the
+    // "inventory" role. Enforced here so no route can forget it.
+    if (READ_ONLY_ROLES.includes(user.role)) {
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+            return res.status(403).json({ error: 'Your account can view but not change anything. Ask an administrator if you need more access.' });
+        }
+        if (CLOSED_TO_READ_ONLY.some((prefix) => req.path === prefix || req.path.startsWith(`${prefix}/`))
+            && req.path !== '/api/settings/public') {
+            return res.status(403).json({ error: 'Your account does not have access to this area.' });
+        }
+        if (user.role !== 'inventory' && DOWNLOAD_PATH.test(req.path)) {
+            return res.status(403).json({ error: 'Your account cannot download. Ask an administrator for download access.' });
+        }
+    }
     next();
 });
 

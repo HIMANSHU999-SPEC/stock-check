@@ -269,13 +269,13 @@ export default function AssetList() {
             <div className="flex justify-between items-center mb-3">
                 <h2>Asset Management</h2>
                 <div className="flex gap-2">
-                    <button onClick={exportExcel} className="btn btn-secondary">
+                    <button onClick={exportExcel} className="download-only btn btn-secondary">
                         📥 Export Excel (filtered)
                     </button>
-                    <Link to="/assets/import-invoice" className="btn btn-secondary">
+                    <Link to="/assets/import-invoice" className="write-only btn btn-secondary">
                         📄 Import Invoice
                     </Link>
-                    <Link to="/assets/new" className="btn btn-primary">
+                    <Link to="/assets/new" className="write-only btn btn-primary">
                         + Add New Asset
                     </Link>
                 </div>
@@ -388,7 +388,7 @@ export default function AssetList() {
                 </div>
             </div>
 
-            <details className="card details-card mb-3">
+            <details className="write-only card details-card mb-3">
                 <summary>Import assets from an Excel file</summary>
                 <div className="card-body">
                     <p className="text-muted">
@@ -434,7 +434,7 @@ export default function AssetList() {
             )}
 
             {selectedIds.length > 0 && (
-                <div className="bulk-bar">
+                <div className="write-only bulk-bar">
                     <strong>{selectedIds.length} selected</strong>
                     <span className="text-muted">Move to</span>
                     <select
@@ -472,6 +472,7 @@ export default function AssetList() {
                                 <tr>
                                     <th style={{ width: '1%' }}>
                                         <input
+                                            className="write-only"
                                             type="checkbox"
                                             checked={allSelected}
                                             onChange={toggleAll}
@@ -503,6 +504,7 @@ export default function AssetList() {
                                         <tr key={asset.id} className={selected.has(asset.id) ? 'row-selected' : ''}>
                                             <td>
                                                 <input
+                                            className="write-only"
                                                     type="checkbox"
                                                     checked={selected.has(asset.id)}
                                                     onChange={() => toggleRow(asset.id)}
@@ -540,13 +542,13 @@ export default function AssetList() {
                                                     <Link to={`/assets/${asset.id}`} className="btn btn-sm btn-secondary">
                                                         View
                                                     </Link>
-                                                    <Link to={`/assets/${asset.id}/edit`} className="btn btn-sm btn-secondary">
+                                                    <Link to={`/assets/${asset.id}/edit`} className="write-only btn btn-sm btn-secondary">
                                                         Edit
                                                     </Link>
                                                     {canAssign(asset) && (
                                                         <button
                                                             onClick={() => actions.open('assign', asset.id)}
-                                                            className="btn btn-sm btn-primary"
+                                                            className="write-only btn btn-sm btn-primary"
                                                         >
                                                             Assign
                                                         </button>
@@ -555,13 +557,13 @@ export default function AssetList() {
                                                         <>
                                                             <button
                                                                 onClick={() => actions.open('reassign', asset.id)}
-                                                                className="btn btn-sm btn-secondary"
+                                                                className="write-only btn btn-sm btn-secondary"
                                                             >
                                                                 Reassign
                                                             </button>
                                                             <button
                                                                 onClick={() => actions.open('return', asset.id)}
-                                                                className="btn btn-sm btn-secondary"
+                                                                className="write-only btn btn-sm btn-secondary"
                                                             >
                                                                 Return
                                                             </button>
@@ -569,7 +571,7 @@ export default function AssetList() {
                                                     )}
                                                     <button
                                                         onClick={() => handleDelete(asset.id)}
-                                                        className="btn btn-sm btn-danger"
+                                                        className="write-only btn btn-sm btn-danger"
                                                     >
                                                         Delete
                                                     </button>

@@ -52,7 +52,7 @@ export default function EmployeeDetails() {
             <div className="flex justify-between items-center mb-3">
                 <h2>Employee Details</h2>
                 <div className="flex gap-2">
-                    <button onClick={handleExport} className="btn btn-secondary" disabled={exporting}>
+                    <button onClick={handleExport} className="download-only btn btn-secondary" disabled={exporting}>
                         {exporting ? 'Exporting...' : 'Export PDF'}
                     </button>
                     <Link to="/employees" className="btn btn-secondary">Back</Link>
@@ -137,7 +137,7 @@ export default function EmployeeDetails() {
                                         <td>
                                             <div className="flex gap-1">
                                                 <Link to={`/assets/${a.id}`} className="btn btn-sm btn-secondary">View</Link>
-                                                <Link to={`/assets/${a.id}/edit`} className="btn btn-sm btn-secondary">Edit</Link>
+                                                <Link to={`/assets/${a.id}/edit`} className="write-only btn btn-sm btn-secondary">Edit</Link>
                                             </div>
                                         </td>
                                     </tr>

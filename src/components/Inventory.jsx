@@ -74,7 +74,7 @@ export default function Inventory() {
                         Counts are quantities, so 40 tables registered as one line count as 40.
                     </p>
                 </div>
-                <button onClick={exportExcel} className="btn btn-secondary" disabled={campuses.length === 0}>
+                <button onClick={exportExcel} className="download-only btn btn-secondary" disabled={campuses.length === 0}>
                     📥 Export Excel
                 </button>
             </div>

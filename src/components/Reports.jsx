@@ -139,7 +139,7 @@ export default function Reports() {
                                         </option>
                                     ))}
                                 </select>
-                                <button className="btn btn-secondary" onClick={exportByCategory}>
+                                <button className="download-only btn btn-secondary" onClick={exportByCategory}>
                                     Export CSV
                                 </button>
                             </div>
@@ -236,7 +236,7 @@ export default function Reports() {
                                             View items
                                         </Link>
                                         <button
-                                            className="btn btn-sm btn-primary"
+                                            className="download-only btn btn-sm btn-primary"
                                             style={{ marginLeft: '0.5rem' }}
                                             onClick={async () => {
                                                 try {
@@ -293,7 +293,7 @@ export default function Reports() {
                                             View items
                                         </button>
                                         <button
-                                            className="btn btn-sm btn-primary"
+                                            className="download-only btn btn-sm btn-primary"
                                             style={{ marginLeft: '0.5rem' }}
                                             onClick={async () => {
                                                 try {
@@ -381,7 +381,7 @@ export default function Reports() {
                     <div className="flex justify-between items-center">
                         <h3 className="card-title">Assets by Campus</h3>
                         <button
-                            className="btn btn-secondary"
+                            className="download-only btn btn-secondary"
                             disabled={campusExporting}
                             onClick={async () => {
                                 try {
@@ -397,7 +397,7 @@ export default function Reports() {
                             {campusExporting ? 'Exporting...' : 'Export CSV'}
                         </button>
                         <button
-                            className="btn btn-secondary"
+                            className="download-only btn btn-secondary"
                             disabled={campusExporting || selectedCampuses.length === 0}
                             onClick={async () => {
                                 try {
@@ -471,7 +471,7 @@ export default function Reports() {
                     <div className="flex justify-between items-center">
                         <h3 className="card-title">Export Assigned Devices by Employee</h3>
                         <button
-                            className="btn btn-primary"
+                            className="download-only btn btn-primary"
                             onClick={exportAssignments}
                             disabled={employees.length === 0}
                         >

@@ -44,6 +44,8 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // Only the people who deal with the reports are told about them.
+        if (['viewer', 'inventory'].includes(document.body.dataset.access)) return;
         staffReportsAPI.count().then((r) => setOpenReports(r.open || 0)).catch(() => {});
     }, []);
 
@@ -101,7 +103,7 @@ export default function Dashboard() {
         <div>
             <div className="flex justify-between items-center mb-3">
                 <h2>Dashboard</h2>
-                <Link to="/assets/new" className="btn btn-primary">
+                <Link to="/assets/new" className="write-only btn btn-primary">
                     + Add New Asset
                 </Link>
             </div>
@@ -194,7 +196,7 @@ export default function Dashboard() {
                 <div className="card-header">
                     <div className="flex justify-between items-center">
                         <h3 className="card-title">📚 Library Overview</h3>
-                        <Link to="/library/issue" className="btn btn-sm btn-primary">Issue Desk</Link>
+                        <Link to="/library/issue" className="write-only btn btn-sm btn-primary">Issue Desk</Link>
                     </div>
                 </div>
                 <div className="card-body">
@@ -333,7 +335,7 @@ export default function Dashboard() {
                     </div>
                     <div className="card-body">
                         <div className="flex flex-col gap-2">
-                            <Link to="/assets/new" className="btn btn-primary">
+                            <Link to="/assets/new" className="write-only btn btn-primary">
                                 📦 Register New Asset
                             </Link>
                             <Link to="/employees" className="btn btn-secondary">

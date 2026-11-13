@@ -282,6 +282,7 @@ export const documentsAPI = {
 // Users API (admin-only)
 export const usersAPI = {
     getAll: () => apiCall('/users'),
+    staffCandidates: () => apiCall('/users/staff-candidates'),
     create: (data) => apiCall('/users', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => apiCall(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id) => apiCall(`/users/${id}`, { method: 'DELETE' }),
