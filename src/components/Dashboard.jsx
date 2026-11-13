@@ -5,7 +5,7 @@ import { reportsAPI, assetsAPI, authAPI, booksAPI } from '../services/api';
 // Lightweight horizontal bar chart (no external chart library).
 function BarChart({ data, unit = '' }) {
     const max = Math.max(1, ...data.map((d) => d.value));
-    const palette = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#ec4899', '#84cc16'];
+    const palette = ['#8e414a', '#2f7d5b', '#c98a1b', '#3b6ea5', '#7a5ea8', '#4b8f8c', '#b0567a', '#6b7280'];
     if (!data.length) {
         return <p className="text-muted">No data yet</p>;
     }
@@ -39,7 +39,6 @@ export default function Dashboard() {
     const [bookSummary, setBookSummary] = useState(null);
     const [loadError, setLoadError] = useState('');
     const [license, setLicense] = useState(null);
-    const [showLicense, setShowLicense] = useState(true);
     const [campusModal, setCampusModal] = useState({ open: false, name: '', assets: [], loading: false });
     const [loading, setLoading] = useState(true);
 
@@ -110,23 +109,18 @@ export default function Dashboard() {
                 </div>
             )}
 
-            <div className="flex justify-between items-center mb-3">
-                <div>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setShowLicense((v) => !v)}>
-                        {showLicense ? 'Hide License' : 'Show License'}
-                    </button>
-                </div>
-                {showLicense && license && (() => {
-                    const expiryMs = license.expires_at ? Number(license.expires_at) : null;
-                    const daysLeft = expiryMs ? Math.max(0, Math.ceil((expiryMs - Date.now()) / (1000 * 60 * 60 * 24))) : null;
-                    return (
-                        <div className="badge badge-primary" style={{ fontSize: '0.95rem', padding: '0.5rem 0.75rem' }}>
-                            License: {license.status || 'unknown'}{' '}
-                            {daysLeft !== null ? `(expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'})` : '(no expiry)'}
-                        </div>
-                    );
-                })()}
-            </div>
+            {/* Only worth a line when the licence is close to running out. */}
+            {license?.expires_at && (() => {
+                const daysLeft = Math.ceil((Number(license.expires_at) - Date.now()) / (1000 * 60 * 60 * 24));
+                if (daysLeft > 60) return null;
+                return (
+                    <div className="alert alert-warning">
+                        {daysLeft > 0
+                            ? `The licence for this system expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}. Please ask the administrator to renew it.`
+                            : 'The licence for this system has expired. Please contact the administrator.'}
+                    </div>
+                );
+            })()}
 
             <div className="stats-grid">
                 <div className="stat-card">
@@ -162,7 +156,10 @@ export default function Dashboard() {
                         <h3 className="card-title">Assets by Status</h3>
                     </div>
                     <div className="card-body">
-                        <BarChart data={statusStats.map((s) => ({ label: s.status || 'unknown', value: s.count || 0 }))} />
+                        <BarChart data={statusStats.map((s) => ({
+                            label: (s.status || 'unknown').replace(/^./, (c) => c.toUpperCase()),
+                            value: s.count || 0
+                        }))} />
                     </div>
                 </div>
                 <div className="card">

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { employeesAPI, assetsAPI } from '../services/api';
+import { outcomeLabel } from '../utils/scan';
 
 export default function EmployeeDetails() {
     const { id } = useParams();
@@ -79,6 +80,21 @@ export default function EmployeeDetails() {
                     </div>
                     <div>
                         <div className="form-group">
+                            <label className="form-label">Status</label>
+                            <div>
+                                <span className={`badge badge-${employee.status === 'inactive' ? 'warning' : 'success'}`}>
+                                    {employee.status === 'inactive' ? 'Inactive' : 'Active'}
+                                </span>
+                            </div>
+                            {employee.status === 'inactive' && (
+                                <div className="text-muted mt-1" style={{ fontSize: '0.9rem' }}>
+                                    Since {employee.deactivated_at ? new Date(employee.deactivated_at).toLocaleDateString() : 'unknown'}
+                                    {employee.deactivated_by ? `, by ${employee.deactivated_by}` : ''}
+                                    {employee.deactivation_note ? ` — ${employee.deactivation_note}` : ''}
+                                </div>
+                            )}
+                        </div>
+                        <div className="form-group">
                             <label className="form-label">Assigned Assets</label>
                             <div className="badge badge-info">{employee.assets?.length || 0}</div>
                         </div>
@@ -117,6 +133,42 @@ export default function EmployeeDetails() {
                                                 <Link to={`/assets/${a.id}/edit`} className="btn btn-sm btn-secondary">Edit</Link>
                                             </div>
                                         </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div className="card mb-3">
+                <div className="card-header">
+                    <h3 className="card-title">Previously Held</h3>
+                </div>
+                <div className="table-container">
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Asset Number</th>
+                                <th>Name</th>
+                                <th>Qty</th>
+                                <th>From</th>
+                                <th>Until</th>
+                                <th>Outcome</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {(employee.past_assets || []).length === 0 ? (
+                                <tr><td colSpan="6" className="text-center text-muted">Nothing handed back yet</td></tr>
+                            ) : (
+                                employee.past_assets.map((p) => (
+                                    <tr key={p.assignment_id}>
+                                        <td><Link to={`/assets/${p.asset_id}`} className="text-primary"><strong>{p.asset_number}</strong></Link></td>
+                                        <td><div className="cell-clamp" title={p.name}>{p.name}</div></td>
+                                        <td>{p.quantity}</td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{p.assigned_at ? new Date(p.assigned_at).toLocaleDateString() : '—'}</td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{new Date(p.returned_at).toLocaleDateString()}</td>
+                                        <td>{outcomeLabel(p.return_condition)}</td>
                                     </tr>
                                 ))
                             )}

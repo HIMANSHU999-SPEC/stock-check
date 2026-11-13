@@ -110,6 +110,8 @@ export const assetsAPI = {
     return: (id, data) => apiCall(`/assets/${id}/return`, { method: 'POST', body: JSON.stringify(data) }),
     reassign: (id, data) => apiCall(`/assets/${id}/reassign`, { method: 'POST', body: JSON.stringify(data) }),
     transfer: (id, data) => apiCall(`/assets/${id}/transfer`, { method: 'POST', body: JSON.stringify(data) }),
+    // Move many assets to one campus: { ids, campus, location?, notes? }
+    bulkTransfer: (data) => apiCall('/assets/bulk-transfer', { method: 'POST', body: JSON.stringify(data) }),
     // Resolve a scanned sticker (link or bare number) or a typed serial number
     lookup: (code) => apiCall(`/assets/lookup?code=${encodeURIComponent(code)}`),
     sendEmail: (id, template, assignmentId) =>
@@ -167,6 +169,9 @@ export const employeesAPI = {
     create: (data) => apiCall('/employees', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => apiCall(`/employees/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id) => apiCall(`/employees/${id}`, { method: 'DELETE' }),
+    deactivate: (id, note) =>
+        apiCall(`/employees/${id}/deactivate`, { method: 'POST', body: JSON.stringify({ note }) }),
+    reactivate: (id) => apiCall(`/employees/${id}/reactivate`, { method: 'POST' }),
     exportReport: (id) => downloadFile(`/employees/${id}/report`, `employee-${id}-report.pdf`),
 };
 

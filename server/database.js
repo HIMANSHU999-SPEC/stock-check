@@ -413,6 +413,28 @@ function initializeDatabase() {
   // Existing databases keep their accounts exactly as they are.
   bootstrapFirstAdmin();
 
+  // People are never removed once they have a history: a leaver is marked
+  // inactive instead, so every past assignment still shows who held what.
+  const employeeColumns = db.prepare(`PRAGMA table_info('employees')`).all().map((col) => col.name);
+  if (!employeeColumns.includes('status')) {
+    db.exec(`ALTER TABLE employees ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`);
+  }
+  if (!employeeColumns.includes('deactivated_at')) {
+    db.exec(`ALTER TABLE employees ADD COLUMN deactivated_at DATETIME`);
+  }
+  if (!employeeColumns.includes('deactivated_by')) {
+    db.exec(`ALTER TABLE employees ADD COLUMN deactivated_by TEXT`);
+  }
+  if (!employeeColumns.includes('deactivation_note')) {
+    db.exec(`ALTER TABLE employees ADD COLUMN deactivation_note TEXT`);
+  }
+
+  // Who carried out each change to an asset (the signed-in user's email).
+  const historyColumns = db.prepare(`PRAGMA table_info('asset_history')`).all().map((col) => col.name);
+  if (!historyColumns.includes('performed_by')) {
+    db.exec(`ALTER TABLE asset_history ADD COLUMN performed_by TEXT`);
+  }
+
   // Seed default license state
   ensureSetting('license', {
     status: 'not_activated',

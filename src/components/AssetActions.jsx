@@ -134,9 +134,11 @@ export function AssignModal({ assetId, mode = 'assign', assignmentId, onClose, o
     }, [isReassign, maxQuantity]);
 
     const filteredEmployees = useMemo(() => {
+        // Leavers stay on record but cannot be given anything.
+        const active = employees.filter((emp) => emp.status !== 'inactive');
         const term = employeeFilter.trim().toLowerCase();
-        if (!term) return employees;
-        return employees.filter((emp) =>
+        if (!term) return active;
+        return active.filter((emp) =>
             [emp.name, emp.email, emp.department].some((v) => (v || '').toLowerCase().includes(term)));
     }, [employees, employeeFilter]);
 

@@ -1123,3 +1123,581 @@ code {
 .sticker-foot {
   margin-top: 0.6mm;
 }
+
+/* ==========================================================================
+   Interface refresh
+   Later rules win, so everything below adjusts the base styles above.
+   ========================================================================== */
+
+/* ---- Navigation: one line, grouped drop-downs, a real phone menu -------- */
+.navbar {
+  padding: 0.6rem 0;
+}
+
+.navbar-content {
+  flex-wrap: nowrap;
+  gap: var(--spacing-md);
+}
+
+.navbar-brand {
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.navbar-brand img {
+  height: 38px;
+  width: auto;
+  background: #fff;
+  border-radius: 6px;
+  padding: 3px;
+}
+
+.navbar-brand h1 {
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+
+.navbar-collapse {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 1;
+  gap: var(--spacing-md);
+  min-width: 0;
+}
+
+.navbar-nav {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 0.15rem;
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.9rem;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.nav-group {
+  position: relative;
+}
+
+.nav-group-btn {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.nav-caret {
+  width: 0;
+  height: 0;
+  margin-top: 2px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  font-size: 0;
+  opacity: 0.85;
+  transition: transform 0.15s ease;
+}
+
+.nav-group.open .nav-caret {
+  transform: rotate(180deg);
+}
+
+.nav-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 200px;
+  padding: 0.35rem;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+}
+
+.nav-group.open .nav-menu {
+  display: block;
+}
+
+.nav-menu a {
+  display: block;
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.nav-menu a:hover {
+  background: var(--bg-tertiary);
+}
+
+.nav-menu a.active {
+  color: var(--primary);
+  font-weight: 700;
+  background: var(--bg-primary);
+}
+
+.navbar-user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.navbar-user-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.navbar-user-name small {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.navbar-logout {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.navbar-logout:hover {
+  background: #fff;
+  color: var(--primary-dark);
+}
+
+.navbar-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 44px;
+  height: 44px;
+  margin-left: auto;
+  padding: 0 10px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.navbar-toggle span {
+  display: block;
+  height: 2px;
+  background: #fff;
+  border-radius: 2px;
+}
+
+/* The subtitle is the first thing to go when the bar gets tight. */
+@media (max-width: 1280px) {
+  .navbar-subtitle {
+    display: none;
+  }
+}
+
+@media (max-width: 1180px) {
+  .navbar-content {
+    flex-wrap: wrap;
+  }
+
+  .navbar-brand {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .navbar-toggle {
+    display: flex;
+  }
+
+  .navbar-collapse {
+    display: none;
+    flex-basis: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.5rem 0 0.25rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .navbar-collapse.open {
+    display: flex;
+  }
+
+  .navbar-nav {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .nav-link {
+    display: flex;
+    width: 100%;
+    padding: 0.7rem 0.6rem;
+    font-size: 1rem;
+  }
+
+  /* On a phone every group is simply listed under its heading. */
+  .nav-group-btn {
+    pointer-events: none;
+    padding-bottom: 0.2rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.65);
+    background: none !important;
+  }
+
+  .nav-caret {
+    display: none;
+  }
+
+  .nav-menu {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    position: static;
+    min-width: 0;
+    padding: 0 0 0.4rem;
+    background: none;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .nav-menu a {
+    padding: 0.6rem;
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 1rem;
+  }
+
+  .nav-menu a:hover,
+  .nav-menu a.active {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.18);
+  }
+
+  .navbar-user {
+    justify-content: space-between;
+    margin-top: 0.4rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .navbar-user-name {
+    align-items: flex-start;
+  }
+}
+
+/* ---- Calmer cards ------------------------------------------------------- */
+.card {
+  transition: box-shadow 0.2s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Cards used to jump on hover, which made tables and forms twitch. */
+.card:hover {
+  transform: none;
+  box-shadow: var(--shadow);
+}
+
+.card-body:last-child {
+  margin-bottom: 0;
+}
+
+/* A card that opens on demand (e.g. the Excel import on the asset list). */
+.details-card {
+  padding: 0;
+}
+
+.details-card > summary {
+  padding: 0.85rem var(--spacing-lg);
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.details-card > summary:hover {
+  color: var(--primary);
+}
+
+.details-card[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.details-card > .card-body {
+  padding: var(--spacing-lg);
+}
+
+/* ---- Headings a size down, so pages start higher ------------------------ */
+h1 {
+  font-size: 2rem;
+}
+
+h2 {
+  font-size: 1.6rem;
+}
+
+h3 {
+  font-size: 1.3rem;
+}
+
+h4 {
+  font-size: 1.1rem;
+}
+
+/* ---- Form fields that look like fields, not disabled boxes -------------- */
+.form-control {
+  background: #fff;
+  border-color: #d5c3c7;
+  min-height: 42px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.form-control:hover {
+  border-color: var(--primary-light);
+}
+
+.form-control:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(142, 65, 74, 0.18);
+}
+
+.form-control:disabled,
+.form-control[readonly] {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+.form-control::placeholder {
+  color: var(--text-muted);
+}
+
+/* The grid already spaces its cells; the extra margin left dead space. */
+.grid > .form-group {
+  margin-bottom: 0;
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: var(--primary);
+  width: 1rem;
+  height: 1rem;
+}
+
+.btn:focus-visible,
+.nav-link:focus-visible,
+.nav-menu a:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--primary-light);
+  outline-offset: 2px;
+}
+
+.navbar .nav-link:focus-visible,
+.navbar .btn:focus-visible {
+  outline-color: #fff;
+}
+
+/* ---- Tables: compact rows, nothing breaking mid-number ------------------ */
+.table th {
+  padding: 0.7rem 0.9rem;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 0.6rem 0.9rem;
+  font-size: 0.9rem;
+  vertical-align: middle;
+}
+
+.table tbody tr {
+  transition: background-color 0.12s ease;
+}
+
+.table tbody tr:hover {
+  background: var(--bg-primary);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Reference numbers and their links stay on one line. */
+.table td a strong,
+.table td > strong {
+  white-space: nowrap;
+}
+
+.badge {
+  white-space: nowrap;
+}
+
+/* Long product names: two lines, the rest on hover. */
+.cell-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  max-width: 18rem;
+  min-width: 8rem;
+}
+
+/* ---- Page headers and button rows wrap instead of overflowing ----------- */
+.flex.justify-between {
+  flex-wrap: wrap;
+  gap: var(--spacing-sm) var(--spacing-md);
+}
+
+.flex.gap-1,
+.flex.gap-2,
+.flex.gap-3 {
+  flex-wrap: wrap;
+}
+
+.table .flex.gap-1 {
+  flex-wrap: nowrap;
+}
+
+.stat-value {
+  line-height: 1.15;
+}
+
+.stats-grid {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+/* ---- Phones ------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .container {
+    padding: 0 var(--spacing-md);
+  }
+
+  .main-content {
+    padding: var(--spacing-lg) 0;
+  }
+
+  .grid-2,
+  .grid-3,
+  .grid-4 {
+    grid-template-columns: 1fr;
+  }
+
+  .grid {
+    gap: var(--spacing-md);
+  }
+
+  /* Two figures side by side read better than a long single column. */
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-md);
+  }
+
+  .stat-card {
+    padding: var(--spacing-md);
+  }
+
+  .stat-value {
+    font-size: 1.6rem;
+  }
+
+  .card {
+    padding: var(--spacing-md);
+  }
+
+  .details-card {
+    padding: 0;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+  }
+
+  h2 {
+    font-size: 1.4rem;
+  }
+
+  h3 {
+    font-size: 1.15rem;
+  }
+
+  .navbar-brand h1 {
+    font-size: 0.95rem;
+    white-space: normal;
+  }
+
+  .navbar-brand img {
+    height: 32px;
+  }
+
+  /* Comfortable touch targets. */
+  .btn {
+    min-height: 42px;
+  }
+
+  .btn-sm {
+    min-height: 36px;
+  }
+
+  .modal {
+    width: calc(100% - 1.5rem);
+    max-height: 92vh;
+  }
+}
+
+@media print {
+  .navbar-toggle,
+  .footer {
+    display: none !important;
+  }
+}
+
+@media (max-width: 640px) {
+  /* A wide table inside a card scrolls sideways instead of widening the page. */
+  .card-body {
+    overflow-x: auto;
+  }
+}
+
+/* ---- Moving several assets at once -------------------------------------- */
+.bulk-bar {
+  position: sticky;
+  top: 64px;
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-sm) var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  padding: 0.7rem var(--spacing-md);
+  background: #fff;
+  border: 1px solid var(--primary-light);
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+}
+
+.bulk-bar .form-control {
+  width: auto;
+  flex: 1 1 180px;
+  max-width: 260px;
+}
+
+.table tbody tr.row-selected,
+.table tbody tr.row-selected:hover {
+  background: #fbf1f2;
+}

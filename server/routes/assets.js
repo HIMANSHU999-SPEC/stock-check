@@ -621,7 +621,12 @@ router.get('/:id', (req, res) => {
       ORDER BY ah.timestamp DESC, ah.id DESC
     `).all(req.params.id);
 
-        res.json({ ...asset, assignments: assignments.openAssignments(asset.id), history });
+        res.json({
+            ...asset,
+            assignments: assignments.openAssignments(asset.id),
+            previous_holders: assignments.closedAssignments(asset.id),
+            history
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -663,9 +668,9 @@ router.post('/', (req, res) => {
 
         // Add to history
         db.prepare(`
-      INSERT INTO asset_history (asset_id, action, notes)
-      VALUES (?, 'created', 'Asset registered in system')
-    `).run(result.lastInsertRowid);
+      INSERT INTO asset_history (asset_id, action, notes, performed_by)
+      VALUES (?, 'created', 'Asset registered in system', ?)
+    `).run(result.lastInsertRowid, req.user?.email || null);
 
         const newAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(result.lastInsertRowid);
         sharepoint.enqueue(newAsset.id);
@@ -816,21 +821,21 @@ router.put('/:id', (req, res) => {
             if (after.status !== current.status) {
                 const holders = closed.map(assignments.holderLabel).join(', ');
                 db.prepare(`
-          INSERT INTO asset_history (asset_id, action, employee_id, notes)
-          VALUES (?, 'status_change', ?, ?)
+          INSERT INTO asset_history (asset_id, action, employee_id, notes, performed_by)
+          VALUES (?, 'status_change', ?, ?, ?)
         `).run(current.id, closed.length === 1 ? closed[0].employee_id : null,
-                    `Status changed from ${current.status} to ${after.status}${holders ? ` (returned from ${holders})` : ''}`);
+                    `Status changed from ${current.status} to ${after.status}${holders ? ` (returned from ${holders})` : ''}`, req.user?.email || null);
             } else {
                 db.prepare(`
-          INSERT INTO asset_history (asset_id, action, notes)
-          VALUES (?, 'updated', 'Asset information updated')
-        `).run(current.id);
+          INSERT INTO asset_history (asset_id, action, notes, performed_by)
+          VALUES (?, 'updated', 'Asset information updated', ?)
+        `).run(current.id, req.user?.email || null);
             }
             if ((after.campus || '') !== (current.campus || '')) {
                 db.prepare(`
-          INSERT INTO asset_history (asset_id, action, notes)
-          VALUES (?, 'transferred', ?)
-        `).run(current.id, `Campus changed from ${current.campus || 'Unassigned'} to ${after.campus || 'Unassigned'}`);
+          INSERT INTO asset_history (asset_id, action, notes, performed_by)
+          VALUES (?, 'transferred', ?, ?)
+        `).run(current.id, `Campus changed from ${current.campus || 'Unassigned'} to ${after.campus || 'Unassigned'}`, req.user?.email || null);
             }
             return closed;
         })();
@@ -889,6 +894,7 @@ router.delete('/:id', (req, res) => {
                 db.prepare('INSERT INTO delete_logs (user_id, target_type, target_id) VALUES (?, ?, ?)')
                     .run(req.user.id, 'asset', req.params.id);
             }
+            assignments.addHistory(asset.id, 'deleted', null, 'Moved to the recycle bin', req.user);
         });
 
         doDelete();
@@ -986,13 +992,66 @@ router.post('/:id/reassign', async (req, res) => {
 // Move an asset to another campus / location
 router.post('/:id/transfer', (req, res) => {
     try {
-        const { asset, from, to } = assignments.transfer(req.params.id, req.body || {});
+        const { asset, from, to } = assignments.transfer(req.params.id, req.body || {}, req.user);
         logActivity(req, {
             action: 'asset_transferred', entity_type: 'asset', entity_id: asset.id,
             description: `Moved ${asset.asset_number} (${asset.name}) from ${from} to ${to}`
         });
         sharepoint.enqueue(asset.id);
         res.json(asset);
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
+// Move several assets to a campus in one go (typically the ones that were
+// never given a campus). Who holds each item is unaffected. Every asset gets
+// its own history entry; anything already at that campus is left alone.
+router.post('/bulk-transfer', (req, res) => {
+    try {
+        const { ids, campus, location, notes } = req.body || {};
+        const assetIds = [...new Set((Array.isArray(ids) ? ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+        const targetCampus = String(campus || '').trim();
+        if (assetIds.length === 0) {
+            return res.status(400).json({ error: 'Select at least one asset to move' });
+        }
+        if (assetIds.length > 1000) {
+            return res.status(400).json({ error: 'Move at most 1000 assets at a time' });
+        }
+        if (!targetCampus) {
+            return res.status(400).json({ error: 'Choose the campus to move them to' });
+        }
+
+        // Only change the room when one was typed; otherwise each keeps its own.
+        const body = { campus: targetCampus.slice(0, 80), notes: String(notes || '').trim() || undefined };
+        const room = String(location || '').trim();
+        if (room) body.location = room.slice(0, 120);
+
+        const moved = [];
+        const skipped = [];
+        db.transaction(() => {
+            for (const id of assetIds) {
+                try {
+                    const { asset } = assignments.transfer(id, body, req.user);
+                    moved.push(asset);
+                } catch (err) {
+                    if (!(err instanceof assignments.AssignmentError)) throw err;
+                    skipped.push({ id, reason: err.message });
+                }
+            }
+        })();
+
+        if (moved.length > 0) {
+            const numbers = moved.map((a) => a.asset_number);
+            const listed = numbers.length > 12 ? `${numbers.slice(0, 12).join(', ')} and ${numbers.length - 12} more` : numbers.join(', ');
+            logActivity(req, {
+                action: 'assets_bulk_transferred', entity_type: 'asset', entity_id: null,
+                description: `Moved ${moved.length} asset${moved.length === 1 ? '' : 's'} to ${body.campus}${body.location ? ` / ${body.location}` : ''}: ${listed}`
+            });
+            moved.forEach((a) => sharepoint.enqueue(a.id));
+        }
+
+        res.json({ moved: moved.length, skipped, campus: body.campus });
     } catch (error) {
         handleError(res, error);
     }
@@ -1102,6 +1161,7 @@ router.post('/:id/restore', (req, res) => {
             // Who holds it is read back from the assignment records, which a
             // delete never touches.
             assignments.syncAssetSummary(binItem.entity_id);
+            assignments.addHistory(binItem.entity_id, 'restored', null, 'Restored from the recycle bin', req.user);
 
             db.prepare('DELETE FROM recycle_bin WHERE id = ?').run(binItem.id);
         });

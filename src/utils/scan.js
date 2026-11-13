@@ -25,3 +25,16 @@ export function availableQuantity(asset) {
     if (!asset || !['available', 'assigned'].includes(asset.status)) return 0;
     return Math.max(0, (asset.quantity || 1) - (asset.assigned_quantity || 0));
 }
+
+// How an assignment ended, in plain words.
+export function outcomeLabel(condition) {
+    const labels = {
+        good: 'Returned in good condition',
+        needs_repair: 'Returned — needs repair',
+        damaged: 'Returned damaged',
+        lost: 'Reported lost',
+        reassigned: 'Passed to someone else',
+        status_change: 'Taken out of service'
+    };
+    return labels[condition] || 'Returned';
+}

@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { assetsAPI, reportsAPI } from '../services/api';
 import { statusColor } from '../utils/scan';
 import { useAssetActions } from './AssetActions';
+import { CAMPUSES } from '../constants';
 
 const EMPTY_FILTERS = { search: '', status: '', category: '', campus: '', model: '', brand: '' };
 
@@ -30,6 +31,12 @@ export default function AssetList() {
     const [filters, setFilters] = useState(() => ({ ...EMPTY_FILTERS, ...filtersFromUrl(location.search) }));
     const [models, setModels] = useState([]);
     const [brands, setBrands] = useState([]);
+    // Ticked rows, for moving several assets to a campus in one go.
+    const [selected, setSelected] = useState(() => new Set());
+    const [moveCampus, setMoveCampus] = useState('');
+    const [moveLocation, setMoveLocation] = useState('');
+    const [moving, setMoving] = useState(false);
+    const [noCampusCount, setNoCampusCount] = useState(0);
     // Only the most recent request may fill the table: a slower earlier one
     // must not overwrite the results of the filters now on screen.
     const latestLoad = useRef(0);
@@ -88,8 +95,10 @@ export default function AssetList() {
     async function loadCampuses() {
         try {
             const data = await reportsAPI.getByCampus();
-            const names = data.map((c) => c.campus).filter(Boolean);
-            setCampuses(names);
+            // "Unspecified" is the report's label for assets with no campus yet.
+            const names = data.map((c) => c.campus).filter((n) => n && n !== 'Unspecified');
+            setCampuses([...new Set([...CAMPUSES, ...names])]);
+            setNoCampusCount(data.find((c) => c.campus === 'Unspecified')?.asset_count || 0);
         } catch (error) {
             console.error('Error loading campuses:', error);
         }
@@ -212,6 +221,49 @@ export default function AssetList() {
         }
     }
 
+    // Ticks only ever refer to rows that are on screen.
+    const selectedIds = assets.filter((a) => selected.has(a.id)).map((a) => a.id);
+    const allSelected = assets.length > 0 && selectedIds.length === assets.length;
+
+    function toggleRow(id) {
+        setSelected((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+    }
+
+    function toggleAll() {
+        setSelected(allSelected ? new Set() : new Set(assets.map((a) => a.id)));
+    }
+
+    async function moveSelected() {
+        if (!moveCampus || selectedIds.length === 0) return;
+        const where = moveLocation.trim() ? `${moveCampus} / ${moveLocation.trim()}` : moveCampus;
+        if (!confirm(`Move ${selectedIds.length} asset${selectedIds.length === 1 ? '' : 's'} to ${where}?`)) return;
+        setMoving(true);
+        try {
+            const result = await assetsAPI.bulkTransfer({
+                ids: selectedIds,
+                campus: moveCampus,
+                location: moveLocation.trim() || undefined
+            });
+            const parts = [`${result.moved} asset${result.moved === 1 ? '' : 's'} moved to ${where}.`];
+            if (result.skipped.length > 0) {
+                parts.push(`${result.skipped.length} left as they were (already there).`);
+            }
+            setNotice(parts.join(' '));
+            setSelected(new Set());
+            setMoveLocation('');
+            loadAssets();
+            loadCampuses();
+        } catch (error) {
+            alert('Could not move the assets: ' + error.message);
+        } finally {
+            setMoving(false);
+        }
+    }
+
     return (
         <div>
             <div className="flex justify-between items-center mb-3">
@@ -324,7 +376,7 @@ export default function AssetList() {
                                 }}
                             >
                                 <option value="">All Campuses</option>
-                                <option value="__unassigned__">Unassigned</option>
+                                <option value="__unassigned__">No campus yet{noCampusCount ? ` (${noCampusCount})` : ''}</option>
                                 {campuses.map((c) => (
                                     <option key={c} value={c}>
                                         {c}
@@ -336,10 +388,8 @@ export default function AssetList() {
                 </div>
             </div>
 
-            <div className="card mb-3">
-                <div className="card-header">
-                    <h3 className="card-title">Import Assets (Excel by Category)</h3>
-                </div>
+            <details className="card details-card mb-3">
+                <summary>Import assets from an Excel file</summary>
                 <div className="card-body">
                     <p className="text-muted">
                         Upload .xlsx or .xls with columns: Name, Category, Model, Serial Number, Purchase Date,
@@ -363,7 +413,54 @@ export default function AssetList() {
                         {importing && <span className="text-muted">Importing...</span>}
                     </div>
                 </div>
-            </div>
+            </details>
+
+            {noCampusCount > 0 && filters.campus !== '__unassigned__' && selectedIds.length === 0 && (
+                <div className="alert alert-info flex justify-between items-center">
+                    <span>
+                        {noCampusCount} asset{noCampusCount === 1 ? ' has' : 's have'} no campus yet. Show them,
+                        tick the ones to move and choose a campus.
+                    </span>
+                    <button
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => {
+                            setFilters({ ...filters, campus: '__unassigned__' });
+                            navigate({ search: 'campus=__unassigned__' });
+                        }}
+                    >
+                        Show assets with no campus
+                    </button>
+                </div>
+            )}
+
+            {selectedIds.length > 0 && (
+                <div className="bulk-bar">
+                    <strong>{selectedIds.length} selected</strong>
+                    <span className="text-muted">Move to</span>
+                    <select
+                        className="form-control"
+                        value={moveCampus}
+                        onChange={(e) => setMoveCampus(e.target.value)}
+                        aria-label="Campus to move to"
+                    >
+                        <option value="">Choose campus…</option>
+                        {campuses.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Room / location (optional)"
+                        value={moveLocation}
+                        onChange={(e) => setMoveLocation(e.target.value)}
+                    />
+                    <button className="btn btn-primary" onClick={moveSelected} disabled={!moveCampus || moving}>
+                        {moving ? 'Moving…' : `Move ${selectedIds.length}`}
+                    </button>
+                    <button className="btn btn-secondary" onClick={() => setSelected(new Set())} disabled={moving}>
+                        Clear
+                    </button>
+                </div>
+            )}
 
             {loading ? (
                 <div className="spinner"></div>
@@ -373,6 +470,14 @@ export default function AssetList() {
                         <table className="table">
                             <thead>
                                 <tr>
+                                    <th style={{ width: '1%' }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={allSelected}
+                                            onChange={toggleAll}
+                                            aria-label="Select all assets shown"
+                                        />
+                                    </th>
                                     <th>Asset Number</th>
                                     <th>Name</th>
                                     <th>Category</th>
@@ -389,23 +494,33 @@ export default function AssetList() {
                             <tbody>
                                 {assets.length === 0 ? (
                                     <tr>
-                                        <td colSpan="11" className="text-center text-muted">
+                                        <td colSpan="12" className="text-center text-muted">
                                             No assets found
                                         </td>
                                     </tr>
                                 ) : (
                                     assets.map((asset) => (
-                                        <tr key={asset.id}>
+                                        <tr key={asset.id} className={selected.has(asset.id) ? 'row-selected' : ''}>
+                                            <td>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selected.has(asset.id)}
+                                                    onChange={() => toggleRow(asset.id)}
+                                                    aria-label={`Select ${asset.asset_number}`}
+                                                />
+                                            </td>
                                             <td>
                                                 <Link to={`/assets/${asset.id}`} className="text-primary">
                                                     <strong>{asset.asset_number}</strong>
                                                 </Link>
                                             </td>
-                                            <td>{asset.name}</td>
-                                            <td>{asset.category_name || 'N/A'}</td>
-                                            <td>{asset.model || 'N/A'}</td>
-                                            <td>{asset.supplier_name || 'N/A'}</td>
-                                            <td>{asset.campus || 'N/A'}</td>
+                                            <td><div className="cell-clamp" title={asset.name}>{asset.name}</div></td>
+                                            <td>{asset.category_name || '—'}</td>
+                                            <td><div className="cell-clamp" title={asset.model || ''}>{asset.model || '—'}</div></td>
+                                            <td>{asset.supplier_name || '—'}</td>
+                                            <td>
+                                                {asset.campus || <span className="badge badge-warning">No campus</span>}
+                                            </td>
                                             <td style={{ whiteSpace: 'nowrap' }}>
                                                 {(asset.quantity || 1) > 1
                                                     ? `${asset.assigned_quantity || 0} / ${asset.quantity} out`
@@ -416,7 +531,7 @@ export default function AssetList() {
                                                     {asset.status}
                                                 </span>
                                             </td>
-                                            <td>{asset.holders || '-'}</td>
+                                            <td><div className="cell-clamp" title={asset.holders || ''}>{asset.holders || '—'}</div></td>
                                             <td style={{ whiteSpace: 'nowrap' }}>
                                                 {asset.created_at ? new Date(asset.created_at).toLocaleDateString() : '—'}
                                             </td>

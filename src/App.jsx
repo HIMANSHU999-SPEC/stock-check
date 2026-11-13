@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import AssetList from './components/AssetList';
 import AssetDetails from './components/AssetDetails';
@@ -25,146 +25,16 @@ import Inventory from './components/Inventory';
 import Scan from './components/Scan';
 import Settings from './components/Settings';
 import SsoComplete from './components/SsoComplete';
+import Navbar from './components/Navbar';
 import { authAPI, saveAuthToken, clearAuthToken } from './services/api';
 import './index.css';
-
-function Navbar({ user, onLogout, license }) {
-    const location = useLocation();
-
-    const isActive = (path) => location.pathname === path;
-
-    return (
-        <nav className="navbar">
-            <div className="container navbar-content">
-                <div className="navbar-brand">
-                    <img
-                        src="/laat-logo.png"
-                        alt="London Academy for Applied Technology"
-                        style={{ height: '40px', width: 'auto', background: '#fff', borderRadius: '6px', padding: '3px' }}
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                    <div>
-                        <h1>Stock Management System</h1>
-                        <div className="navbar-subtitle">
-                            London Academy for Applied Technology — Built by JH Infotech
-                        </div>
-                    </div>
-                </div>
-                <ul className="navbar-nav">
-                    <li>
-                        <Link to="/" className={`nav-link ${isActive('/') ? 'active' : ''}`}>
-                            Dashboard
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/assets" className={`nav-link ${isActive('/assets') ? 'active' : ''}`}>
-                            Assets
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/inventory" className={`nav-link ${isActive('/inventory') ? 'active' : ''}`}>
-                            Inventory
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/scan" className={`nav-link ${isActive('/scan') ? 'active' : ''}`}>
-                            Scan
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/employees" className={`nav-link ${isActive('/employees') ? 'active' : ''}`}>
-                            Employees
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/categories" className={`nav-link ${isActive('/categories') ? 'active' : ''}`}>
-                            Categories
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/reports" className={`nav-link ${isActive('/reports') ? 'active' : ''}`}>
-                            Reports
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/books" className={`nav-link ${isActive('/books') ? 'active' : ''}`}>
-                            Books
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/borrowers" className={`nav-link ${isActive('/borrowers') ? 'active' : ''}`}>
-                            Borrowers
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/library/issue" className={`nav-link ${isActive('/library/issue') ? 'active' : ''}`}>
-                            Issue Desk
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/activity" className={`nav-link ${isActive('/activity') ? 'active' : ''}`}>
-                            Activity
-                        </Link>
-                    </li>
-                    {user?.role === 'admin' && (
-                        <li>
-                            <Link to="/users" className={`nav-link ${isActive('/users') ? 'active' : ''}`}>
-                                Users
-                            </Link>
-                        </li>
-                    )}
-                    <li>
-                        <Link to="/recycle-bin" className={`nav-link ${isActive('/recycle-bin') ? 'active' : ''}`}>
-                            Recycle Bin
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/tags" className={`nav-link ${isActive('/tags') ? 'active' : ''}`}>
-                            Print Stickers
-                        </Link>
-                    </li>
-                    {user?.role === 'admin' && (
-                        <li>
-                            <Link to="/settings" className={`nav-link ${isActive('/settings') ? 'active' : ''}`}>
-                                Settings
-                            </Link>
-                        </li>
-                    )}
-                    {user ? (
-                        <>
-                            <li className="text-muted" style={{ padding: '0 0.5rem' }}>
-                                {user.name} ({user.role})
-                            </li>
-                            <li>
-                                <button className="btn btn-sm btn-secondary" onClick={onLogout}>
-                                    Logout
-                                </button>
-                            </li>
-                        </>
-                    ) : (
-                        <li>
-                            <Link to="/login" className="btn btn-sm btn-secondary">
-                                Login
-                            </Link>
-                        </li>
-                    )}
-                    {license?.expired && (
-                        <li>
-                            <span className="badge badge-danger">License expired</span>
-                        </li>
-                    )}
-                </ul>
-            </div>
-        </nav>
-    );
-}
 
 function Footer() {
     return (
         <footer className="footer">
             <div className="container">
                 <p className="footer-text">
-                    © 2025 London Academy for Applied Technology — Developed by{' '}
+                    © {new Date().getFullYear()} London Academy for Applied Technology — Developed by{' '}
                     <span className="footer-link">JH Infotech</span>
                 </p>
             </div>

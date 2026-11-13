@@ -75,9 +75,29 @@ function syncAssetSummary(assetId) {
     `).run(soleEmployee, assignedQty, status, assetId);
 }
 
-function addHistory(assetId, action, employeeId, notes) {
-    db.prepare('INSERT INTO asset_history (asset_id, action, employee_id, notes) VALUES (?, ?, ?, ?)')
-        .run(assetId, action, employeeId || null, notes || null);
+// `user` is whoever carried out the change; it is kept with the entry so the
+// trail shows who did what as well as when.
+function addHistory(assetId, action, employeeId, notes, user) {
+    db.prepare('INSERT INTO asset_history (asset_id, action, employee_id, notes, performed_by) VALUES (?, ?, ?, ?, ?)')
+        .run(assetId, action, employeeId || null, notes || null, user?.email || null);
+}
+
+// Everyone who held the asset before and has since handed it back, newest
+// first. These rows are never deleted, so the record outlives the holder
+// leaving the organisation.
+function closedAssignments(assetId) {
+    return db.prepare(`
+      SELECT x.id, x.employee_id, x.location_label, x.quantity, x.assigned_at, x.returned_at,
+             x.return_condition, x.notes,
+             e.name AS employee_name, e.email AS employee_email, e.status AS employee_status,
+             ub.email AS assigned_by_email, ur.email AS returned_by_email
+      FROM asset_assignments x
+      LEFT JOIN employees e ON x.employee_id = e.id
+      LEFT JOIN users ub ON x.assigned_by = ub.id
+      LEFT JOIN users ur ON x.returned_by = ur.id
+      WHERE x.asset_id = ? AND x.returned_at IS NOT NULL
+      ORDER BY x.returned_at DESC, x.id DESC
+    `).all(assetId);
 }
 
 // History line such as "Assigned to Jane Smith" or, for bulk stock,
@@ -94,6 +114,9 @@ function resolveHolder({ employee_id, location }) {
     if (employee_id) {
         const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(Number(employee_id));
         if (!employee) throw new AssignmentError('Employee not found', 404);
+        if (employee.status === 'inactive') {
+            throw new AssignmentError(`${employee.name} is marked inactive — reactivate them before assigning anything`);
+        }
         return { employee, location: null, label: employee.name };
     }
     const label = String(location || '').trim();
@@ -192,7 +215,7 @@ function assign(assetId, body, user) {
 
         const assignmentId = giveToHolder(asset.id, holder, quantity, user?.id, body.notes);
         addHistory(asset.id, 'assigned', holder.employee?.id,
-            describe('Assigned', asset, quantity, `to ${holder.label}`, body.notes));
+            describe('Assigned', asset, quantity, `to ${holder.label}`, body.notes), user);
         syncAssetSummary(asset.id);
         return { asset: getAsset(asset.id), holder, quantity, assignmentId };
     })();
@@ -215,7 +238,7 @@ function giveBack(assetId, body, user) {
 
         const conditionText = condition === 'good' ? '' : ` (${condition.replace('_', ' ')})`;
         addHistory(asset.id, 'returned', row.employee_id,
-            describe('Returned', asset, quantity, `from ${holderLabel(row)}${conditionText}`, body.notes));
+            describe('Returned', asset, quantity, `from ${holderLabel(row)}${conditionText}`, body.notes), user);
 
         // A one-off item that comes back broken or is reported lost leaves
         // circulation. For bulk stock the count is left alone — adjust the
@@ -224,7 +247,7 @@ function giveBack(assetId, body, user) {
         if (newStatus && asset.quantity === 1) {
             db.prepare('UPDATE assets SET status = ? WHERE id = ?').run(newStatus, asset.id);
             addHistory(asset.id, 'status_change', row.employee_id,
-                `Status changed from ${asset.status} to ${newStatus} on return`);
+                `Status changed from ${asset.status} to ${newStatus} on return`, user);
         }
         syncAssetSummary(asset.id);
         return { asset: getAsset(asset.id), previous: row, quantity, condition };
@@ -252,14 +275,14 @@ function reassign(assetId, body, user) {
         const assignmentId = giveToHolder(asset.id, holder, quantity, user?.id, body.notes);
 
         addHistory(asset.id, 'reassigned', holder.employee?.id,
-            describe('Reassigned', asset, quantity, `from ${fromLabel} to ${holder.label}`, body.notes));
+            describe('Reassigned', asset, quantity, `from ${fromLabel} to ${holder.label}`, body.notes), user);
         syncAssetSummary(asset.id);
         return { asset: getAsset(asset.id), previous: row, holder, quantity, assignmentId };
     })();
 }
 
 /** Move an asset to another campus and/or location. Holders are unaffected. */
-function transfer(assetId, body) {
+function transfer(assetId, body, user) {
     return db.transaction(() => {
         const asset = getAsset(assetId);
         const campus = body.campus === undefined ? (asset.campus || '') : String(body.campus || '').trim();
@@ -273,7 +296,7 @@ function transfer(assetId, body) {
 
         const from = [asset.campus || 'Unassigned campus', asset.location].filter(Boolean).join(' / ');
         const to = [campus || 'Unassigned campus', location].filter(Boolean).join(' / ');
-        addHistory(asset.id, 'transferred', null, `Moved from ${from} to ${to}${body.notes ? ` — ${body.notes}` : ''}`);
+        addHistory(asset.id, 'transferred', null, `Moved from ${from} to ${to}${body.notes ? ` — ${body.notes}` : ''}`, user);
         return { asset: getAsset(asset.id), from, to };
     })();
 }
@@ -302,6 +325,8 @@ module.exports = {
     transfer,
     closeAll,
     openAssignments,
+    closedAssignments,
+    addHistory,
     syncAssetSummary,
     holderLabel
 };

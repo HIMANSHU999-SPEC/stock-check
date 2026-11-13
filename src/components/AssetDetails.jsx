@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { assetsAPI, documentsAPI, settingsAPI } from '../services/api';
 import { handleEmailResult } from '../utils/emailTemplates';
-import { assetScanUrl, statusColor } from '../utils/scan';
+import { assetScanUrl, statusColor, outcomeLabel } from '../utils/scan';
 import { useAssetActions } from './AssetActions';
 import QRCode from 'react-qr-code';
 
@@ -423,6 +423,51 @@ export default function AssetDetails() {
                 </div>
             </div>
 
+            {asset.previous_holders && asset.previous_holders.length > 0 && (
+                <div className="card mt-3">
+                    <div className="card-header">
+                        <h3 className="card-title">Previous Holders</h3>
+                    </div>
+                    <div className="table-container">
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th>Held by</th>
+                                    {isBulk && <th>Qty</th>}
+                                    <th>From</th>
+                                    <th>Until</th>
+                                    <th>Outcome</th>
+                                    <th>Recorded by</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {asset.previous_holders.map((row) => (
+                                    <tr key={row.id}>
+                                        <td>
+                                            {row.employee_id ? (
+                                                <Link to={`/employees/${row.employee_id}`} className="text-primary">
+                                                    <strong>{row.employee_name || 'Unknown'}</strong>
+                                                </Link>
+                                            ) : (
+                                                <strong>{row.location_label || 'Unknown'}</strong>
+                                            )}
+                                            {row.employee_status === 'inactive' && (
+                                                <span className="badge badge-warning" style={{ marginLeft: '0.5rem' }}>Inactive</span>
+                                            )}
+                                        </td>
+                                        {isBulk && <td>{row.quantity}</td>}
+                                        <td style={{ whiteSpace: 'nowrap' }}>{row.assigned_at ? new Date(row.assigned_at).toLocaleDateString() : '—'}</td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{new Date(row.returned_at).toLocaleDateString()}</td>
+                                        <td>{outcomeLabel(row.return_condition)}</td>
+                                        <td>{row.returned_by_email || '—'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
             {asset.history && asset.history.length > 0 && (
                 <div className="card mt-3">
                     <div className="card-header">
@@ -436,6 +481,7 @@ export default function AssetDetails() {
                                     <th>Action</th>
                                     <th>Employee</th>
                                     <th>Notes</th>
+                                    <th>By</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -447,6 +493,7 @@ export default function AssetDetails() {
                                         </td>
                                         <td>{entry.employee_name || '-'}</td>
                                         <td>{entry.notes || '-'}</td>
+                                        <td>{entry.performed_by || '—'}</td>
                                     </tr>
                                 ))}
                             </tbody>
