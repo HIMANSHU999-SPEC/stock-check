@@ -1831,3 +1831,22 @@ body[data-access="viewer"] .write-only,
 body[data-access="inventory"] .write-only,
 body[data-access="viewer"] .download-only { display: none !important; }
 .role-key { display: grid; gap: 0.4rem; font-size: 0.9rem; }
+
+/* ---------- Drafts for emails the server could not send ---------- */
+.draft-bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 900;
+    background: #fff; border-top: 3px solid var(--primary, #8b3a44);
+    box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.12);
+    max-height: 45vh; overflow-y: auto;
+}
+.draft-bar-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+    padding: 0.7rem 1.25rem; border-top: 1px solid var(--border, #e7dadd);
+}
+.draft-bar-item:first-child { border-top: 0; }
+.draft-bar-text { min-width: 0; overflow-wrap: anywhere; }
+.draft-bar-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; flex-shrink: 0; }
+@media (max-width: 720px) {
+    .draft-bar-item { flex-direction: column; align-items: stretch; }
+}
+@media print { .draft-bar { display: none; } }

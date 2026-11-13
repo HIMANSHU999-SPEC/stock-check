@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { myAPI } from '../services/api';
+import { queueDraft } from '../utils/emailTemplates';
 
 // The database stores UTC without a zone marker.
 export function formatStamp(value) {
@@ -89,9 +90,10 @@ export default function MyAssets() {
                 assignment_id: reporting.item ? reporting.item.assignment_id : undefined
             });
             setReporting(null);
+            if (result.draft) queueDraft(result.draft.to, result.draft.subject, result.draft.body);
             setNotice(result.emailed
                 ? 'Your message has been sent to IT Support. They will be in touch.'
-                : 'Your report has been recorded for IT Support. They will be in touch.');
+                : 'Your report has been recorded and IT Support can see it. You can also email it to them with the draft at the bottom of the screen.');
             await load();
         } catch (err) {
             setReportError(err.message);
@@ -128,6 +130,15 @@ export default function MyAssets() {
 
             {error && <div className="alert alert-danger">{error}</div>}
             {notice && <div className="alert alert-success">{notice}</div>}
+
+            {person.on_staff_list && items.length > 0 && (
+                <div className="alert alert-info">
+                    <strong>Please confirm what you have received.</strong> Check each item below against what is
+                    actually with you. Press <strong>✓ I have this</strong> if you have it. If you never received
+                    it, no longer have it, or a detail is wrong, press <strong>Report a problem</strong> and IT
+                    Support will sort it out. Bulk or shared stock is confirmed by IT Support, so it has no button.
+                </div>
+            )}
 
             {!person.on_staff_list ? (
                 <div className="card">

@@ -27,6 +27,7 @@ import Settings from './components/Settings';
 import SsoComplete from './components/SsoComplete';
 import Navbar from './components/Navbar';
 import MyAssets from './components/MyAssets';
+import EmailDraftBar from './components/EmailDraftBar';
 import StaffReports from './components/StaffReports';
 import { authAPI, saveAuthToken, clearAuthToken } from './services/api';
 import './index.css';
@@ -403,6 +404,7 @@ function App() {
                     </div>
                 </main>
                 {user && <Footer />}
+                {user && <EmailDraftBar />}
             </div>
         </Router>
     );

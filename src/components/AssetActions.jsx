@@ -181,7 +181,7 @@ export function AssignModal({ assetId, mode = 'assign', assignmentId, onClose, o
                 : location.trim();
             const parts = [`${asset.asset_number} ${isReassign ? 'reassigned' : 'assigned'} to ${who}.`];
             for (const email of [result.email, result.previous_email]) {
-                const line = email && email.status !== 'not_configured' ? handleEmailResult(email) : '';
+                const line = email ? handleEmailResult(email) : '';
                 if (line) parts.push(line);
             }
             onDone(parts.join(' '), result);
@@ -420,7 +420,7 @@ export function ReturnModal({ assetId, assignmentId, onClose, onDone }) {
             });
             const parts = [`${asset.asset_number} returned from ${holderName(row)}.`];
             if (condition !== 'good' && !isBulk) parts.push(`Status is now "${result.status}".`);
-            const line = result.email && result.email.status !== 'not_configured' ? handleEmailResult(result.email) : '';
+            const line = result.email ? handleEmailResult(result.email) : '';
             if (line) parts.push(line);
             onDone(parts.join(' '), result);
         } catch (err) {

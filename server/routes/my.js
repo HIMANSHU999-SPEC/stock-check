@@ -208,7 +208,14 @@ router.post('/reports', async (req, res) => {
         });
         db.prepare('UPDATE staff_reports SET email_status = ? WHERE id = ?').run(mail.status, reportId);
 
-        res.status(201).json({ id: reportId, emailed: mail.status === 'sent' });
+        res.status(201).json({
+            id: reportId,
+            emailed: mail.status === 'sent',
+            // Not sent: let them send it from their own mailbox as well.
+            draft: mail.status !== 'sent' && supportAddress()
+                ? { to: supportAddress(), subject: `Asset report from ${employee.name}: ${REASONS[reason]}${item ? ` (${item.asset_number})` : ''}`, body: lines.filter((l) => !l.startsWith('Review and close') && !l.startsWith('Reply to this email')).join('\n').trim() }
+                : null
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

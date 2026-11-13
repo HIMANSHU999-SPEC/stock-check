@@ -43,9 +43,14 @@ ${ASSET_BLOCK}
 
 Please look after it and keep it secure. It remains the property of {{org_name}} and must be returned to IT Support when requested or when you leave.
 
-You can see everything recorded against your name, and confirm that you have it, at {{my_assets_url}}
+Please confirm that you have received it:
+1. Open {{my_assets_url}}
+2. Sign in with your work Microsoft account
+3. Find the item under "Items recorded against your name" and press "I have this"
 
-If any of these details are wrong, or the item is lost or damaged, reply to this email straight away.
+If you have not received it, or any of these details are wrong, press "Report a problem" next to the item on that page, or reply to this email straight away. (Shared or bulk items are confirmed by IT Support, so they show no button.)
+
+If the item is later lost or damaged, tell IT Support immediately.
 
 ${SIGN_OFF}`
     },
@@ -375,7 +380,9 @@ async function sendMail({ to, subject, body, templateKey, entity, user, replyTo 
     } catch (err) {
         const message = explainGraphError(err, 'Mail.Send');
         logEmail({ templateKey, to: toAddress, cc: status.cc, subject, status: 'failed', error: message, entity, user });
-        return { status: 'failed', to: toAddress, error: message };
+        // The wording goes back with the failure so the person can send it
+        // from their own mailbox instead of the message being lost.
+        return { status: 'failed', to: toAddress, error: message, subject, body };
     }
 }
 
