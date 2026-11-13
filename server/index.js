@@ -10,18 +10,26 @@ const { router: authRouter, getUserFromToken, getPersonFromToken, licenseStatus 
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+// Behind a reverse proxy (nginx) set HOST=127.0.0.1 so the API cannot be
+// reached directly over plain HTTP from outside. Unset, it listens on every
+// interface, which is what a container needs.
+const HOST = (process.env.HOST || '').trim() || undefined;
+
+// Don't advertise the framework.
+app.disable('x-powered-by');
 
 // Middleware
-app.use(cors());
-app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-    }
-    next();
-});
+// The web app is served from the same origin as the API (nginx in production,
+// the Vite proxy in development), so no other site needs to call it. Other
+// origins are refused unless listed in CORS_ORIGIN (comma separated).
+const allowedOrigins = (process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim()).filter(Boolean);
+if (allowedOrigins.length > 0) {
+    app.use(cors({
+        origin: allowedOrigins,
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization']
+    }));
+}
 app.use(express.json());
 
 // Auth & license routes
@@ -150,11 +158,17 @@ if (process.env.NODE_ENV === 'production') {
 // callback instead of throwing. Exit so a second copy can never sit alive
 // without the port, quietly running the nightly backup job against the
 // live database.
-app.listen(PORT, (error) => {
+const onListening = (error) => {
     if (error) {
         console.error(`Could not listen on port ${PORT}: ${error.message}`);
         process.exit(1);
     }
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on ${HOST || 'all interfaces'}, port ${PORT}`);
     console.log(`API available at http://localhost:${PORT}/api`);
-});
+};
+
+if (HOST) {
+    app.listen(PORT, HOST, onListening);
+} else {
+    app.listen(PORT, onListening);
+}
