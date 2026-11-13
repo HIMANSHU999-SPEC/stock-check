@@ -374,12 +374,25 @@ export default function AssetDetails() {
                                                 : 'Room / location'}
                                             {' · since '}
                                             {new Date(row.assigned_at.replace(' ', 'T') + 'Z').toLocaleDateString()}
-                                            {row.employee_id && (row.confirmed_at
-                                                ? ` · ✓ confirmed by holder ${new Date(row.confirmed_at.replace(' ', 'T') + 'Z').toLocaleDateString()}`
-                                                : ' · not yet confirmed by holder')}
+                                            {row.confirmed_at
+                                                ? ` · ✓ confirmed ${new Date(row.confirmed_at.replace(' ', 'T') + 'Z').toLocaleDateString()} by ${
+                                                    String(row.confirmed_by || '').toLowerCase() === String(row.employee_email || '').toLowerCase()
+                                                        ? 'the holder' : `IT (${row.confirmed_by})`}`
+                                                : isBulk || !row.employee_id
+                                                    ? ' · not yet confirmed by IT'
+                                                    : ' · not yet confirmed'}
                                         </div>
                                     </div>
                                     <div className="flex gap-1" style={{ flexWrap: 'wrap' }}>
+                                        {!row.confirmed_at && (
+                                            <button
+                                                className="write-only btn btn-sm btn-secondary"
+                                                title="Record that you have checked this holder really has it"
+                                                onClick={() => assetsAPI.confirmHolder(id, row.id).then(loadAsset).catch((e) => alert(e.message))}
+                                            >
+                                                ✓ Confirm
+                                            </button>
+                                        )}
                                         <button onClick={() => actions.open('return', id, row.id)} className="write-only btn btn-sm btn-primary">
                                             Return
                                         </button>

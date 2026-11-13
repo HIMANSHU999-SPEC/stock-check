@@ -305,6 +305,34 @@ function transfer(assetId, body, user) {
 }
 
 /**
+ * An administrator or sub-administrator records that a holder really has
+ * what is assigned to them. This is how bulk stock, rooms and departments
+ * are confirmed, since nobody signs in as those. `filter` is
+ * { assignmentId } for one line or { employeeId } for everything a person
+ * or department holds. Returns the lines that were newly confirmed.
+ */
+function confirmByStaff(filter, user) {
+    return db.transaction(() => {
+        const rows = db.prepare(`
+          SELECT x.*, a.asset_number, a.name AS asset_name, a.quantity AS asset_quantity,
+                 e.name AS employee_name
+          FROM asset_assignments x
+          JOIN assets a ON a.id = x.asset_id
+          LEFT JOIN employees e ON e.id = x.employee_id
+          WHERE x.returned_at IS NULL AND a.deleted_at IS NULL AND x.confirmed_at IS NULL
+            AND ${filter.assignmentId ? 'x.id = ?' : 'x.employee_id = ?'}
+        `).all(Number(filter.assignmentId || filter.employeeId) || 0);
+        for (const row of rows) {
+            db.prepare('UPDATE asset_assignments SET confirmed_at = CURRENT_TIMESTAMP, confirmed_by = ? WHERE id = ?')
+                .run(user.email, row.id);
+            addHistory(row.asset_id, 'confirmed', row.employee_id,
+                `Checked by IT: ${holderLabel(row)} holds ${row.asset_quantity > 1 ? `${row.quantity} of ` : ''}this item`, user);
+        }
+        return rows;
+    })();
+}
+
+/**
  * Close every open assignment (asset lost, retired, sent for repair…).
  * Must be called inside the caller's transaction. Returns the closed rows.
  */
@@ -329,6 +357,7 @@ module.exports = {
     closeAll,
     openAssignments,
     closedAssignments,
+    confirmByStaff,
     addHistory,
     syncAssetSummary,
     holderLabel

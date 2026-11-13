@@ -105,7 +105,22 @@ export default function EmployeeDetails() {
 
             <div className="card mb-3">
                 <div className="card-header">
-                    <h3 className="card-title">Current Assigned Assets</h3>
+                    <div className="flex justify-between items-center" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <h3 className="card-title">Current Assigned Assets</h3>
+                        {(employee.assets || []).some((a) => !a.confirmed_at) && (
+                            <button
+                                type="button" className="write-only btn btn-sm btn-primary"
+                                title="Record that you have checked this person or department really has these"
+                                onClick={() => {
+                                    const waiting = employee.assets.filter((a) => !a.confirmed_at).length;
+                                    if (!window.confirm(`Confirm that ${employee.name} has all ${waiting} unconfirmed item(s)? This is recorded under your name.`)) return;
+                                    employeesAPI.confirmAssets(id).then(loadEmployee).catch((e) => alert(e.message));
+                                }}
+                            >
+                                ✓ Confirm all ({employee.assets.filter((a) => !a.confirmed_at).length})
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <div className="table-container">
                     <table className="table">
@@ -115,7 +130,7 @@ export default function EmployeeDetails() {
                                 <th>Name</th>
                                 <th>Category</th>
                                 <th>Status</th>
-                                <th>Confirmed by holder</th>
+                                <th>Confirmed</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -130,9 +145,17 @@ export default function EmployeeDetails() {
                                         <td>{a.category_name || 'N/A'}</td>
                                         <td><span className={`badge badge-${getStatusColor(a.status)}`}>{a.status}</span></td>
                                         <td style={{ whiteSpace: 'nowrap' }}>
-                                            {a.confirmed_at
-                                                ? <span className="badge badge-success">✓ {formatStamp(a.confirmed_at)}</span>
-                                                : <span className="text-muted">Not yet</span>}
+                                            {a.confirmed_at ? (
+                                                <>
+                                                    <span className="badge badge-success">✓ {formatStamp(a.confirmed_at)}</span>
+                                                    <div className="text-muted" style={{ fontSize: '0.8rem' }}>
+                                                        {String(a.confirmed_by || '').toLowerCase() === String(employee.email || '').toLowerCase()
+                                                            ? 'by the holder' : `by IT (${a.confirmed_by})`}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <span className="text-muted">{a.quantity > 1 ? 'Not yet (IT confirms bulk)' : 'Not yet'}</span>
+                                            )}
                                         </td>
                                         <td>
                                             <div className="flex gap-1">

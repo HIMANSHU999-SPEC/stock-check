@@ -108,6 +108,7 @@ export const assetsAPI = {
     delete: (id) => apiCall(`/assets/${id}`, { method: 'DELETE' }),
     assign: (id, data) => apiCall(`/assets/${id}/assign`, { method: 'POST', body: JSON.stringify(data) }),
     return: (id, data) => apiCall(`/assets/${id}/return`, { method: 'POST', body: JSON.stringify(data) }),
+    confirmHolder: (id, assignmentId) => apiCall(`/assets/${id}/assignments/${assignmentId}/confirm`, { method: 'POST' }),
     reassign: (id, data) => apiCall(`/assets/${id}/reassign`, { method: 'POST', body: JSON.stringify(data) }),
     transfer: (id, data) => apiCall(`/assets/${id}/transfer`, { method: 'POST', body: JSON.stringify(data) }),
     // Move many assets to one campus: { ids, campus, location?, notes? }
@@ -171,6 +172,7 @@ export const employeesAPI = {
     delete: (id) => apiCall(`/employees/${id}`, { method: 'DELETE' }),
     deactivate: (id, note) =>
         apiCall(`/employees/${id}/deactivate`, { method: 'POST', body: JSON.stringify({ note }) }),
+    confirmAssets: (id) => apiCall(`/employees/${id}/confirm-assets`, { method: 'POST' }),
     reactivate: (id) => apiCall(`/employees/${id}/reactivate`, { method: 'POST' }),
     exportReport: (id) => downloadFile(`/employees/${id}/report`, `employee-${id}-report.pdf`),
 };

@@ -55,7 +55,7 @@ export default function MyAssets() {
     }
 
     async function confirmAll() {
-        const waiting = data.items.filter((item) => !item.confirmed_at && !item.open_reports);
+        const waiting = data.items.filter((item) => !item.confirmed_at && !item.open_reports && !item.bulk);
         setBusyId('all');
         setNotice('');
         try {
@@ -104,7 +104,8 @@ export default function MyAssets() {
     if (!data) return <div className="alert alert-danger">{error}</div>;
 
     const { person, items, returned, reports, reasons } = data;
-    const waiting = items.filter((item) => !item.confirmed_at && !item.open_reports);
+    // Bulk stock is counted by IT, so it is never waiting on the holder.
+    const waiting = items.filter((item) => !item.confirmed_at && !item.open_reports && !item.bulk);
     const confirmed = items.filter((item) => item.confirmed_at).length;
     const reasonChoices = Object.entries(reasons).filter(([key]) =>
         (reporting?.item ? ITEM_REASONS.includes(key) : !ITEM_REASONS.includes(key)));
@@ -147,7 +148,7 @@ export default function MyAssets() {
                         </div>
                         <div className="stat-card">
                             <div className="stat-value">{confirmed}</div>
-                            <div className="stat-label">Confirmed by you</div>
+                            <div className="stat-label">Confirmed</div>
                         </div>
                         <div className="stat-card">
                             <div className="stat-value">{waiting.length}</div>
@@ -199,7 +200,13 @@ export default function MyAssets() {
                                             {item.open_reports > 0 ? (
                                                 <span className="badge badge-warning">Reported to IT Support</span>
                                             ) : item.confirmed_at ? (
-                                                <span className="badge badge-success">✓ Confirmed {formatStamp(item.confirmed_at)}</span>
+                                                <span className="badge badge-success">
+                                                    ✓ {item.bulk ? 'Checked by IT' : 'Confirmed'} {formatStamp(item.confirmed_at)}
+                                                </span>
+                                            ) : item.bulk ? (
+                                                <span className="badge badge-info" title="Shared stock is counted by IT Support, so there is nothing for you to confirm">
+                                                    Bulk stock — IT confirms
+                                                </span>
                                             ) : (
                                                 <button
                                                     type="button" className="btn btn-sm btn-primary"

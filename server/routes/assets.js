@@ -931,6 +931,26 @@ router.post('/:id/assign', async (req, res) => {
     }
 });
 
+// IT confirms that a holder has what is assigned to them (one line)
+router.post('/:id/assignments/:assignmentId/confirm', (req, res) => {
+    try {
+        const open = assignments.openAssignments(req.params.id).find((row) => row.id === Number(req.params.assignmentId));
+        if (!open) {
+            return res.status(404).json({ error: 'That assignment is no longer open' });
+        }
+        const confirmed = assignments.confirmByStaff({ assignmentId: open.id }, req.user);
+        for (const row of confirmed) {
+            logActivity(req, {
+                action: 'asset_confirmed', entity_type: 'asset', entity_id: row.asset_id,
+                description: `Confirmed ${row.asset_number} (${row.asset_name}) is with ${assignments.holderLabel(row)}`
+            });
+        }
+        res.json({ confirmed: confirmed.length });
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
 // Return stock from a holder
 router.post('/:id/return', async (req, res) => {
     try {

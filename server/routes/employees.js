@@ -3,12 +3,13 @@ const router = express.Router();
 const db = require('../database');
 const PDFDocument = require('pdfkit');
 const { logActivity } = require('../utils/activity');
+const { confirmByStaff } = require('../services/assignments');
 
 // What a person currently holds comes from the open assignment records, so an
 // employee sharing bulk stock with others (or a room) is still counted.
 const HELD_ASSETS_SQL = `
       SELECT a.*, c.name as category_name, x.id as assignment_id, x.quantity as held_quantity, x.assigned_at,
-             x.confirmed_at
+             x.confirmed_at, x.confirmed_by
       FROM asset_assignments x
       JOIN assets a ON x.asset_id = a.id
       LEFT JOIN categories c ON a.category_id = c.id
@@ -143,6 +144,26 @@ router.put('/:id', (req, res) => {
 // and every past assignment stay exactly as they are; they simply can no
 // longer be given anything. Everything they hold has to come back first, so
 // nothing is left assigned to a leaver.
+// IT confirms everything recorded against a person or department in one go
+router.post('/:id/confirm-assets', (req, res) => {
+    try {
+        const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
+        if (!employee) {
+            return res.status(404).json({ error: 'Employee not found' });
+        }
+        const confirmed = confirmByStaff({ employeeId: employee.id }, req.user);
+        if (confirmed.length > 0) {
+            logActivity(req, {
+                action: 'asset_confirmed', entity_type: 'employee', entity_id: employee.id,
+                description: `Confirmed ${confirmed.length} item(s) are with ${employee.name}`
+            });
+        }
+        res.json({ confirmed: confirmed.length });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 router.post('/:id/deactivate', (req, res) => {
     try {
         const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);

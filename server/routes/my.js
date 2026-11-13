@@ -26,6 +26,7 @@ const MAX_OPEN_REPORTS = 10;
 
 const HELD_SQL = `
   SELECT x.id AS assignment_id, x.quantity, x.assigned_at, x.confirmed_at,
+         (a.quantity > 1) AS bulk,
          a.id AS asset_id, a.asset_number, a.name, a.brand, a.model, a.serial_number, a.campus,
          c.name AS category_name,
          (SELECT COUNT(*) FROM staff_reports r WHERE r.assignment_id = x.id AND r.status = 'open') AS open_reports
@@ -100,6 +101,10 @@ router.post('/assets/:assignmentId/confirm', (req, res) => {
         const row = heldRow(employee.id, req.params.assignmentId);
         if (!row) {
             return res.status(404).json({ error: 'That item is no longer on your list — refresh the page' });
+        }
+        // Shared stock is counted by IT, not confirmed by each holder.
+        if (row.bulk) {
+            return res.status(400).json({ error: 'This is bulk stock — IT Support confirms it. Use "Report a problem" if it is wrong.' });
         }
         if (!row.confirmed_at) {
             db.transaction(() => {
