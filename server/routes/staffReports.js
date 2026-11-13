@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const { addHistory } = require('../services/assignments');
 const { logActivity } = require('../utils/activity');
-const directory = require('../services/directory');
+const leaverAlerts = require('../services/leaverAlerts');
 
 // The IT side of "My assets": the problems staff have raised about their own
 // lists, and who has (and has not) confirmed what they hold. For
@@ -21,7 +21,7 @@ const REASON_LABELS = {
 router.get('/count', (req, res) => {
     try {
         const open = db.prepare("SELECT COUNT(*) AS n FROM staff_reports WHERE status = 'open'").get().n;
-        res.json({ open });
+        res.json({ open, leavers_holding: leaverAlerts.holdingCount() });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -38,7 +38,7 @@ router.get('/', (req, res) => {
 
         // Per person: how much they hold and how much of it they have confirmed.
         const confirmations = db.prepare(`
-          SELECT e.id AS employee_id, e.name, e.email, e.department,
+          SELECT e.id AS employee_id, e.name, e.email, e.department, e.kind,
                  COUNT(*) AS held,
                  SUM(CASE WHEN x.confirmed_at IS NOT NULL THEN 1 ELSE 0 END) AS confirmed,
                  MAX(x.confirmed_at) AS last_confirmed_at
@@ -61,28 +61,11 @@ router.get('/', (req, res) => {
 // recorded against them needs collecting or reassigning by IT.
 router.get('/leavers', async (req, res) => {
     try {
-        const staff = db.prepare(`
-          SELECT e.id AS employee_id, e.name, e.email, e.department,
-                 COUNT(a.id) AS held, COALESCE(SUM(CASE WHEN a.id IS NOT NULL THEN x.quantity END), 0) AS units
-          FROM employees e
-          LEFT JOIN asset_assignments x ON x.employee_id = e.id AND x.returned_at IS NULL
-          LEFT JOIN assets a ON a.id = x.asset_id AND a.deleted_at IS NULL
-          WHERE e.status != 'inactive'
-          GROUP BY e.id
-          ORDER BY e.name
-        `).all();
-        const result = await directory.accountStates(staff.map((s) => s.email), { refresh: req.query.refresh === '1' });
-        const all = staff
-            .map((s) => ({ ...s, account: result.states.get(String(s.email).trim().toLowerCase()) || 'unknown' }));
-        const people = all.filter((s) => ['disabled', 'no_licence', 'not_found'].includes(s.account));
-        res.json({
-            available: result.available,
-            checked_at: result.checked_at,
-            checked: staff.length,
-            unknown: all.filter((s) => s.account === 'unknown').length,
-            staff_licence: directory.STAFF_LICENCE,
-            people
-        });
+        const refresh = req.query.refresh === '1';
+        const result = await leaverAlerts.findLeavers({ refresh });
+        // A fresh look also updates the dashboard notice and sends any alert due.
+        if (refresh) leaverAlerts.run({ refresh: false });
+        res.json(result);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

@@ -172,6 +172,7 @@ export const employeesAPI = {
     delete: (id) => apiCall(`/employees/${id}`, { method: 'DELETE' }),
     deactivate: (id, note) =>
         apiCall(`/employees/${id}/deactivate`, { method: 'POST', body: JSON.stringify({ note }) }),
+    setKind: (id, kind) => apiCall(`/employees/${id}/kind`, { method: 'POST', body: JSON.stringify({ kind }) }),
     confirmAssets: (id) => apiCall(`/employees/${id}/confirm-assets`, { method: 'POST' }),
     reactivate: (id) => apiCall(`/employees/${id}/reactivate`, { method: 'POST' }),
     exportReport: (id) => downloadFile(`/employees/${id}/report`, `employee-${id}-report.pdf`),

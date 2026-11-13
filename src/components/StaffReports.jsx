@@ -220,8 +220,20 @@ export default function StaffReports() {
                                         </td>
                                         <td>
                                             {p.held === 0 ? 'Nothing' : `${p.held} item${p.held === 1 ? '' : 's'}${p.units > p.held ? ` (${p.units} units)` : ''}`}
+                                            {p.held > 0 && p.account !== 'not_found' && (
+                                                <div><span className="badge badge-danger">Not returned</span></div>
+                                            )}
                                         </td>
                                         <td>
+                                            {p.account === 'not_found' && (
+                                                <button
+                                                    type="button" className="btn btn-sm btn-secondary" style={{ marginRight: '0.4rem' }}
+                                                    title="A department or shared mailbox: stop listing it here"
+                                                    onClick={() => employeesAPI.setKind(p.employee_id, 'shared').then(() => Promise.all([loadLeavers(), load()])).catch((e) => setLeaversError(e.message))}
+                                                >
+                                                    It is a department
+                                                </button>
+                                            )}
                                             {p.held === 0 ? (
                                                 <button type="button" className="btn btn-sm btn-primary" onClick={() => markInactive(p)}>
                                                     Mark inactive
@@ -266,6 +278,9 @@ export default function StaffReports() {
                                 <tr key={row.employee_id}>
                                     <td>
                                         <Link to={`/employees/${row.employee_id}`} className="text-primary">{row.name}</Link>
+                                        {row.kind === 'shared' && (
+                                            <span className="badge badge-info" style={{ marginLeft: '0.5rem' }}>Department — IT confirms</span>
+                                        )}
                                         {leavers?.people?.some((p) => p.employee_id === row.employee_id) && (
                                             <span className="badge badge-danger" style={{ marginLeft: '0.5rem' }}>Cannot sign in</span>
                                         )}

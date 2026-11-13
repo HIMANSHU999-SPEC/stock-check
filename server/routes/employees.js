@@ -16,6 +16,7 @@ const HELD_ASSETS_SQL = `
       WHERE x.employee_id = ? AND x.returned_at IS NULL AND a.deleted_at IS NULL
       ORDER BY x.assigned_at DESC
     `;
+const KINDS = ['person', 'shared'];
 const HELD_COUNT_SQL = `
       SELECT COUNT(*) as count
       FROM asset_assignments x JOIN assets a ON x.asset_id = a.id
@@ -95,9 +96,9 @@ router.post('/', (req, res) => {
         const { name, email, department, phone } = req.body;
 
         const result = db.prepare(`
-      INSERT INTO employees (name, email, department, phone)
-      VALUES (?, ?, ?, ?)
-    `).run(name, email, department, phone);
+      INSERT INTO employees (name, email, department, phone, kind)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(name, email, department, phone, req.body.kind === 'shared' ? 'shared' : 'person');
 
         const newEmployee = db.prepare('SELECT * FROM employees WHERE id = ?').get(result.lastInsertRowid);
         logActivity(req, {
@@ -120,12 +121,13 @@ router.put('/:id', (req, res) => {
         }
 
         db.prepare(`
-      UPDATE employees SET name = ?, email = ?, department = ?, phone = ?
+      UPDATE employees SET name = ?, email = ?, department = ?, phone = ?, kind = ?
       WHERE id = ?
-    `).run(name, email, department, phone, req.params.id);
+    `).run(name, email, department, phone,
+            KINDS.includes(req.body.kind) ? req.body.kind : before.kind, req.params.id);
 
         const updatedEmployee = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
-        const changed = ['name', 'email', 'department', 'phone']
+        const changed = ['name', 'email', 'department', 'phone', 'kind']
             .filter((field) => (before[field] || '') !== (updatedEmployee[field] || ''))
             .map((field) => `${field}: "${before[field] || ''}" -> "${updatedEmployee[field] || ''}"`);
         if (changed.length > 0) {
@@ -140,10 +142,31 @@ router.put('/:id', (req, res) => {
     }
 });
 
-// Mark someone inactive (left, or no longer issued equipment). Their record
-// and every past assignment stay exactly as they are; they simply can no
-// longer be given anything. Everything they hold has to come back first, so
-// nothing is left assigned to a leaver.
+// Say whether an entry is a person or a department / shared mailbox
+router.post('/:id/kind', (req, res) => {
+    try {
+        const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
+        if (!employee) {
+            return res.status(404).json({ error: 'Employee not found' });
+        }
+        if (!KINDS.includes(req.body?.kind)) {
+            return res.status(400).json({ error: 'Choose person or shared' });
+        }
+        db.prepare('UPDATE employees SET kind = ? WHERE id = ?').run(req.body.kind, employee.id);
+        if (employee.kind !== req.body.kind) {
+            logActivity(req, {
+                action: 'employee_updated', entity_type: 'employee', entity_id: employee.id,
+                description: req.body.kind === 'shared'
+                    ? `Marked ${employee.name} as a department / shared mailbox, not a person`
+                    : `Marked ${employee.name} as a person`
+            });
+        }
+        res.json(db.prepare('SELECT * FROM employees WHERE id = ?').get(employee.id));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // IT confirms everything recorded against a person or department in one go
 router.post('/:id/confirm-assets', (req, res) => {
     try {
@@ -164,6 +187,10 @@ router.post('/:id/confirm-assets', (req, res) => {
     }
 });
 
+// Mark someone inactive (left, or no longer issued equipment). Their record
+// and every past assignment stay exactly as they are; they simply can no
+// longer be given anything. Everything they hold has to come back first, so
+// nothing is left assigned to a leaver.
 router.post('/:id/deactivate', (req, res) => {
     try {
         const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);

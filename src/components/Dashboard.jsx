@@ -40,13 +40,14 @@ export default function Dashboard() {
     const [loadError, setLoadError] = useState('');
     const [license, setLicense] = useState(null);
     const [openReports, setOpenReports] = useState(0);
+    const [leaversHolding, setLeaversHolding] = useState(0);
     const [campusModal, setCampusModal] = useState({ open: false, name: '', assets: [], loading: false });
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         // Only the people who deal with the reports are told about them.
         if (['viewer', 'inventory'].includes(document.body.dataset.access)) return;
-        staffReportsAPI.count().then((r) => setOpenReports(r.open || 0)).catch(() => {});
+        staffReportsAPI.count().then((r) => { setOpenReports(r.open || 0); setLeaversHolding(r.leavers_holding || 0); }).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -113,6 +114,14 @@ export default function Dashboard() {
                     <div className="card-body" style={{ color: 'var(--danger)' }}>
                         ⚠️ {loadError}
                     </div>
+                </div>
+            )}
+
+            {leaversHolding > 0 && (
+                <div className="alert alert-danger">
+                    {leaversHolding === 1 ? 'Someone who has left still has' : `${leaversHolding} people who have left still have`} equipment
+                    recorded against them. It needs returning to inventory, reassigning, or marking lost.{' '}
+                    <Link to="/staff-reports" className="text-primary">See who</Link>
                 </div>
             )}
 

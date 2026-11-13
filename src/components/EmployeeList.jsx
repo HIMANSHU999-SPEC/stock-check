@@ -15,7 +15,8 @@ export default function EmployeeList() {
         name: '',
         email: '',
         department: '',
-        phone: ''
+        phone: '',
+        kind: 'person'
     });
 
     useEffect(() => {
@@ -40,11 +41,12 @@ export default function EmployeeList() {
                 name: employee.name,
                 email: employee.email,
                 department: employee.department || '',
-                phone: employee.phone || ''
+                phone: employee.phone || '',
+                kind: employee.kind || 'person'
             });
         } else {
             setEditingEmployee(null);
-            setFormData({ name: '', email: '', department: '', phone: '' });
+            setFormData({ name: '', email: '', department: '', phone: '', kind: 'person' });
         }
         setShowModal(true);
     }
@@ -178,6 +180,9 @@ export default function EmployeeList() {
                                                 <Link to={`/employees/${employee.id}`} className="text-primary">
                                                     <strong>{employee.name}</strong>
                                                 </Link>
+                                                {employee.kind === 'shared' && (
+                                                    <span className="badge badge-info" style={{ marginLeft: '0.5rem' }}>Department</span>
+                                                )}
                                             </td>
                                             <td>{employee.email}</td>
                                             <td>{employee.department || '—'}</td>
@@ -323,6 +328,18 @@ export default function EmployeeList() {
                                     value={formData.phone}
                                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                                 />
+                            </div>
+
+                            <label className="flex items-center gap-1 mb-2">
+                                <input
+                                    type="checkbox"
+                                    checked={formData.kind === 'shared'}
+                                    onChange={(e) => setFormData({ ...formData, kind: e.target.checked ? 'shared' : 'person' })}
+                                />
+                                <span>This is a department or shared mailbox, not a person</span>
+                            </label>
+                            <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                Nobody signs in as a department, so IT confirms what it holds and it is never listed as a leaver.
                             </div>
 
                             <div className="flex gap-2 mt-3">

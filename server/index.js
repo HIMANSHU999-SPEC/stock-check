@@ -161,6 +161,9 @@ async function runDailyBackup() {
 runDailyBackup();
 setInterval(runDailyBackup, 24 * 60 * 60 * 1000);
 
+// Watch for leavers who still hold equipment and tell the people responsible.
+require('./services/leaverAlerts').startWorker();
+
 // Push queued asset changes to SharePoint (no-op until it is switched on).
 sharepoint.startWorker();
 

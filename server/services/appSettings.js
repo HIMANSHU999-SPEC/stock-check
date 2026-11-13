@@ -13,6 +13,8 @@ const FIELDS = {
     // Where staff reports about their own assets are sent. Empty means the
     // sending mailbox itself.
     support_email: { type: 'email', fallback: () => '' },
+    // Who is told when someone who has left still holds equipment.
+    leaver_alert_to: { type: 'emails', fallback: () => '' },
     mail_on_assign: { type: 'boolean', fallback: () => true },
     mail_on_return: { type: 'boolean', fallback: () => true },
     sharepoint_enabled: { type: 'boolean', fallback: () => Boolean(defaults.sharepointSite) },

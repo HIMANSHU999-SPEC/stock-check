@@ -453,6 +453,13 @@ function initializeDatabase() {
     db.exec(`ALTER TABLE employees ADD COLUMN deactivation_note TEXT`);
   }
 
+  // A staff-list entry is a person unless marked as a department or shared
+  // mailbox ("shared"): those hold equipment but nobody signs in as them,
+  // so they are never treated as leavers and IT confirms what they hold.
+  if (!employeeColumns.includes('kind')) {
+    db.exec(`ALTER TABLE employees ADD COLUMN kind TEXT NOT NULL DEFAULT 'person'`);
+  }
+
   // Who carried out each change to an asset (the signed-in user's email).
   const historyColumns = db.prepare(`PRAGMA table_info('asset_history')`).all().map((col) => col.name);
   if (!historyColumns.includes('performed_by')) {
@@ -491,6 +498,17 @@ function initializeDatabase() {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_staff_reports_status ON staff_reports (status, created_at)`);
+
+  // Leavers who still hold equipment, and whether the people responsible
+  // have been emailed about them yet. A row goes when the items are dealt with.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS leaver_alerts (
+      employee_id INTEGER PRIMARY KEY,
+      reason TEXT,
+      first_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      notified_at DATETIME
+    )
+  `);
 
   // Seed default license state
   ensureSetting('license', {

@@ -210,6 +210,16 @@ function Integrations() {
                         </div>
                     </div>
                     <div className="form-group">
+                        <label className="form-label">Tell these people when a leaver still holds equipment</label>
+                        <input
+                            type="text" className="form-control" placeholder="e.g. name@yourdomain.ac.uk, other@yourdomain.ac.uk"
+                            value={form.leaver_alert_to || ''} onChange={set('leaver_alert_to')}
+                        />
+                        <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                            Checked against Microsoft 365 a few times a day. Separate several addresses with commas.
+                        </div>
+                    </div>
+                    <div className="form-group">
                         <label className="form-label">Organisation name (used in emails and on stickers)</label>
                         <input type="text" className="form-control" value={form.org_name} onChange={set('org_name')} />
                     </div>

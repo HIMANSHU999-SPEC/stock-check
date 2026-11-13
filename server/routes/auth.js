@@ -167,6 +167,9 @@ router.get('/sso/callback', async (req, res) => {
       if (!employee) {
         return fail(`${identity.emails[0]} is not on the staff list in this system. If you have been given equipment, ask IT Support to add you.`);
       }
+      if (employee.kind === 'shared') {
+        return fail(`${identity.emails[0]} is a department or shared mailbox here, not a personal account. Sign in with your own account.`);
+      }
       if (employee.status === 'inactive') {
         return fail(`${identity.emails[0]} is marked as no longer active. Please contact IT Support.`);
       }
