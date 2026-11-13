@@ -43,7 +43,7 @@ export default function RecycleBin() {
     return (
         <div>
             <div className="flex justify-between items-center mb-3">
-                <h2>Recycle Bin (90-day retention)</h2>
+                <h2>Recycle Bin</h2>
                 <div className="flex items-center gap-2">
                     <input
                         type="password"
@@ -55,6 +55,11 @@ export default function RecycleBin() {
                     />
                 </div>
             </div>
+
+            <p className="text-muted mb-3">
+                Deleted assets are kept here with their full history and can be restored at any time.
+                Nothing is removed automatically.
+            </p>
 
             {loading ? (
                 <div className="spinner"></div>
@@ -69,14 +74,13 @@ export default function RecycleBin() {
                                     <th>Campus</th>
                                     <th>Supplier</th>
                                     <th>Deleted At</th>
-                                    <th>Restore Until</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {items.length === 0 ? (
                                     <tr>
-                                        <td colSpan="7" className="text-center text-muted">
+                                        <td colSpan="6" className="text-center text-muted">
                                             No items in recycle bin
                                         </td>
                                     </tr>
@@ -88,7 +92,6 @@ export default function RecycleBin() {
                                             <td>{item.campus || 'N/A'}</td>
                                             <td>{item.supplier_name || 'N/A'}</td>
                                             <td>{item.deleted_at}</td>
-                                            <td>{item.can_restore_until}</td>
                                             <td>
                                                 <button
                                                     className="btn btn-sm btn-primary"

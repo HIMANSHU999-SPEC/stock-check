@@ -879,9 +879,11 @@ router.delete('/:id', (req, res) => {
         const userId = req.user?.id || null;
 
         const doDelete = db.transaction(() => {
+            // Kept indefinitely: nothing purges the bin. can_restore_until is a
+            // leftover NOT NULL column from the old 90-day rule and is ignored.
             db.prepare(`
         INSERT INTO recycle_bin (entity_type, entity_id, payload, deleted_at, deleted_by, can_restore_until)
-        VALUES ('asset', ?, ?, datetime('now','localtime'), ?, datetime('now','localtime', '+90 days'))
+        VALUES ('asset', ?, ?, datetime('now','localtime'), ?, '9999-12-31 00:00:00')
       `).run(asset.id, JSON.stringify(asset), userId);
 
             db.prepare(`
@@ -900,7 +902,7 @@ router.delete('/:id', (req, res) => {
         doDelete();
         sharepoint.enqueue(asset.id);
 
-        res.json({ message: 'Asset moved to recycle bin (retained for 90 days)' });
+        res.json({ message: 'Asset moved to the recycle bin. Its history is kept and it can be restored at any time.' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -1112,15 +1114,6 @@ router.post('/:id/restore', (req, res) => {
 
         if (!binItem) {
             return res.status(404).json({ error: 'No recycle bin entry for this asset' });
-        }
-
-        const isExpired = db.prepare(`
-      SELECT CASE WHEN can_restore_until <= datetime('now','localtime') THEN 1 ELSE 0 END as expired
-      FROM recycle_bin WHERE id = ?
-    `).get(binItem.id)?.expired;
-
-        if (isExpired) {
-            return res.status(410).json({ error: 'Recycle bin entry expired and cannot be restored' });
         }
 
         let payload = {};
