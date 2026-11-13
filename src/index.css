@@ -1742,3 +1742,65 @@ body:not(.light-mode) .campus-badge:hover {
 .modal .table td:first-child {
   white-space: nowrap;
 }
+
+/* ---- Logo ---------------------------------------------------------------- */
+/* The shield alone, on a clean white tile: crisp at this size, where the full
+   wordmark with its small tagline turned to a blur. */
+.navbar-brand img {
+  height: 42px;
+  width: 42px;
+  padding: 5px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.navbar-brand h1 {
+  letter-spacing: 0.01em;
+}
+
+/* Sign-in page: the full logo sits inside the white card, so there is no
+   white box floating on the tinted page. */
+.login-card {
+  padding: var(--spacing-xl);
+}
+
+.login-brand {
+  text-align: center;
+  margin-bottom: var(--spacing-lg);
+  padding-bottom: var(--spacing-lg);
+  border-bottom: 1px solid var(--border);
+}
+
+.login-brand img {
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  margin-bottom: var(--spacing-md);
+}
+
+.login-brand h3 {
+  margin-bottom: 0.25rem;
+}
+
+.login-brand p {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .navbar-brand img {
+    height: 36px;
+    width: 36px;
+    padding: 4px;
+  }
+
+  .login-card {
+    padding: var(--spacing-lg);
+  }
+}
+
+/* A wide table must not stretch its grid cell (and the page) on a phone. */
+.grid > * {
+  min-width: 0;
+}

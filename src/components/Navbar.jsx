@@ -80,7 +80,7 @@ export default function Navbar({ user, onLogout, license }) {
             <div className="container navbar-content">
                 <Link to="/" className="navbar-brand">
                     <img
-                        src="/laat-logo.png"
+                        src="/laat-shield.png"
                         alt="London Academy for Applied Technology"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />

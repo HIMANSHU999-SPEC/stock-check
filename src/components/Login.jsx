@@ -58,19 +58,16 @@ export default function Login({ onLogin, license, authLoading, user }) {
     }
 
     return (
-        <div style={{ maxWidth: '540px', margin: '0 auto', padding: '3rem 0 2rem' }}>
-        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-            <img
-                src="/laat-logo.png"
-                alt="London Academy for Applied Technology"
-                style={{ height: '84px', width: 'auto' }}
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
-        </div>
-        <div className="card">
-            <div className="card-header">
-                <h3 className="card-title">Login</h3>
-                <p className="text-muted" style={{ marginBottom: 0 }}>
+        <div style={{ maxWidth: '480px', margin: '0 auto', padding: '4rem 0 2rem' }}>
+        <div className="card login-card">
+            <div className="login-brand">
+                <img
+                    src="/laat-logo-full.png"
+                    alt="London Academy for Applied Technology"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+                <h3>Stock Management System</h3>
+                <p className="text-muted">
                     {sso.enabled
                         ? 'Sign in with your work Microsoft account.'
                         : 'Sign in with your administrator or sub-administrator credentials.'}
