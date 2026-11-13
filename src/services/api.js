@@ -349,6 +349,7 @@ export const myAPI = {
 export const staffReportsAPI = {
     list: () => apiCall('/staff-reports'),
     count: () => apiCall('/staff-reports/count'),
+    leavers: (refresh = false) => apiCall(`/staff-reports/leavers${refresh ? '?refresh=1' : ''}`),
     resolve: (id, note) => apiCall(`/staff-reports/${id}/resolve`, { method: 'POST', body: JSON.stringify({ note }) }),
 };
 

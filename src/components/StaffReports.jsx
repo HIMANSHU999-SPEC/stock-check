@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { staffReportsAPI } from '../services/api';
+import { staffReportsAPI, employeesAPI } from '../services/api';
 import { formatStamp } from './MyAssets';
 
 /**
@@ -15,6 +15,10 @@ export default function StaffReports() {
     const [note, setNote] = useState('');
     const [saving, setSaving] = useState(false);
     const [closeError, setCloseError] = useState('');
+    // Asking Microsoft 365 takes a few seconds, so it loads on its own.
+    const [leavers, setLeavers] = useState(null);
+    const [leaversBusy, setLeaversBusy] = useState(false);
+    const [leaversError, setLeaversError] = useState('');
 
     async function load() {
         try {
@@ -25,7 +29,32 @@ export default function StaffReports() {
         }
     }
 
-    useEffect(() => { load(); }, []);
+    async function loadLeavers(refresh = false) {
+        setLeaversBusy(true);
+        setLeaversError('');
+        try {
+            setLeavers(await staffReportsAPI.leavers(refresh));
+        } catch (err) {
+            setLeaversError(err.message || 'Could not check Microsoft 365');
+        } finally {
+            setLeaversBusy(false);
+        }
+    }
+
+    async function markInactive(person) {
+        const reason = person.account === 'disabled'
+            ? 'Microsoft 365 account is disabled'
+            : 'No Microsoft 365 account with this email';
+        if (!window.confirm(`Mark ${person.name} inactive? Their record and history are kept, and they can be reactivated.`)) return;
+        try {
+            await employeesAPI.deactivate(person.employee_id, `${reason} — marked inactive from Staff reports`);
+            await Promise.all([loadLeavers(), load()]);
+        } catch (err) {
+            setLeaversError(err.message);
+        }
+    }
+
+    useEffect(() => { load(); loadLeavers(); }, []);
 
     async function closeReport(e) {
         e.preventDefault();
@@ -132,6 +161,83 @@ export default function StaffReports() {
             </div>
 
             <div className="card mb-3">
+                <div className="card-header flex justify-between items-center" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div>
+                        <h3 className="card-title">
+                            Staff who may have left
+                            {leavers?.people?.length > 0 && (
+                                <span className="badge badge-danger" style={{ marginLeft: '0.5rem' }}>{leavers.people.length}</span>
+                            )}
+                        </h3>
+                        <div className="text-muted" style={{ fontSize: '0.9rem' }}>
+                            Active on the staff list here, but their Microsoft 365 account is disabled or does not
+                            exist, so they cannot sign in to confirm anything.
+                        </div>
+                    </div>
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => loadLeavers(true)} disabled={leaversBusy}>
+                        {leaversBusy ? 'Checking Microsoft 365…' : 'Check again'}
+                    </button>
+                </div>
+                {leaversError && <div className="card-body"><div className="alert alert-danger" style={{ marginBottom: 0 }}>{leaversError}</div></div>}
+                {!leavers && !leaversError && <div className="card-body text-muted">Checking Microsoft 365…</div>}
+                {leavers && !leavers.available && (
+                    <div className="card-body text-muted">Microsoft 365 is not connected on this server, so this check is not available.</div>
+                )}
+                {leavers && leavers.available && (
+                    <div className="table-container">
+                        <table className="table">
+                            <thead>
+                                <tr><th>Person</th><th>Microsoft 365 account</th><th>Still recorded against them</th><th>What to do</th></tr>
+                            </thead>
+                            <tbody>
+                                {leavers.people.length === 0 ? (
+                                    <tr><td colSpan="4" className="text-center text-muted">
+                                        Everyone active on the staff list has a working Microsoft 365 account
+                                    </td></tr>
+                                ) : leavers.people.map((p) => (
+                                    <tr key={p.employee_id}>
+                                        <td>
+                                            <Link to={`/employees/${p.employee_id}`} className="text-primary">{p.name}</Link>
+                                            <div className="text-muted" style={{ fontSize: '0.85rem' }}>{p.email}</div>
+                                        </td>
+                                        <td>
+                                            {p.account === 'disabled'
+                                                ? <span className="badge badge-danger">Disabled</span>
+                                                : <span className="badge badge-warning">No account</span>}
+                                            {p.account === 'not_found' && (
+                                                <div className="text-muted" style={{ fontSize: '0.8rem' }}>
+                                                    A department or shared name, or a deleted account
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td>
+                                            {p.held === 0 ? 'Nothing' : `${p.held} item${p.held === 1 ? '' : 's'}${p.units > p.held ? ` (${p.units} units)` : ''}`}
+                                        </td>
+                                        <td>
+                                            {p.held === 0 ? (
+                                                <button type="button" className="btn btn-sm btn-primary" onClick={() => markInactive(p)}>
+                                                    Mark inactive
+                                                </button>
+                                            ) : (
+                                                <Link to={`/employees/${p.employee_id}`} className="btn btn-sm btn-secondary">
+                                                    Return or reassign first
+                                                </Link>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+                {leavers?.available && leavers.unknown > 0 && (
+                    <div className="card-body text-muted" style={{ fontSize: '0.85rem' }}>
+                        {leavers.unknown} of {leavers.checked} could not be checked just now; use “Check again”.
+                    </div>
+                )}
+            </div>
+
+            <div className="card mb-3">
                 <div className="card-header">
                     <h3 className="card-title">Confirmations</h3>
                     <div className="text-muted" style={{ fontSize: '0.9rem' }}>
@@ -152,6 +258,9 @@ export default function StaffReports() {
                                 <tr key={row.employee_id}>
                                     <td>
                                         <Link to={`/employees/${row.employee_id}`} className="text-primary">{row.name}</Link>
+                                        {leavers?.people?.some((p) => p.employee_id === row.employee_id) && (
+                                            <span className="badge badge-danger" style={{ marginLeft: '0.5rem' }}>Cannot sign in</span>
+                                        )}
                                         <div className="text-muted" style={{ fontSize: '0.85rem' }}>{row.email}</div>
                                     </td>
                                     <td>{row.department || '—'}</td>

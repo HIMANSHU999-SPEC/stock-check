@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const { addHistory } = require('../services/assignments');
 const { logActivity } = require('../utils/activity');
+const directory = require('../services/directory');
 
 // The IT side of "My assets": the problems staff have raised about their own
 // lists, and who has (and has not) confirmed what they hold. For
@@ -50,6 +51,37 @@ router.get('/', (req, res) => {
         `).all();
 
         res.json({ reports, confirmations });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// People still active on the staff list whose Microsoft 365 account is
+// disabled or gone. They cannot sign in to confirm anything, so what is
+// recorded against them needs collecting or reassigning by IT.
+router.get('/leavers', async (req, res) => {
+    try {
+        const staff = db.prepare(`
+          SELECT e.id AS employee_id, e.name, e.email, e.department,
+                 COUNT(a.id) AS held, COALESCE(SUM(CASE WHEN a.id IS NOT NULL THEN x.quantity END), 0) AS units
+          FROM employees e
+          LEFT JOIN asset_assignments x ON x.employee_id = e.id AND x.returned_at IS NULL
+          LEFT JOIN assets a ON a.id = x.asset_id AND a.deleted_at IS NULL
+          WHERE e.status != 'inactive'
+          GROUP BY e.id
+          ORDER BY e.name
+        `).all();
+        const result = await directory.accountStates(staff.map((s) => s.email), { refresh: req.query.refresh === '1' });
+        const people = staff
+            .map((s) => ({ ...s, account: result.states.get(String(s.email).trim().toLowerCase()) || 'unknown' }))
+            .filter((s) => s.account === 'disabled' || s.account === 'not_found');
+        res.json({
+            available: result.available,
+            checked_at: result.checked_at,
+            checked: staff.length,
+            unknown: staff.length - [...result.states.values()].filter((v) => v !== 'unknown').length,
+            people
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
