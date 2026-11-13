@@ -172,7 +172,15 @@ if (process.env.NODE_ENV === 'production') {
     });
 }
 
-app.listen(PORT, () => {
+// Express 5 reports a failed listen (e.g. the port is already taken) to this
+// callback instead of throwing. Exit so a second copy can never sit alive
+// without the port, quietly running the purge and backup jobs against the
+// live database.
+app.listen(PORT, (error) => {
+    if (error) {
+        console.error(`Could not listen on port ${PORT}: ${error.message}`);
+        process.exit(1);
+    }
     console.log(`Server running on port ${PORT}`);
     console.log(`API available at http://localhost:${PORT}/api`);
 });
