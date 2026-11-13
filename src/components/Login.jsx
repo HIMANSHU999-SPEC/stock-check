@@ -4,18 +4,17 @@ import { authAPI } from '../services/api';
 
 const STORED_EMAIL_KEY = 'saved_login_email';
 
-export default function Login({ onLogin, onActivate, license, authLoading }) {
+export default function Login({ onLogin, license, authLoading, user }) {
     const navigate = useNavigate();
     const location = useLocation();
     // Where the person was heading before being asked to sign in (for
     // example the asset a scanned sticker points to).
     const returnTo = location.state?.from || '/';
     const [sso, setSso] = useState({ enabled: false, password_login: true });
-    const [email, setEmail] = useState('itsupport@laat.ac.uk');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState(() => new URLSearchParams(location.search).get('sso_error') || '');
     const [message, setMessage] = useState('');
-    const [code, setCode] = useState('');
     const [busy, setBusy] = useState(false);
     const [remember, setRemember] = useState(true);
 
@@ -44,8 +43,31 @@ export default function Login({ onLogin, onActivate, license, authLoading }) {
         }
     }
 
+    // Signed in but the licence has lapsed. It can only be renewed on the
+    // server, so there is nothing to do here but say who to ask.
+    if (user && license?.expired) {
+        return (
+            <div className="card" style={{ maxWidth: '540px', margin: '2rem auto' }}>
+                <div className="card-body">
+                    <div className="alert alert-danger" style={{ marginBottom: 0 }}>
+                        The licence for this system needs renewing. Please contact the administrator.
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     return (
-        <div className="card" style={{ maxWidth: '540px', margin: '2rem auto' }}>
+        <div style={{ maxWidth: '540px', margin: '0 auto', padding: '3rem 0 2rem' }}>
+        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+            <img
+                src="/laat-logo.png"
+                alt="London Academy for Applied Technology"
+                style={{ height: '84px', width: 'auto' }}
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+        </div>
+        <div className="card">
             <div className="card-header">
                 <h3 className="card-title">Login</h3>
                 <p className="text-muted" style={{ marginBottom: 0 }}>
@@ -57,13 +79,17 @@ export default function Login({ onLogin, onActivate, license, authLoading }) {
             <div className="card-body">
                 {error && <div className="alert alert-danger">{error}</div>}
                 {message && <div className="alert alert-success">{message}</div>}
+                {license?.expired && (
+                    <div className="alert alert-danger">
+                        The licence for this system needs renewing. Please contact the administrator.
+                    </div>
+                )}
 
                 {sso.enabled && (
                     <>
                         <a
                             href={authAPI.ssoLoginUrl(returnTo)}
                             className="btn btn-microsoft w-100"
-                            aria-disabled={license?.expired ? 'true' : undefined}
                         >
                             <svg width="18" height="18" viewBox="0 0 21 21" aria-hidden="true">
                                 <rect x="1" y="1" width="9" height="9" fill="#f25022" />
@@ -119,58 +145,7 @@ export default function Login({ onLogin, onActivate, license, authLoading }) {
                 )}
             </div>
 
-            <div className="card-header">
-                <h4 className="card-title" style={{ marginBottom: 0 }}>Activation</h4>
-                <p className="text-muted" style={{ marginBottom: 0 }}>
-                    Enter your activation code to start a trial or extend your license.
-                </p>
-            </div>
-            <div className="card-body">
-                <div className="form-group">
-                    <label className="form-label">Activation Code</label>
-                    <input
-                        type="text"
-                        className="form-control"
-                        value={code}
-                        onChange={(e) => setCode(e.target.value)}
-                        placeholder="Enter activation code"
-                    />
-                </div>
-                <button
-                    onClick={async (e) => {
-                        e.preventDefault();
-                        if (!code) return;
-                        setBusy(true);
-                        setError('');
-                        setMessage('');
-                        try {
-                            const res = await onActivate(code);
-                            setMessage(res?.message || 'License updated');
-                            setCode('');
-                        } catch (err) {
-                            setError(err.message || 'Activation failed');
-                        } finally {
-                            setBusy(false);
-                        }
-                    }}
-                    className="btn btn-secondary w-100"
-                    disabled={busy}
-                >
-                    Activate / Extend
-                </button>
-
-                <div className="mt-3">
-                    <div className="text-muted">License status</div>
-                    <div style={{ fontWeight: 'bold' }}>
-                        {license
-                            ? `${license.status ?? 'unknown'}${license.expired ? ' (expired)' : ''}`
-                            : 'Not activated'}
-                    </div>
-                    {license?.expires_at && (
-                        <div>Expires: {new Date(license.expires_at).toLocaleString()}</div>
-                    )}
-                </div>
-            </div>
+        </div>
         </div>
     );
 }

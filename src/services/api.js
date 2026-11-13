@@ -337,7 +337,6 @@ export const authAPI = {
     login: (email, password) => apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
     me: () => apiCall('/auth/me'),
     license: () => apiCall('/auth/license'),
-    activate: (code) => apiCall('/auth/activate', { method: 'POST', body: JSON.stringify({ code }) }),
     ssoConfig: () => apiCall('/auth/sso/config'),
     // A full-page navigation, not a fetch: the browser has to follow the
     // redirect to Microsoft and back.

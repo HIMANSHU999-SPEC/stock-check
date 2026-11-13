@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { settingsAPI } from '../services/api';
+import LicencePanel from './LicencePanel';
 
 const TABS = [
     { key: 'integrations', label: 'Microsoft 365' },
     { key: 'templates', label: 'Email templates' },
-    { key: 'log', label: 'Email log' }
+    { key: 'log', label: 'Email log' },
+    { key: 'licence', label: 'Licence' }
 ];
 
 function StatusPill({ ok, okText, offText }) {
@@ -508,7 +510,7 @@ function EmailLog() {
     );
 }
 
-export default function Settings({ currentUser }) {
+export default function Settings({ currentUser, license }) {
     const [tab, setTab] = useState('integrations');
 
     if (currentUser?.role !== 'admin') {
@@ -537,6 +539,7 @@ export default function Settings({ currentUser }) {
             {tab === 'integrations' && <Integrations />}
             {tab === 'templates' && <Templates />}
             {tab === 'log' && <EmailLog />}
+            {tab === 'licence' && <LicencePanel license={license} />}
         </div>
     );
 }

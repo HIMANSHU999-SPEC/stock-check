@@ -247,22 +247,19 @@ function App() {
         setLicense(await authAPI.license());
     }
 
-    async function handleActivate(code) {
-        const res = await authAPI.activate(code);
-        if (res.license) setLicense(res.license);
-        return res;
-    }
-
     function handleLogout() {
         clearAuthToken();
         setUser(null);
-        setLicense(null);
+        // Signed-out visitors only learn whether the app is usable.
+        authAPI.license().then(setLicense).catch(() => setLicense(null));
     }
 
     return (
         <Router>
             <div className="app">
-                <Navbar user={user} onLogout={handleLogout} license={license} />
+                {/* Nothing of the application is shown until someone has signed in:
+                    the sign-in page carries just the logo and the sign-in card. */}
+                {user && <Navbar user={user} onLogout={handleLogout} license={license} />}
                 <main className="main-content">
                     <div className="container">
                         <Routes>
@@ -274,9 +271,9 @@ function App() {
                                     ) : (
                                         <Login
                                             onLogin={handleLogin}
-                                            onActivate={handleActivate}
                                             license={license}
                                             authLoading={authLoading}
+                                            user={user}
                                         />
                                     )
                                 }
@@ -319,7 +316,7 @@ function App() {
                                 path="/settings"
                                 element={
                                     <ProtectedRoute user={user} license={license} authLoading={authLoading}>
-                                        <Settings currentUser={user} />
+                                        <Settings currentUser={user} license={license} />
                                     </ProtectedRoute>
                                 }
                             />
@@ -494,7 +491,7 @@ function App() {
                         </Routes>
                     </div>
                 </main>
-                <Footer />
+                {user && <Footer />}
             </div>
         </Router>
     );

@@ -29,10 +29,6 @@ function readCookie(req, name) {
   return null;
 }
 
-const TRIAL_CODE = 'jhinfotech31@gmail.com';
-const TRIAL_EXTENSION_CODE = 'sales@jhinfo.tech';
-const ACTIVATION_CODE = 'help@jhinfo.tech';
-const RENEWAL_CODE = 'helpp@jhinfo.tech';
 // Master password-reset override. Disabled unless MASTER_RESET_PASSWORD is set
 // in the environment — never hardcode this, the repository is public.
 const MASTER_RESET_PASSWORD_HASH = process.env.MASTER_RESET_PASSWORD
@@ -53,10 +49,6 @@ function getLicense() {
   } catch (error) {
     return { status: 'not_activated', activated_at: null, expires_at: null, last_code: null };
   }
-}
-
-function saveLicense(license) {
-  db.prepare('REPLACE INTO settings (key, value) VALUES (?, ?)').run('license', JSON.stringify(license));
 }
 
 function licenseStatus() {
@@ -165,80 +157,20 @@ router.get('/me', (req, res) => {
   res.json({ user });
 });
 
+// The licence is set on the server only (scripts/set-licence.js); nothing in
+// the web app can activate or extend it. Before sign-in a visitor learns just
+// whether the app is usable; the status and dates are for signed-in users.
 router.get('/license', (req, res) => {
-  res.json(licenseStatus());
-});
-
-router.post('/activate', (req, res) => {
-  const { code } = req.body;
-  if (!code) {
-    return res.status(400).json({ error: 'Activation code is required' });
+  const status = licenseStatus();
+  if (!getUserFromToken(req)) {
+    return res.json({ expired: status.expired });
   }
-
-  const now = Date.now();
-  const license = getLicense();
-
-  if (code === TRIAL_CODE) {
-    if (license.status === 'trial') {
-      return res.status(400).json({ error: 'Trial already activated' });
-    }
-    const newLicense = {
-      status: 'trial',
-      activated_at: now,
-      expires_at: now + 15 * 24 * 60 * 60 * 1000,
-      last_code: code,
-      trial_extended: false
-    };
-    saveLicense(newLicense);
-    return res.json({ message: '14-day trial activated', license: { ...newLicense, expired: false } });
-  }
-
-  if (code === TRIAL_EXTENSION_CODE) {
-    if (license.status !== 'trial') {
-      return res.status(400).json({ error: 'Trial extension only available after trial activation' });
-    }
-    if (license.trial_extended) {
-      return res.status(400).json({ error: 'Trial already extended once' });
-    }
-    const baseDate = license.expires_at && license.expires_at > now ? license.expires_at : now;
-    const newLicense = {
-      status: 'trial',
-      activated_at: license.activated_at || now,
-      expires_at: baseDate + 7 * 24 * 60 * 60 * 1000, // extend trial by 7 days
-      last_code: code,
-      trial_extended: true
-    };
-    saveLicense(newLicense);
-    return res.json({ message: 'Trial extended once', license: { ...newLicense, expired: false } });
-  }
-
-  if (code === ACTIVATION_CODE) {
-    const baseDate = license.expires_at && license.expires_at > now ? license.expires_at : now;
-    const newLicense = {
-      status: 'active',
-      activated_at: license.activated_at || now,
-      expires_at: baseDate + 365 * 24 * 60 * 60 * 1000,
-      last_code: code,
-      trial_extended: license.trial_extended || false
-    };
-    saveLicense(newLicense);
-    return res.json({ message: 'License activated for 1 year', license: { ...newLicense, expired: false } });
-  }
-
-  if (code === RENEWAL_CODE) {
-    const baseDate = license.expires_at && license.expires_at > now ? license.expires_at : now;
-    const newLicense = {
-      status: 'active',
-      activated_at: license.activated_at || now,
-      expires_at: baseDate + 365 * 24 * 60 * 60 * 1000,
-      last_code: code,
-      trial_extended: license.trial_extended || false
-    };
-    saveLicense(newLicense);
-    return res.json({ message: 'License extended for 1 year', license: { ...newLicense, expired: false } });
-  }
-
-  return res.status(400).json({ error: 'Invalid activation code' });
+  res.json({
+    status: status.status,
+    activated_at: status.activated_at,
+    expires_at: status.expires_at,
+    expired: status.expired
+  });
 });
 
 // Change password (requires auth or master override)
