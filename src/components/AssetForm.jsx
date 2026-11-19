@@ -153,7 +153,7 @@ export default function AssetForm() {
             } catch (err) {
                 // suggestions are a convenience; the form works without them
             }
-        }, 400);
+        }, 700);
         return () => {
             cancelled = true;
             clearTimeout(timer);
@@ -246,8 +246,8 @@ export default function AssetForm() {
                                 </select>
                                 {!isEdit && suggestion?.category && (auto.category_id || !formData.category_id) && (
                                     <div className="text-muted" style={{ fontSize: '0.85rem' }}>
-                                        Suggested from the name{suggestion.sure ? '' : ' — not certain, please check'}.
-                                        Change it if it is wrong.
+                                        {suggestion.source === 'ai' ? '✨ Suggested by AI' : 'Suggested from the name'}
+                                        {suggestion.sure ? '' : ' — not certain, please check'}. Change it if it is wrong.
                                     </div>
                                 )}
                             </div>

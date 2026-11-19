@@ -331,6 +331,21 @@ function initializeDatabase() {
     )
   `);
 
+  // What the AI made of each asset, kept so it is only asked again when the
+  // asset's name, model or brand changes (input_hash).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_suggestions (
+      asset_id INTEGER PRIMARY KEY,
+      input_hash TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT '',
+      brand TEXT NOT NULL DEFAULT '',
+      electronic INTEGER NOT NULL DEFAULT 0,
+      confident INTEGER NOT NULL DEFAULT 0,
+      model TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
   // Editable email templates (subject + plain-text body with {{placeholders}})
   db.exec(`
     CREATE TABLE IF NOT EXISTS email_templates (

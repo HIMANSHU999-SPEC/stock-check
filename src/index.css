@@ -2031,3 +2031,36 @@ body[data-access="viewer"] .download-only { display: none !important; }
 .rule-chip button:hover {
   color: var(--danger);
 }
+
+/* Tidy-up: the AI panel */
+.ai-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md) var(--spacing-xl);
+  border-left: 4px solid var(--primary);
+}
+
+.ai-panel > div:first-child {
+  flex: 1 1 26rem;
+}
+
+.ai-panel p {
+  margin-bottom: 0;
+}
+
+.ai-progress {
+  height: 10px;
+  margin-top: var(--spacing-sm);
+  background: rgba(127, 127, 127, 0.18);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.ai-progress span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transition: width 0.4s ease;
+}

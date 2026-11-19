@@ -275,6 +275,9 @@ export default function AssetList() {
                     <button onClick={exportExcel} className="download-only btn btn-secondary">
                         📥 Export Excel (filtered)
                     </button>
+                    <Link to="/assets/tidy" className="write-only btn btn-secondary">
+                        ✨ Categorise with AI
+                    </Link>
                     <Link to="/assets/import-invoice" className="write-only btn btn-secondary">
                         📄 Import Invoice
                     </Link>

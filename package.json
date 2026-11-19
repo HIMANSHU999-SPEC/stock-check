@@ -16,6 +16,7 @@
     "vite": "^7.2.4"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.10.0",
     "archiver": "^7.0.1",
     "better-sqlite3": "^12.4.6",
     "cors": "^2.8.5",

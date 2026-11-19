@@ -11,7 +11,7 @@ Built and maintained by **Himanshu Chadha**. Hosting for the deployed instance i
 - **Asset management** — register, track and assign every organisational asset
 - **Automatic asset numbering** — `AST-YYYY-NNNN`, generated on creation
 - **Assign, reassign, return** — to a person or to a room; bulk stock (chairs, tables, cables) can be split across several holders, returned in part, and returned in a recorded condition
-- **Auto-categorising** — an asset's category and brand are worked out from its name (on the form, in Excel and invoice imports), with your own "names containing X are Y" rules on top; a tidy-up screen proposes fixes for the existing register and applies only what you approve
+- **Auto-categorising, with AI** — an asset's category and brand are worked out from its name (on the form, in Excel and invoice imports). With an Anthropic API key configured, Claude does the working out; without one, built-in rules do. Your own "names containing X are Y" rules win over both. A tidy-up screen proposes fixes for the existing register and applies only what you approve
 - **What we have** — dashboard tiles for laptops, desktops and every other type; click one to split it by brand, click a brand to see those assets
 - **Stock by campus** — quantities per campus and category: assigned, available, in repair, written off; move items between campuses with a history trail
 - **QR stickers and scanning** — print stickers on A4 label sheets or a label printer; scanning one with a phone or handheld scanner opens the asset, ready to assign or book back in
@@ -71,6 +71,8 @@ For production deployment and the full environment variable reference, see `DEPL
 
 **Tidy up** — Assets → Tidy up lists every asset with no real category, a missing or oddly spelt brand, or (for electronics) no campus, with a suggested fix for each. Untick or change anything, then Apply. Electronics with no campus go under Towerhill (set `HOME_CAMPUS` to change it), ready to be moved on with the bulk move on the asset list. Categories somebody chose by hand are only ever questioned, never changed unless ticked.
 
+**Categorise with AI** — on the Tidy up screen, press *Categorise with AI* to have Claude look at every asset. It runs in the background and its answers appear in the same list as suggestions, marked ✨ AI; nothing changes until you apply them. It asks about each asset once, and again only if the name or model changes. To turn it on, set `ANTHROPIC_API_KEY` in `.env` and restart. Only each asset's name, model, brand and current category are sent to Anthropic — never holders, locations, serial numbers or prices. If the AI cannot be reached, adding and importing assets carries on with the built-in rules.
+
 **Stock by campus** — Inventory shows each campus broken down by category, with links through to the matching assets.
 
 ### Reports
@@ -98,7 +100,8 @@ stock-check/
 │   │                       # books, borrowers, users, auth, reports
 │   ├── services/
 │   │   ├── assignments.js  # assign / reassign / return / transfer rules
-│   │   ├── classifier.js   # category and brand from an asset's name
+│   │   ├── aiClassifier.js # category and brand from Claude (Anthropic API)
+│   │   ├── classifier.js   # the same from built-in rules (fallback)
 │   │   ├── tidy.js         # defaults for new assets, tidy-up of existing ones
 │   │   ├── sso.js          # Microsoft sign-in (OpenID Connect + PKCE)
 │   │   ├── graph.js        # Microsoft Graph client (app identity)
@@ -140,7 +143,7 @@ stock-check/
 `/api/inventory/summary` — stock by campus and category · `/api/inventory/categories` — each type split by brand · `/api/inventory/locations` — rooms holding stock
 
 ### Tidy-up
-`GET /api/tidy/preview` — proposed fixes (changes nothing) · `POST /api/tidy/apply` · `GET /api/tidy/classify?name=&model=` · `/api/tidy/rules`
+`GET /api/tidy/preview` — proposed fixes (changes nothing) · `POST /api/tidy/apply` · `POST /api/tidy/ai-run` and `GET /api/tidy/ai-status` — ask the AI about the register · `GET /api/tidy/classify?name=&model=` · `/api/tidy/rules`
 
 ### Settings (admin)
 `/api/settings/integrations` · `/api/settings/email-templates` · `/api/settings/email-log` · `/api/settings/sharepoint/*`

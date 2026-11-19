@@ -313,6 +313,9 @@ export const tidyAPI = {
     classify: (fields) => apiCall(`/tidy/classify?${new URLSearchParams(fields)}`),
     preview: () => apiCall('/tidy/preview'),
     apply: (changes) => apiCall('/tidy/apply', { method: 'POST', body: JSON.stringify({ changes }) }),
+    // Ask the AI about the register (runs in the background; poll aiStatus)
+    aiRun: (redo = false) => apiCall('/tidy/ai-run', { method: 'POST', body: JSON.stringify({ redo }) }),
+    aiStatus: () => apiCall('/tidy/ai-status'),
     getRules: () => apiCall('/tidy/rules'),
     addRule: (keyword, category) =>
         apiCall('/tidy/rules', { method: 'POST', body: JSON.stringify({ keyword, category }) }),

@@ -46,6 +46,7 @@ export default function TidyAssets() {
     const [busy, setBusy] = useState(false);
     const [message, setMessage] = useState(null); // { type, text, link }
     const [newRule, setNewRule] = useState({ keyword: '', category: '' });
+    const [aiJob, setAiJob] = useState(null); // the AI run in progress, if any
 
     // `keep` carries over what has been ticked and chosen so far (after
     // adding a rule, say) wherever the suggestion itself has not changed.
@@ -67,8 +68,49 @@ export default function TidyAssets() {
     }
 
     useEffect(() => {
-        load().catch((err) => setMessage({ type: 'danger', text: err.message }));
+        load()
+            .then(() => tidyAPI.aiStatus())
+            // Pick up a run that is still going (started earlier, or by a colleague).
+            .then((job) => { if (job.running) setAiJob(job); })
+            .catch((err) => setMessage({ type: 'danger', text: err.message }));
     }, []);
+
+    // While the AI is working, follow its progress; when it finishes, show
+    // what it suggested.
+    useEffect(() => {
+        if (!aiJob?.running) return undefined;
+        const timer = setTimeout(async () => {
+            try {
+                const job = await tidyAPI.aiStatus();
+                setAiJob(job);
+                if (!job.running) {
+                    await load(true);
+                    setMessage(job.error
+                        ? { type: 'danger', text: `The AI stopped after ${job.done} of ${job.total}: ${job.error} What it finished is shown below.` }
+                        : { type: 'success', text: `The AI has looked at ${job.done} asset${job.done === 1 ? '' : 's'}. Its suggestions are below — review them, then apply.` });
+                }
+            } catch (err) {
+                setAiJob(null);
+                setMessage({ type: 'danger', text: err.message });
+            }
+        }, 1500);
+        return () => clearTimeout(timer);
+    }, [aiJob]);
+
+    async function runAi(redo = false) {
+        if (redo && !confirm('Ask the AI again about every asset, including the ones it has already looked at?')) return;
+        setMessage(null);
+        try {
+            const job = await tidyAPI.aiRun(redo);
+            if (job.total === 0) {
+                setMessage({ type: 'info', text: 'The AI has already looked at every asset. Nothing new to ask.' });
+                return;
+            }
+            setAiJob(job);
+        } catch (err) {
+            setMessage({ type: 'danger', text: err.message });
+        }
+    }
 
     // Existing categories, plus any new ones the suggestions would create.
     const categoryOptions = useMemo(() => {
@@ -223,6 +265,48 @@ export default function TidyAssets() {
                 </div>
             )}
 
+            <div className="card mb-3 ai-panel">
+                <div>
+                    <h3 className="card-title">✨ Categorise with AI</h3>
+                    {!data.ai.configured ? (
+                        <p className="text-muted">
+                            AI categorising is switched off, so the suggestions below come from built-in rules. To
+                            turn it on, an administrator adds an Anthropic API key
+                            (<code>ANTHROPIC_API_KEY</code>) to the server's <code>.env</code> file and restarts it.
+                        </p>
+                    ) : aiJob?.running ? (
+                        <>
+                            <p>Asking the AI… {aiJob.done} of {aiJob.total} assets done. You can leave this page; it carries on.</p>
+                            <div className="ai-progress">
+                                <span style={{ width: `${aiJob.total ? Math.round((aiJob.done / aiJob.total) * 100) : 0}%` }} />
+                            </div>
+                        </>
+                    ) : (
+                        <p className="text-muted">
+                            {data.ai.covered === 0
+                                ? 'The AI reads each asset\'s name and works out its category and brand, including names the built-in rules cannot make sense of.'
+                                : data.ai.covered >= data.ai.total
+                                    ? `The AI has looked at all ${data.ai.total} assets.`
+                                    : `The AI has looked at ${data.ai.covered} of ${data.ai.total} assets; the rest use built-in rules until it does.`}{' '}
+                            It only suggests: nothing changes until you apply. Only each asset's name, model, brand and
+                            current category are sent to Anthropic — nothing about people, serial numbers or prices.
+                        </p>
+                    )}
+                </div>
+                {data.ai.configured && !aiJob?.running && (
+                    <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
+                        {data.ai.covered < data.ai.total && (
+                            <button className="btn btn-primary" onClick={() => runAi(false)}>
+                                ✨ {data.ai.covered === 0 ? 'Categorise with AI' : 'Categorise the rest with AI'}
+                            </button>
+                        )}
+                        {data.ai.covered > 0 && (
+                            <button className="btn btn-secondary" onClick={() => runAi(true)}>Ask again for all</button>
+                        )}
+                    </div>
+                )}
+            </div>
+
             <div className="stats-grid">
                 <div className="stat-card">
                     <div className="stat-label">Categories to fix</div>
@@ -370,6 +454,9 @@ export default function TidyAssets() {
                                                                     </select>
                                                                 </div>
                                                                 <span className={`badge badge-${reason.tone}`}>{reason.text}</span>
+                                                                {p.category.source === 'ai' && (
+                                                                    <span className="badge badge-primary" style={{ marginLeft: '0.3rem' }} title="Suggested by the AI">✨ AI</span>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     ) : <span className="text-muted">—</span>}

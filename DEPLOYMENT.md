@@ -16,6 +16,8 @@ No credentials are hardcoded in this repository. Configure via environment:
 | `ENTRA_TENANT_ID` / `ENTRA_CLIENT_ID` / `ENTRA_CLIENT_SECRET` | Microsoft Entra app registration used for single sign-on, email and SharePoint. See `docs/MICROSOFT365_SETUP.md`. |
 | `DISABLE_PASSWORD_LOGIN` | `true` refuses email + password sign-in once single sign-on is working. |
 | `MAIL_FROM` / `MAIL_CC` | Mailbox emails are sent from, and optional copy addresses. Can also be set in Settings. |
+| `ANTHROPIC_API_KEY` | Optional. Turns on AI suggestions for categories and brands. Only asset names, models, brands and categories are sent. `AI_MODEL` overrides the model. |
+| `HOME_CAMPUS` | Campus that electronics with no campus are filed under (default `Towerhill`). |
 | `SHAREPOINT_SITE_URL` / `SHAREPOINT_LIST_NAME` | SharePoint site and list to mirror assets to. Can also be set in Settings. |
 
 These can be exported in the shell as before, or kept in a `.env` file in the

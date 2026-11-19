@@ -636,7 +636,7 @@ router.get('/:id', (req, res) => {
 });
 
 // Create new asset
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     try {
         const assetNumber = generateAssetNumber();
         const {
@@ -660,7 +660,11 @@ router.post('/', (req, res) => {
         const safeQuantity = Math.max(1, parseInt(quantity, 10) || 1);
         // Whatever was left blank is worked out from the name: the category,
         // the brand, and the home campus for electronics with no campus.
-        const filled = tidy.defaultsForNew({ name, model, brand, category_id, campus });
+        // The form normally sends a category; when one is missing (or the
+        // brand is), ask for a suggestion. This never fails the save.
+        const needsGuess = !category_id || !String(brand || '').trim();
+        const [guess] = needsGuess ? await tidy.suggestForNew([{ name, model, brand }], { timeout: 8000 }) : [];
+        const filled = tidy.defaultsForNew({ name, model, brand, category_id, campus }, guess ? { guess } : {});
 
         const result = db.prepare(`
       INSERT INTO assets (
@@ -679,6 +683,7 @@ router.post('/', (req, res) => {
     `).run(result.lastInsertRowid, req.user?.email || null);
 
         const newAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(result.lastInsertRowid);
+        tidy.rememberAi(newAsset.id, newAsset, filled.ai_answer);
         sharepoint.enqueue(newAsset.id);
         res.status(201).json(newAsset);
     } catch (error) {
@@ -687,7 +692,7 @@ router.post('/', (req, res) => {
 });
 
 // Bulk import assets (expects parsed Excel/JSON on client)
-router.post('/import', (req, res) => {
+router.post('/import', async (req, res) => {
     try {
         const { items = [], createMissingCategories = true } = req.body;
         if (!Array.isArray(items) || items.length === 0) {
@@ -725,11 +730,19 @@ router.post('/import', (req, res) => {
     `);
 
         const insertedIds = [];
-        // Read once for the whole sheet rather than per row.
-        const classifyContext = { rules: tidy.customRules(), names: tidy.categories().map((c) => c.name) };
+        // One round of suggestions for the whole sheet, before anything is
+        // written: rows with no category or brand are worked out from the name.
+        const guesses = await tidy.suggestForNew(items.map((item) => {
+            const brand = item.brand || item.manufacturer;
+            return {
+                name: item.name, model: item.model, brand,
+                ask: !(String(item.category || '').trim() && String(brand || '').trim())
+            };
+        }));
+        const aiAnswers = [];
         const importResult = db.transaction(() => {
             let inserted = 0;
-            for (const item of items) {
+            for (const [index, item] of items.entries()) {
                 // An imported row has no holder yet, so "assigned" becomes available.
                 const status = allowedStatuses.includes(item.status) && item.status !== 'assigned' ? item.status : 'available';
                 // A row with no category is categorised from its name; a
@@ -740,7 +753,7 @@ router.post('/import', (req, res) => {
                     brand: item.brand || item.manufacturer,
                     category_id: resolveCategoryId(item.category),
                     campus: item.campus
-                }, classifyContext);
+                }, { guess: guesses[index] });
                 const categoryId = filled.category_id;
 
                 const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
@@ -764,8 +777,10 @@ router.post('/import', (req, res) => {
                     item.notes || null
                 );
                 insertedIds.push(inserted_row.lastInsertRowid);
+                aiAnswers.push([inserted_row.lastInsertRowid, item, filled.ai_answer]);
                 inserted += 1;
             }
+            aiAnswers.forEach(([id, item, answer]) => tidy.rememberAi(id, item, answer));
             return { inserted };
         })();
 
@@ -1250,14 +1265,6 @@ const invoiceUpload = multer({
     }
 });
 
-// Category and brand for an invoice line, in the register's own category
-// names. Lines that match nothing are filed as general electronics for the
-// reviewer to correct.
-function guessCategoryAndBrand(name, context) {
-    const guess = tidy.suggest({ name }, context);
-    return { category: guess.category || context.fallback, brand: guess.brand };
-}
-
 // Best-effort extraction of item lines from invoice text: a line qualifies if
 // it carries a price and isn't a totals/header/address line. The user reviews
 // and corrects everything before import.
@@ -1270,12 +1277,6 @@ function parseInvoiceItems(text) {
     const skip = /sub-?total|grand total|^total|total\b.*£|vat|tax|shipping|postage|delivery|promotion|discount|gift|invoice|receipt|order (number|#|id|date|total)|payment|billing|dispatch|address|amazon\.(co|com|de|eu)|www\.amazon|amazon (eu|services|payments)|sold by|supplied by|thank you|balance|account|page \d|qty unit|unit price|item price|description price|£?\d+\.\d{2} £?\d+\.\d{2} £?\d+\.\d{2} £?\d+\.\d{2}/i;
     const priceToken = /(?:£\s?)?(\d{1,3}(?:,\d{3})*\.\d{2})(?:\s*(?:GBP|EUR|USD))?/g;
 
-    const names = tidy.categories().map((c) => c.name);
-    const context = {
-        rules: tidy.customRules(),
-        names,
-        fallback: names.find((n) => ['other electronics', 'electronics'].includes(n.toLowerCase())) || 'Other Electronics'
-    };
     const items = [];
     for (const line of lines) {
         if (skip.test(line)) continue;
@@ -1297,8 +1298,7 @@ function parseInvoiceItems(text) {
         items.push({
             name: name.slice(0, 150),
             quantity,
-            unit_price,
-            ...guessCategoryAndBrand(name, context)
+            unit_price
         });
     }
 
@@ -1319,7 +1319,18 @@ router.post('/parse-invoice', (req, res) => {
             if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
             const data = await extractPdfText(fs.readFileSync(req.file.path));
-            const items = parseInvoiceItems(data.text);
+            const lines = parseInvoiceItems(data.text);
+            // Category and brand for each line, in the register's own
+            // category names. A line nothing can place is filed as general
+            // electronics for the reviewer to correct.
+            const names = tidy.categories().map((c) => c.name);
+            const fallback = names.find((n) => ['other electronics', 'electronics'].includes(n.toLowerCase())) || 'Other Electronics';
+            const guesses = await tidy.suggestForNew(lines.map((line) => ({ name: line.name })));
+            const items = lines.map((line, index) => ({
+                ...line,
+                category: guesses[index].category || fallback,
+                brand: guesses[index].brand
+            }));
 
             res.json({
                 items,
@@ -1350,7 +1361,6 @@ router.post('/import-invoice', (req, res) => {
             }
         }
 
-        const classifyContext = { rules: tidy.customRules(), names: tidy.categories().map((c) => c.name) };
 
         const created = [];
         db.transaction(() => {
@@ -1362,10 +1372,7 @@ router.post('/import-invoice', (req, res) => {
                 const assetNumber = generateAssetNumber();
                 // The reviewer's category and brand stand; blanks are worked
                 // out from the name, and electronics start at the home campus.
-                const filled = tidy.defaultsForNew(
-                    { name, model: it.model, brand: it.brand, category: it.category },
-                    classifyContext
-                );
+                const filled = tidy.defaultsForNew({ name, model: it.model, brand: it.brand, category: it.category });
                 const result = db.prepare(`
           INSERT INTO assets (
             asset_number, name, category_id, brand, model, serial_number, quantity, assigned_quantity,
