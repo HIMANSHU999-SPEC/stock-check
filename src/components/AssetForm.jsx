@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { assetsAPI, reportsAPI, documentsAPI, tidyAPI } from '../services/api';
 import { CAMPUSES } from '../constants';
 
@@ -7,6 +7,10 @@ export default function AssetForm() {
     const navigate = useNavigate();
     const { id } = useParams();
     const isEdit = Boolean(id);
+    // A new asset can arrive part-filled, e.g. from a device the Intune check
+    // found that is not in the register yet.
+    const [query] = useSearchParams();
+    const preset = (field) => (isEdit ? '' : (query.get(field) || '').slice(0, 200));
 
     const [categories, setCategories] = useState([]);
     const [campuses, setCampuses] = useState([]);
@@ -16,11 +20,11 @@ export default function AssetForm() {
     const [loading, setLoading] = useState(false);
     const [invoiceFile, setInvoiceFile] = useState(null);
     const [formData, setFormData] = useState({
-        name: '',
+        name: preset('name'),
         category_id: '',
-        brand: '',
-        model: '',
-        serial_number: '',
+        brand: preset('brand'),
+        model: preset('model'),
+        serial_number: preset('serial_number'),
         quantity: 1,
         purchase_date: '',
         purchase_price: '',
@@ -28,7 +32,7 @@ export default function AssetForm() {
         warranty_period_months: 0,
         campus: '',
         location: '',
-        notes: '',
+        notes: preset('notes'),
         status: 'available'
     });
 
@@ -187,7 +191,11 @@ export default function AssetForm() {
                 }
             }
             if (!isEdit && newAssetId) {
-                navigate(`/assets/${newAssetId}?assign=1`);
+                // Carry on to "who has it", with the person the link named.
+                const who = ['assign_to', 'assign_name', 'assign_email']
+                    .filter((key) => query.get(key))
+                    .map((key) => `&${key}=${encodeURIComponent(query.get(key))}`).join('');
+                navigate(`/assets/${newAssetId}?assign=1${who}`);
             } else {
                 navigate('/assets');
             }

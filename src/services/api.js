@@ -324,6 +324,11 @@ export const tidyAPI = {
 
 // Settings: integrations, email templates, SharePoint sync
 let publicSettingsPromise = null;
+// Double-check of the register against Microsoft Intune (read-only)
+export const intuneAPI = {
+    check: (refresh = false) => apiCall(`/intune/check${refresh ? '?refresh=1' : ''}`),
+};
+
 export const settingsAPI = {
     // Needed on most screens, so fetched once and shared.
     getPublic: () => {

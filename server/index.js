@@ -57,7 +57,7 @@ app.use('/api/my', (req, res, next) => {
 }, require('./routes/my'));
 
 const READ_ONLY_ROLES = ['viewer', 'inventory'];
-const CLOSED_TO_READ_ONLY = ['/api/users', '/api/settings', '/api/activity', '/api/staff-reports', '/api/mail'];
+const CLOSED_TO_READ_ONLY = ['/api/users', '/api/settings', '/api/activity', '/api/staff-reports', '/api/mail', '/api/intune'];
 // Exports, the per-employee PDF and stored documents.
 const DOWNLOAD_PATH = /\/export(\/|$)|^\/api\/employees\/[^/]+\/report$|\/documents\/[^/]+\/(download|view)$/;
 
@@ -118,6 +118,7 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/activity', require('./routes/activity'));
 app.use('/api/inventory', require('./routes/inventory'));
 app.use('/api/tidy', require('./routes/tidy'));
+app.use('/api/intune', require('./routes/intune'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/mail', require('./routes/mail'));
 app.use('/api/staff-reports', require('./routes/staffReports'));

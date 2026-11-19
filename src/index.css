@@ -2064,3 +2064,26 @@ body[data-access="viewer"] .download-only { display: none !important; }
   background: var(--primary);
   transition: width 0.4s ease;
 }
+
+/* Intune check: tiles coloured by how pressing the finding is */
+.intune-tile .device-count {
+  color: var(--text-primary);
+}
+
+.intune-tile.intune-danger .device-count {
+  color: var(--danger);
+}
+
+.intune-tile.intune-warning .device-count {
+  color: var(--warning);
+}
+
+.intune-tile.intune-success .device-count {
+  color: var(--success);
+}
+
+.intune-tile.empty .device-count,
+.intune-tile.empty .device-name {
+  color: var(--text-muted);
+  font-weight: 600;
+}

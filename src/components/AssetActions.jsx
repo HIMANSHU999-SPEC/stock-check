@@ -91,21 +91,28 @@ function EmailOption({ mail, checked, onChange, to }) {
  * Assign available stock, or (mode="reassign") move it from one holder
  * straight to another. The new holder is a person or a room / location.
  */
-export function AssignModal({ assetId, mode = 'assign', assignmentId, onClose, onDone }) {
+// `suggest` pre-fills who it is going to, when the caller already has a good
+// idea (the Intune check does): { employeeId } for someone on the staff list,
+// or { name, email } to offer adding them. Nothing is chosen for the person;
+// they still confirm.
+export function AssignModal({ assetId, mode = 'assign', assignmentId, suggest, onClose, onDone }) {
     const { asset, error: loadError } = useFreshAsset(assetId);
     const mail = useMailSettings();
     const [employees, setEmployees] = useState([]);
     const [locations, setLocations] = useState([]);
     const [holderType, setHolderType] = useState('employee');
-    const [employeeId, setEmployeeId] = useState('');
+    const [employeeId, setEmployeeId] = useState(suggest?.employeeId ? String(suggest.employeeId) : '');
     const [employeeFilter, setEmployeeFilter] = useState('');
     const [location, setLocation] = useState('');
     const [fromId, setFromId] = useState(assignmentId ? String(assignmentId) : '');
     const [quantity, setQuantity] = useState(1);
     const [notes, setNotes] = useState('');
     const [sendEmail, setSendEmail] = useState(true);
-    const [showNewEmployee, setShowNewEmployee] = useState(false);
-    const [newEmployee, setNewEmployee] = useState({ name: '', email: '', department: '', phone: '' });
+    const offerNew = Boolean(suggest && !suggest.employeeId && suggest.email);
+    const [showNewEmployee, setShowNewEmployee] = useState(offerNew);
+    const [newEmployee, setNewEmployee] = useState({
+        name: offerNew ? suggest.name || '' : '', email: offerNew ? suggest.email : '', department: '', phone: ''
+    });
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
 
@@ -618,14 +625,14 @@ export function useAssetActions(onChanged) {
         setActive(null);
         onChanged(message, result);
     };
-    const open = (type, assetId, assignmentId) => setActive({ type, assetId, assignmentId });
+    const open = (type, assetId, assignmentId, suggest) => setActive({ type, assetId, assignmentId, suggest });
 
     let dialogs = null;
     if (active && (active.type === 'assign' || active.type === 'reassign')) {
         dialogs = (
             <AssignModal
                 assetId={active.assetId} mode={active.type} assignmentId={active.assignmentId}
-                onClose={close} onDone={done}
+                suggest={active.suggest} onClose={close} onDone={done}
             />
         );
     } else if (active && active.type === 'return') {

@@ -46,6 +46,8 @@ then copy the **Value** (not the Secret ID) straight away into
 | Sign in with Microsoft | Delegated | `openid`, `profile`, `email` |
 | Send email | **Application** | `Mail.Send` |
 | SharePoint list | **Application** | `Sites.ReadWrite.All` |
+| Leaver check (Staff reports) | **Application** | `User.Read.All` |
+| Intune check | **Application** | `DeviceManagementManagedDevices.Read.All` |
 
 Then click **Grant admin consent for <your organisation>**. Every row should
 show a green tick. Skip a row if you are not using that feature.
@@ -110,6 +112,12 @@ Sign in as an administrator and open **Settings**.
    up to date*, **Save**, then **Test connection** (this creates the list) and
    **Sync everything now**.
 
+4. **Intune check:** open **Assets → Intune check**. It reads Intune's device
+   list (read-only: the permission cannot change anything in Intune) and
+   compares it with the register by serial number. If it says Microsoft 365
+   denied the request, `DeviceManagementManagedDevices.Read.All` is missing or
+   has no admin consent.
+
 Once everybody signs in with Microsoft, set `DISABLE_PASSWORD_LOGIN=true` in
 `.env` and restart. Remove it again if you ever need a password to get back in.
 
@@ -123,3 +131,5 @@ Once everybody signs in with Microsoft, set `DISABLE_PASSWORD_LOGIN=true` in
 | Email: "Microsoft 365 denied the request" | `Mail.Send` has no admin consent, or the access policy does not include the *Send from* mailbox. |
 | SharePoint: "The provided path does not exist" | The site address is wrong — copy it from the browser when on the site's home page. |
 | SharePoint: access denied | `Sites.ReadWrite.All` has no admin consent. |
+| Intune check: "Microsoft 365 denied the request" | `DeviceManagementManagedDevices.Read.All` (application) is not added, or has no admin consent. Consent can take a few minutes to take effect. |
+| Intune check: a device shows as "Not in Intune" although it is enrolled | The serial number on the asset differs from the one Intune reports. Search the Intune device name under *Not in the register* and correct the asset. |

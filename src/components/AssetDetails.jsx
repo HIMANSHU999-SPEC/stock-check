@@ -64,7 +64,12 @@ export default function AssetDetails() {
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         if (params.get('assign') === '1') {
-            actions.open('assign', id);
+            const suggest = params.get('assign_to')
+                ? { employeeId: params.get('assign_to') }
+                : params.get('assign_email')
+                    ? { name: params.get('assign_name') || '', email: params.get('assign_email') }
+                    : undefined;
+            actions.open('assign', id, undefined, suggest);
             navigate(location.pathname, { replace: true });
         }
     }, [location.search]);

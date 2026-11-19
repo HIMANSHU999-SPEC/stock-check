@@ -50,6 +50,7 @@ function buildMenu(user) {
                 { to: '/inventory', label: 'Inventory' },
                 { to: '/categories', label: 'Categories' },
                 { to: '/assets/tidy', label: 'Tidy up' },
+                { to: '/intune', label: 'Intune check' },
                 { to: '/tags', label: 'Print stickers' },
                 { to: '/recycle-bin', label: 'Recycle bin' }
             ]

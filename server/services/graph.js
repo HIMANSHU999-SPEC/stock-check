@@ -94,6 +94,27 @@ async function graph(method, path, { body, headers = {} } = {}) {
     return data;
 }
 
+/**
+ * GET a collection and follow Graph's paging links to the end. Resolves with
+ * every item. A next link is only followed while it stays on the Graph host
+ * the app is configured for, so the token is never sent anywhere else.
+ */
+async function graphAll(path, { headers, maxPages = 200 } = {}) {
+    const items = [];
+    let next = path;
+    for (let page = 0; next && page < maxPages; page += 1) {
+        const data = await graph('GET', next, { headers });
+        if (data && Array.isArray(data.value)) items.push(...data.value);
+        const link = data && data['@odata.nextLink'];
+        if (!link) break;
+        if (!String(link).startsWith(`${entra.graphBaseUrl}/`)) {
+            throw new GraphError('Microsoft Graph returned a paging link to an unexpected address');
+        }
+        next = String(link).slice(entra.graphBaseUrl.length);
+    }
+    return items;
+}
+
 // Turn the common failures into something an IT admin can act on.
 function explainGraphError(err, permission) {
     if (!(err instanceof GraphError)) return err.message;
@@ -103,4 +124,4 @@ function explainGraphError(err, permission) {
     return err.message;
 }
 
-module.exports = { graph, getAppToken, GraphError, explainGraphError };
+module.exports = { graph, graphAll, getAppToken, GraphError, explainGraphError };

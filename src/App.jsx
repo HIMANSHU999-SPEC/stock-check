@@ -23,6 +23,7 @@ import RapidCatalogue from './components/RapidCatalogue';
 import InvoiceImport from './components/InvoiceImport';
 import Inventory from './components/Inventory';
 import TidyAssets from './components/TidyAssets';
+import IntuneCheck from './components/IntuneCheck';
 import Scan from './components/Scan';
 import Settings from './components/Settings';
 import SsoComplete from './components/SsoComplete';
@@ -49,7 +50,7 @@ function Footer() {
 // Pages that exist to change something, or to run the system. View-only
 // accounts are sent back to the dashboard; the server refuses them anyway.
 const READ_ONLY_ROLES = ['viewer', 'inventory'];
-const NOT_FOR_READ_ONLY = /^\/(assets\/(new|import-invoice|tidy)|assets\/[^/]+\/edit|books\/new|books\/[^/]+\/edit|library\/(issue|rapid)|recycle-bin|activity|users|settings|staff-reports)\/?$/;
+const NOT_FOR_READ_ONLY = /^\/(assets\/(new|import-invoice|tidy)|assets\/[^/]+\/edit|books\/new|books\/[^/]+\/edit|library\/(issue|rapid)|recycle-bin|activity|users|settings|staff-reports|intune)\/?$/;
 
 function ProtectedRoute({ user, license, authLoading, children, staffAllowed = false }) {
     const location = useLocation();
@@ -254,6 +255,14 @@ function App() {
                                 element={
                                     <ProtectedRoute user={user} license={license} authLoading={authLoading}>
                                         <TidyAssets />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/intune"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <IntuneCheck />
                                     </ProtectedRoute>
                                 }
                             />
