@@ -82,6 +82,8 @@ router.delete('/:id', (req, res) => {
             return res.status(400).json({ error: 'Cannot delete category with assigned assets' });
         }
 
+        // Auto-categorising rules that point at it go with it.
+        db.prepare('DELETE FROM category_rules WHERE category_id = ?').run(req.params.id);
         db.prepare('DELETE FROM categories WHERE id = ?').run(req.params.id);
         res.json({ message: 'Category deleted successfully' });
     } catch (error) {

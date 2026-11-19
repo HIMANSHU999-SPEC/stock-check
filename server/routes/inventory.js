@@ -60,6 +60,53 @@ router.get('/summary', (req, res) => {
     }
 });
 
+// How many of each kind of thing there are, and of which makes: the
+// dashboard's "laptops -> HP / Dell / Lenovo" drill-down. Quantities, with
+// brands grouped whatever their capitalisation.
+router.get('/categories', (req, res) => {
+    try {
+        const rows = db.prepare(`
+      SELECT
+        c.id AS category_id,
+        COALESCE(c.name, 'Uncategorised') AS category,
+        COALESCE(NULLIF(TRIM(MIN(a.brand)), ''), '') AS brand,
+        COUNT(*) AS lines,
+        SUM(a.quantity) AS total,
+        SUM(COALESCE(a.assigned_quantity, 0)) AS assigned,
+        SUM(CASE WHEN a.status IN ('available', 'assigned')
+                 THEN MAX(a.quantity - COALESCE(a.assigned_quantity, 0), 0) ELSE 0 END) AS available
+      FROM assets a
+      LEFT JOIN categories c ON a.category_id = c.id
+      WHERE a.deleted_at IS NULL
+      GROUP BY c.id, LOWER(TRIM(COALESCE(a.brand, '')))
+    `).all();
+
+        const byCategory = new Map();
+        for (const row of rows) {
+            const key = row.category_id === null ? 'none' : row.category_id;
+            if (!byCategory.has(key)) {
+                byCategory.set(key, {
+                    category_id: row.category_id, category: row.category,
+                    lines: 0, total: 0, assigned: 0, available: 0, brands: []
+                });
+            }
+            const group = byCategory.get(key);
+            for (const field of ['lines', 'total', 'assigned', 'available']) group[field] += row[field] || 0;
+            group.brands.push({
+                brand: row.brand, lines: row.lines, total: row.total, assigned: row.assigned, available: row.available
+            });
+        }
+
+        const result = [...byCategory.values()];
+        // Named makes by size, with "no brand recorded" last.
+        result.forEach((group) => group.brands.sort((a, b) => (a.brand === '') - (b.brand === '') || b.total - a.total));
+        result.sort((a, b) => b.total - a.total || a.category.localeCompare(b.category));
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Rooms / locations currently holding stock, for one campus or all
 router.get('/locations', (req, res) => {
     try {

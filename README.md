@@ -11,6 +11,8 @@ Built and maintained by **Himanshu Chadha**. Hosting for the deployed instance i
 - **Asset management** — register, track and assign every organisational asset
 - **Automatic asset numbering** — `AST-YYYY-NNNN`, generated on creation
 - **Assign, reassign, return** — to a person or to a room; bulk stock (chairs, tables, cables) can be split across several holders, returned in part, and returned in a recorded condition
+- **Auto-categorising** — an asset's category and brand are worked out from its name (on the form, in Excel and invoice imports), with your own "names containing X are Y" rules on top; a tidy-up screen proposes fixes for the existing register and applies only what you approve
+- **What we have** — dashboard tiles for laptops, desktops and every other type; click one to split it by brand, click a brand to see those assets
 - **Stock by campus** — quantities per campus and category: assigned, available, in repair, written off; move items between campuses with a history trail
 - **QR stickers and scanning** — print stickers on A4 label sheets or a label printer; scanning one with a phone or handheld scanner opens the asset, ready to assign or book back in
 - **Single sign-on** — sign in with Microsoft (Entra ID); access is still controlled by the Users list
@@ -67,6 +69,8 @@ For production deployment and the full environment variable reference, see `DEPL
 
 **Stickers** — Print Stickers → choose the sticker type → select assets → print at 100% scale. Each sticker's QR code is a link to the asset, so any phone camera can read it; handheld scanners type it into the Scan screen.
 
+**Tidy up** — Assets → Tidy up lists every asset with no real category, a missing or oddly spelt brand, or (for electronics) no campus, with a suggested fix for each. Untick or change anything, then Apply. Electronics with no campus go under Towerhill (set `HOME_CAMPUS` to change it), ready to be moved on with the bulk move on the asset list. Categories somebody chose by hand are only ever questioned, never changed unless ticked.
+
 **Stock by campus** — Inventory shows each campus broken down by category, with links through to the matching assets.
 
 ### Reports
@@ -94,6 +98,8 @@ stock-check/
 │   │                       # books, borrowers, users, auth, reports
 │   ├── services/
 │   │   ├── assignments.js  # assign / reassign / return / transfer rules
+│   │   ├── classifier.js   # category and brand from an asset's name
+│   │   ├── tidy.js         # defaults for new assets, tidy-up of existing ones
 │   │   ├── sso.js          # Microsoft sign-in (OpenID Connect + PKCE)
 │   │   ├── graph.js        # Microsoft Graph client (app identity)
 │   │   ├── mailer.js       # email templates, sending, log
@@ -131,7 +137,10 @@ stock-check/
 | GET | `/api/assets/lookup?code=` | Find an asset from a scanned sticker, asset number or serial |
 
 ### Inventory
-`/api/inventory/summary` — stock by campus and category · `/api/inventory/locations` — rooms holding stock
+`/api/inventory/summary` — stock by campus and category · `/api/inventory/categories` — each type split by brand · `/api/inventory/locations` — rooms holding stock
+
+### Tidy-up
+`GET /api/tidy/preview` — proposed fixes (changes nothing) · `POST /api/tidy/apply` · `GET /api/tidy/classify?name=&model=` · `/api/tidy/rules`
 
 ### Settings (admin)
 `/api/settings/integrations` · `/api/settings/email-templates` · `/api/settings/email-log` · `/api/settings/sharepoint/*`

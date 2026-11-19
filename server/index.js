@@ -117,6 +117,7 @@ app.use('/api/borrowers', require('./routes/borrowers'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/activity', require('./routes/activity'));
 app.use('/api/inventory', require('./routes/inventory'));
+app.use('/api/tidy', require('./routes/tidy'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/mail', require('./routes/mail'));
 app.use('/api/staff-reports', require('./routes/staffReports'));

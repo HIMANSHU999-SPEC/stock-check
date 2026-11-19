@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { reportsAPI, assetsAPI, authAPI, booksAPI, staffReportsAPI } from '../services/api';
+import DeviceBreakdown from './DeviceBreakdown';
 
 // Lightweight horizontal bar chart (no external chart library).
 function BarChart({ data, unit = '' }) {
@@ -173,6 +174,8 @@ export default function Dashboard() {
                     <div className="text-muted">Purchase price</div>
                 </div>
             </div>
+
+            <DeviceBreakdown />
 
             <div className="grid grid-2">
                 <div className="card">

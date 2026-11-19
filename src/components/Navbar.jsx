@@ -49,6 +49,7 @@ function buildMenu(user) {
                 { to: '/assets', label: 'All assets' },
                 { to: '/inventory', label: 'Inventory' },
                 { to: '/categories', label: 'Categories' },
+                { to: '/assets/tidy', label: 'Tidy up' },
                 { to: '/tags', label: 'Print stickers' },
                 { to: '/recycle-bin', label: 'Recycle bin' }
             ]

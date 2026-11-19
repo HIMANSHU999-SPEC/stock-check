@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { assetsAPI, reportsAPI, documentsAPI } from '../services/api';
+import { assetsAPI, reportsAPI, documentsAPI, tidyAPI } from '../services/api';
 import { CAMPUSES } from '../constants';
 
 export default function AssetForm() {
@@ -111,8 +111,63 @@ export default function AssetForm() {
         }
     }
 
+    // For a new asset, the category, brand and campus are suggested from the
+    // name and model as they are typed. A field the person has set themselves
+    // is never overwritten: `auto` remembers which values are still ours.
+    const [suggestion, setSuggestion] = useState(null);
+    const [auto, setAuto] = useState({ category_id: false, brand: false, campus: false });
+    const latest = useRef({ formData, auto });
+    latest.current = { formData, auto };
+
+    useEffect(() => {
+        if (isEdit) return undefined;
+        const name = formData.name.trim();
+        if (name.length < 3) {
+            setSuggestion(null);
+            return undefined;
+        }
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            try {
+                const guess = await tidyAPI.classify({ name, model: formData.model || '' });
+                if (cancelled) return;
+                setSuggestion(guess);
+                // Judge against the form as it is now, not as it was when
+                // the lookup started.
+                const now = latest.current;
+                const values = {
+                    category_id: guess.category?.id || '',
+                    brand: guess.brand || '',
+                    campus: guess.electronic ? guess.home_campus : ''
+                };
+                const patch = {};
+                const filled = {};
+                for (const field of Object.keys(values)) {
+                    if (!now.formData[field] || now.auto[field]) {
+                        patch[field] = values[field];
+                        filled[field] = Boolean(values[field]);
+                    }
+                }
+                setFormData((prev) => ({ ...prev, ...patch }));
+                setAuto((a) => ({ ...a, ...filled }));
+            } catch (err) {
+                // suggestions are a convenience; the form works without them
+            }
+        }, 400);
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [formData.name, formData.model, isEdit]);
+
     async function handleSubmit(e) {
         e.preventDefault();
+        // A category that does not exist yet is created from the suggestion
+        // on the server; otherwise one has to be chosen.
+        if (!formData.category_id && !suggestion?.category) {
+            alert('Choose a category for this asset.');
+            return;
+        }
         setLoading(true);
 
         try {
@@ -146,6 +201,8 @@ export default function AssetForm() {
     function handleChange(e) {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
+        // Once someone sets a suggested field themselves, leave it alone.
+        if (name in auto) setAuto((a) => ({ ...a, [name]: false }));
     }
 
     return (
@@ -175,15 +232,24 @@ export default function AssetForm() {
                                     className="form-control"
                                     value={formData.category_id}
                                     onChange={handleChange}
-                                    required
                                 >
-                                    <option value="">Select Category</option>
+                                    <option value="">
+                                        {suggestion?.category && !suggestion.category.id
+                                            ? `${suggestion.category.name} (new category)`
+                                            : 'Select Category'}
+                                    </option>
                                     {categories.map((cat) => (
                                         <option key={cat.id} value={cat.id}>
                                             {cat.name}
                                         </option>
                                     ))}
                                 </select>
+                                {!isEdit && suggestion?.category && (auto.category_id || !formData.category_id) && (
+                                    <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                        Suggested from the name{suggestion.sure ? '' : ' — not certain, please check'}.
+                                        Change it if it is wrong.
+                                    </div>
+                                )}
                             </div>
 
                             <div className="form-group">
@@ -330,6 +396,7 @@ export default function AssetForm() {
                                         }
                                         setAddingCampus(false);
                                         setFormData((prev) => ({ ...prev, campus: val }));
+                                        setAuto((a) => ({ ...a, campus: false }));
                                     }}
                                 >
                                     <option value="">Unassigned</option>
@@ -340,6 +407,12 @@ export default function AssetForm() {
                                     ))}
                                     <option value="__new__">+ Add new campus</option>
                                 </select>
+                                {!isEdit && suggestion?.electronic && (
+                                    <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                        Electronics with no campus are kept under {suggestion.home_campus} until
+                                        they are moved.
+                                    </div>
+                                )}
                                 {addingCampus && (
                                     <div className="flex gap-2 mt-2">
                                         <input

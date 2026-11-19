@@ -184,6 +184,7 @@ export default function AssetList() {
         return {
             name: data['name'] || data['asset name'] || '',
             category: data['category'] || '',
+            brand: data['brand'] || data['make'] || data['manufacturer'] || '',
             model: data['model'] || '',
             serial_number: data['serial number'] || '',
             quantity: data['quantity'] || data['qty'] || '',
@@ -206,9 +207,11 @@ export default function AssetList() {
             const workbook = XLSX.read(buffer, { type: 'array' });
             const sheet = workbook.Sheets[workbook.SheetNames[0]];
             const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-            const items = rows.map(mapRowToAsset).filter((item) => item.name && item.category);
+            // Only a name is needed: a missing category, brand or campus is
+            // worked out from the name on the server.
+            const items = rows.map(mapRowToAsset).filter((item) => item.name);
             if (items.length === 0) {
-                alert('No valid rows found in the sheet (need Name and Category columns).');
+                alert('No valid rows found in the sheet (it needs a Name column).');
                 return;
             }
             const result = await assetsAPI.importBulk(items, createMissingCategories);
@@ -324,6 +327,7 @@ export default function AssetList() {
                                 onChange={(e) => setFilters({ ...filters, category: e.target.value })}
                             >
                                 <option value="">All Categories</option>
+                                <option value="__none__">No category</option>
                                 {categories.map((cat) => (
                                     <option key={cat.id} value={cat.id}>
                                         {cat.name}
@@ -392,8 +396,10 @@ export default function AssetList() {
                 <summary>Import assets from an Excel file</summary>
                 <div className="card-body">
                     <p className="text-muted">
-                        Upload .xlsx or .xls with columns: Name, Category, Model, Serial Number, Purchase Date,
-                        Purchase Price, Supplier, Status, Location, Notes. Categories will be auto-created if needed.
+                        Upload .xlsx or .xls with columns: Name, Category, Brand, Model, Serial Number, Quantity,
+                        Purchase Date, Purchase Price, Supplier, Status, Campus, Location, Notes. Only Name is needed:
+                        a missing category or brand is worked out from the name, and electronics with no campus go
+                        under Towerhill.
                     </p>
                     <div className="flex gap-2 items-center">
                         <input

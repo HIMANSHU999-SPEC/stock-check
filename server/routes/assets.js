@@ -7,6 +7,7 @@ const assignments = require('../services/assignments');
 const mailer = require('../services/mailer');
 const sharepoint = require('../services/sharepoint');
 const { getSettings } = require('../services/appSettings');
+const tidy = require('../services/tidy');
 const PDFDocument = require('pdfkit');
 const archiver = require('archiver');
 const { PassThrough } = require('stream');
@@ -127,7 +128,9 @@ router.get('/', (req, res) => {
             params.push(status);
         }
 
-        if (category) {
+        if (category === '__none__') {
+            query += ' AND a.category_id IS NULL';
+        } else if (category) {
             query += ' AND a.category_id = ?';
             params.push(category);
         }
@@ -655,6 +658,9 @@ router.post('/', (req, res) => {
     } = req.body;
 
         const safeQuantity = Math.max(1, parseInt(quantity, 10) || 1);
+        // Whatever was left blank is worked out from the name: the category,
+        // the brand, and the home campus for electronics with no campus.
+        const filled = tidy.defaultsForNew({ name, model, brand, category_id, campus });
 
         const result = db.prepare(`
       INSERT INTO assets (
@@ -662,8 +668,8 @@ router.post('/', (req, res) => {
         purchase_date, purchase_price, supplier_name, warranty_period_months, intune_price, status, campus, location, notes
       ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-            assetNumber, name, category_id, model, serial_number, brand || null, safeQuantity,
-            purchase_date, purchase_price, supplier_name, Math.max(0, parseInt(warranty_period_months, 10) || 0), intune_price, status, campus, location, notes
+            assetNumber, name, filled.category_id, model, serial_number, filled.brand, safeQuantity,
+            purchase_date, purchase_price, supplier_name, Math.max(0, parseInt(warranty_period_months, 10) || 0), intune_price, status, filled.campus, location, notes
         );
 
         // Add to history
@@ -715,16 +721,27 @@ router.post('/import', (req, res) => {
       INSERT INTO assets (
         asset_number, name, category_id, model, serial_number, brand, quantity, assigned_quantity,
         purchase_date, purchase_price, supplier_name, warranty_period_months, intune_price, status, campus, location, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
         const insertedIds = [];
+        // Read once for the whole sheet rather than per row.
+        const classifyContext = { rules: tidy.customRules(), names: tidy.categories().map((c) => c.name) };
         const importResult = db.transaction(() => {
             let inserted = 0;
             for (const item of items) {
                 // An imported row has no holder yet, so "assigned" becomes available.
                 const status = allowedStatuses.includes(item.status) && item.status !== 'assigned' ? item.status : 'available';
-                const categoryId = resolveCategoryId(item.category);
+                // A row with no category is categorised from its name; a
+                // blank brand or campus is filled in the same way.
+                const filled = tidy.defaultsForNew({
+                    name: item.name,
+                    model: item.model,
+                    brand: item.brand || item.manufacturer,
+                    category_id: resolveCategoryId(item.category),
+                    campus: item.campus
+                }, classifyContext);
+                const categoryId = filled.category_id;
 
                 const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
                 const warrantyMonths = Math.max(0, parseInt(item.warranty_period_months || item.warranty || item['warranty months'] || item['warranty period'], 10) || 0);
@@ -734,7 +751,7 @@ router.post('/import', (req, res) => {
                     categoryId,
                     item.model || null,
                     item.serial_number || null,
-                    item.brand || item.manufacturer || null,
+                    filled.brand,
                     qty,
                     item.purchase_date || null,
                     item.purchase_price || null,
@@ -742,7 +759,7 @@ router.post('/import', (req, res) => {
                     warrantyMonths,
                     null, // intune_price removed from input
                     status,
-                    item.campus || '',
+                    filled.campus,
                     item.location || null,
                     item.notes || null
                 );
@@ -1233,33 +1250,12 @@ const invoiceUpload = multer({
     }
 });
 
-const CATEGORY_RULES = [
-    [/laptop|notebook|elitebook|thinkpad|ideapad|vivobook|macbook|chromebook|zbook|latitude|inspiron/i, 'Laptop'],
-    [/\bmonitor\b|(\d{2}["”]?\s*(inch)?\s*(led|lcd|ips).*(screen|display))/i, 'Monitor'],
-    [/\btablet\b|ipad|surface go/i, 'Tablet'],
-    [/printer|toner|ink cartridge/i, 'Printer'],
-    [/mouse|keyboard|headset|headphone|earbud|webcam|speaker|microphone/i, 'Peripheral'],
-    [/cable|adapter|charger|\bhub\b|dock|usb[- ]?c|hdmi|power supply|extension lead|surge/i, 'Accessory'],
-    [/router|switch|access point|ethernet|wi-?fi extender/i, 'Network'],
-    [/\bssd\b|\bram\b|hard drive|\bhdd\b|memory card|\busb stick\b|flash drive/i, 'Storage & Components'],
-    [/phone|iphone|galaxy s|pixel \d/i, 'Phone']
-];
-
-const KNOWN_BRANDS = [
-    'Amazon Basics', 'HP', 'Dell', 'Lenovo', 'Apple', 'Microsoft', 'Samsung', 'Asus', 'Acer', 'Logitech',
-    'Anker', 'Ugreen', 'Belkin', 'Kensington', 'TP-Link', 'Netgear', 'Cisco', 'Canon',
-    'Epson', 'Brother', 'Jabra', 'Sony', 'LG', 'Philips', 'Sandisk', 'Kingston', 'Crucial',
-    'Seagate', 'Toshiba', 'Duracell', 'Trust', 'Targus'
-];
-
-function guessCategoryAndBrand(name) {
-    let category = 'Electronics';
-    for (const [re, cat] of CATEGORY_RULES) {
-        if (re.test(name)) { category = cat; break; }
-    }
-    const lower = name.toLowerCase();
-    const brand = KNOWN_BRANDS.find((b) => lower.includes(b.toLowerCase())) || '';
-    return { category, brand };
+// Category and brand for an invoice line, in the register's own category
+// names. Lines that match nothing are filed as general electronics for the
+// reviewer to correct.
+function guessCategoryAndBrand(name, context) {
+    const guess = tidy.suggest({ name }, context);
+    return { category: guess.category || context.fallback, brand: guess.brand };
 }
 
 // Best-effort extraction of item lines from invoice text: a line qualifies if
@@ -1274,6 +1270,12 @@ function parseInvoiceItems(text) {
     const skip = /sub-?total|grand total|^total|total\b.*£|vat|tax|shipping|postage|delivery|promotion|discount|gift|invoice|receipt|order (number|#|id|date|total)|payment|billing|dispatch|address|amazon\.(co|com|de|eu)|www\.amazon|amazon (eu|services|payments)|sold by|supplied by|thank you|balance|account|page \d|qty unit|unit price|item price|description price|£?\d+\.\d{2} £?\d+\.\d{2} £?\d+\.\d{2} £?\d+\.\d{2}/i;
     const priceToken = /(?:£\s?)?(\d{1,3}(?:,\d{3})*\.\d{2})(?:\s*(?:GBP|EUR|USD))?/g;
 
+    const names = tidy.categories().map((c) => c.name);
+    const context = {
+        rules: tidy.customRules(),
+        names,
+        fallback: names.find((n) => ['other electronics', 'electronics'].includes(n.toLowerCase())) || 'Other Electronics'
+    };
     const items = [];
     for (const line of lines) {
         if (skip.test(line)) continue;
@@ -1296,7 +1298,7 @@ function parseInvoiceItems(text) {
             name: name.slice(0, 150),
             quantity,
             unit_price,
-            ...guessCategoryAndBrand(name)
+            ...guessCategoryAndBrand(name, context)
         });
     }
 
@@ -1348,12 +1350,7 @@ router.post('/import-invoice', (req, res) => {
             }
         }
 
-        const catId = (name) => {
-            const clean = (name || 'Electronics').trim() || 'Electronics';
-            const row = db.prepare('SELECT id FROM categories WHERE LOWER(name) = LOWER(?)').get(clean);
-            if (row) return row.id;
-            return db.prepare('INSERT INTO categories (name, description) VALUES (?, ?)').run(clean, '').lastInsertRowid;
-        };
+        const classifyContext = { rules: tidy.customRules(), names: tidy.categories().map((c) => c.name) };
 
         const created = [];
         db.transaction(() => {
@@ -1363,15 +1360,21 @@ router.post('/import-invoice', (req, res) => {
                 const quantity = Math.min(999, Math.max(1, parseInt(it.quantity, 10) || 1));
                 const price = it.unit_price === '' || it.unit_price == null ? null : Math.max(0, parseFloat(it.unit_price) || 0);
                 const assetNumber = generateAssetNumber();
+                // The reviewer's category and brand stand; blanks are worked
+                // out from the name, and electronics start at the home campus.
+                const filled = tidy.defaultsForNew(
+                    { name, model: it.model, brand: it.brand, category: it.category },
+                    classifyContext
+                );
                 const result = db.prepare(`
           INSERT INTO assets (
             asset_number, name, category_id, brand, model, serial_number, quantity, assigned_quantity,
             purchase_date, purchase_price, status, campus, notes
-          ) VALUES (?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, 'available', '', ?)
+          ) VALUES (?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, 'available', ?, ?)
         `).run(
-                    assetNumber, name.slice(0, 150), catId(it.category),
-                    (it.brand || '').trim() || null, (it.model || '').trim() || null,
-                    quantity, it.purchase_date || null, price,
+                    assetNumber, name.slice(0, 150), filled.category_id,
+                    filled.brand, (it.model || '').trim() || null,
+                    quantity, it.purchase_date || null, price, filled.campus,
                     `Imported from invoice${file_name ? ` "${file_name}"` : ''}`
                 );
 

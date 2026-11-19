@@ -318,6 +318,19 @@ function initializeDatabase() {
     })();
   }
 
+  // The organisation's own "a name containing X is a Y" rules for the
+  // auto-categoriser; they take priority over the built-in ones.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS category_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      keyword TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      category_id INTEGER NOT NULL,
+      created_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (category_id) REFERENCES categories(id)
+    )
+  `);
+
   // Editable email templates (subject + plain-text body with {{placeholders}})
   db.exec(`
     CREATE TABLE IF NOT EXISTS email_templates (

@@ -302,8 +302,21 @@ export const activityAPI = {
 // Campus-wise stock position
 export const inventoryAPI = {
     summary: () => apiCall('/inventory/summary'),
+    // Each category with its makes, for the dashboard's drill-down
+    categories: () => apiCall('/inventory/categories'),
     locations: (campus) =>
         apiCall(`/inventory/locations${campus !== undefined ? `?campus=${encodeURIComponent(campus)}` : ''}`),
+};
+
+// Auto-categorising: suggestions for one asset, and the tidy-up of the register
+export const tidyAPI = {
+    classify: (fields) => apiCall(`/tidy/classify?${new URLSearchParams(fields)}`),
+    preview: () => apiCall('/tidy/preview'),
+    apply: (changes) => apiCall('/tidy/apply', { method: 'POST', body: JSON.stringify({ changes }) }),
+    getRules: () => apiCall('/tidy/rules'),
+    addRule: (keyword, category) =>
+        apiCall('/tidy/rules', { method: 'POST', body: JSON.stringify({ keyword, category }) }),
+    removeRule: (id) => apiCall(`/tidy/rules/${id}`, { method: 'DELETE' }),
 };
 
 // Settings: integrations, email templates, SharePoint sync
