@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { reportsAPI, assetsAPI, authAPI, booksAPI } from '../services/api';
+import { reportsAPI, assetsAPI, authAPI, booksAPI, staffReportsAPI } from '../services/api';
+import DeviceBreakdown from './DeviceBreakdown';
 
 // Lightweight horizontal bar chart (no external chart library).
 function BarChart({ data, unit = '' }) {
     const max = Math.max(1, ...data.map((d) => d.value));
-    const palette = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#ec4899', '#84cc16'];
+    const palette = ['#8e414a', '#2f7d5b', '#c98a1b', '#3b6ea5', '#7a5ea8', '#4b8f8c', '#b0567a', '#6b7280'];
     if (!data.length) {
         return <p className="text-muted">No data yet</p>;
     }
@@ -39,9 +40,16 @@ export default function Dashboard() {
     const [bookSummary, setBookSummary] = useState(null);
     const [loadError, setLoadError] = useState('');
     const [license, setLicense] = useState(null);
-    const [showLicense, setShowLicense] = useState(true);
+    const [openReports, setOpenReports] = useState(0);
+    const [leaversHolding, setLeaversHolding] = useState(0);
     const [campusModal, setCampusModal] = useState({ open: false, name: '', assets: [], loading: false });
     const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        // Only the people who deal with the reports are told about them.
+        if (['viewer', 'inventory'].includes(document.body.dataset.access)) return;
+        staffReportsAPI.count().then((r) => { setOpenReports(r.open || 0); setLeaversHolding(r.leavers_holding || 0); }).catch(() => {});
+    }, []);
 
     useEffect(() => {
         loadData();
@@ -81,7 +89,7 @@ export default function Dashboard() {
     async function handleCampusClick(displayName, campusValue) {
         setCampusModal({ open: true, name: displayName || 'Unassigned', assets: [], loading: true });
         try {
-            const assets = await assetsAPI.getAll({ campus: campusValue || '' });
+            const assets = await assetsAPI.getAll({ campus: campusValue || '__unassigned__' });
             setCampusModal({ open: true, name: displayName || 'Unassigned', assets, loading: false });
         } catch (error) {
             setCampusModal({ open: true, name: displayName || 'Unassigned', assets: [], loading: false });
@@ -97,7 +105,7 @@ export default function Dashboard() {
         <div>
             <div className="flex justify-between items-center mb-3">
                 <h2>Dashboard</h2>
-                <Link to="/assets/new" className="btn btn-primary">
+                <Link to="/assets/new" className="write-only btn btn-primary">
                     + Add New Asset
                 </Link>
             </div>
@@ -110,23 +118,34 @@ export default function Dashboard() {
                 </div>
             )}
 
-            <div className="flex justify-between items-center mb-3">
-                <div>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setShowLicense((v) => !v)}>
-                        {showLicense ? 'Hide License' : 'Show License'}
-                    </button>
+            {leaversHolding > 0 && (
+                <div className="alert alert-danger">
+                    {leaversHolding === 1 ? 'Someone who has left still has' : `${leaversHolding} people who have left still have`} equipment
+                    recorded against them. It needs returning to inventory, reassigning, or marking lost.{' '}
+                    <Link to="/staff-reports" className="text-primary">See who</Link>
                 </div>
-                {showLicense && license && (() => {
-                    const expiryMs = license.expires_at ? Number(license.expires_at) : null;
-                    const daysLeft = expiryMs ? Math.max(0, Math.ceil((expiryMs - Date.now()) / (1000 * 60 * 60 * 24))) : null;
-                    return (
-                        <div className="badge badge-primary" style={{ fontSize: '0.95rem', padding: '0.5rem 0.75rem' }}>
-                            License: {license.status || 'unknown'}{' '}
-                            {daysLeft !== null ? `(expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'})` : '(no expiry)'}
-                        </div>
-                    );
-                })()}
-            </div>
+            )}
+
+            {openReports > 0 && (
+                <div className="alert alert-warning">
+                    {openReports === 1 ? 'A member of staff has' : `${openReports} members of staff have`} reported a
+                    problem with the assets recorded against them.{' '}
+                    <Link to="/staff-reports" className="text-primary">Review staff reports</Link>
+                </div>
+            )}
+
+            {/* Only worth a line when the licence is close to running out. */}
+            {license?.expires_at && (() => {
+                const daysLeft = Math.ceil((Number(license.expires_at) - Date.now()) / (1000 * 60 * 60 * 24));
+                if (daysLeft > 60) return null;
+                return (
+                    <div className="alert alert-warning">
+                        {daysLeft > 0
+                            ? `The licence for this system expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}. Please ask the administrator to renew it.`
+                            : 'The licence for this system has expired. Please contact the administrator.'}
+                    </div>
+                );
+            })()}
 
             <div className="stats-grid">
                 <div className="stat-card">
@@ -156,13 +175,18 @@ export default function Dashboard() {
                 </div>
             </div>
 
+            <DeviceBreakdown />
+
             <div className="grid grid-2">
                 <div className="card">
                     <div className="card-header">
                         <h3 className="card-title">Assets by Status</h3>
                     </div>
                     <div className="card-body">
-                        <BarChart data={statusStats.map((s) => ({ label: s.status || 'unknown', value: s.count || 0 }))} />
+                        <BarChart data={statusStats.map((s) => ({
+                            label: (s.status || 'unknown').replace(/^./, (c) => c.toUpperCase()),
+                            value: s.count || 0
+                        }))} />
                     </div>
                 </div>
                 <div className="card">
@@ -184,7 +208,7 @@ export default function Dashboard() {
                 <div className="card-header">
                     <div className="flex justify-between items-center">
                         <h3 className="card-title">📚 Library Overview</h3>
-                        <Link to="/library/issue" className="btn btn-sm btn-primary">Issue Desk</Link>
+                        <Link to="/library/issue" className="write-only btn btn-sm btn-primary">Issue Desk</Link>
                     </div>
                 </div>
                 <div className="card-body">
@@ -241,8 +265,10 @@ export default function Dashboard() {
                                 </tr>
                             ) : (
                                 campusStats.map((c, idx) => {
-                                    const displayName = c.campus && c.campus.trim() ? c.campus : 'Unassigned';
-                                    const campusValue = c.campus && c.campus.trim() ? c.campus : '';
+                                    // The report labels assets without a campus "Unspecified".
+                                    const named = c.campus && c.campus.trim() && c.campus !== 'Unspecified';
+                                    const displayName = named ? c.campus : 'No campus yet';
+                                    const campusValue = named ? c.campus : '';
                                     return (
                                         <tr key={idx}>
                                             <td>
@@ -294,8 +320,8 @@ export default function Dashboard() {
                                                         {asset.asset_number}
                                                     </Link>
                                                 </td>
-                                                <td>{asset.name}</td>
-                                                <td>{asset.category_name || 'N/A'}</td>
+                                                <td><div className="cell-clamp" title={asset.name}>{asset.name}</div></td>
+                                                <td>{asset.category_name || '—'}</td>
                                                 <td>
                                                     <span className={`badge badge-${getStatusColor(asset.status)}`}>
                                                         {asset.status}
@@ -321,7 +347,7 @@ export default function Dashboard() {
                     </div>
                     <div className="card-body">
                         <div className="flex flex-col gap-2">
-                            <Link to="/assets/new" className="btn btn-primary">
+                            <Link to="/assets/new" className="write-only btn btn-primary">
                                 📦 Register New Asset
                             </Link>
                             <Link to="/employees" className="btn btn-secondary">

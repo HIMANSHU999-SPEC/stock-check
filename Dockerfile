@@ -7,6 +7,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
+# The Excel library is installed from a tarball kept in the repository.
+COPY vendor ./vendor
 RUN npm ci || npm install
 COPY . .
 RUN npm run build
@@ -16,6 +18,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 
 COPY package*.json ./
+COPY vendor ./vendor
 RUN (npm ci --omit=dev || npm install --omit=dev) && npm cache clean --force
 
 # Copy server code and the built frontend.

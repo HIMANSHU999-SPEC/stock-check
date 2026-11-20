@@ -16,11 +16,13 @@ export default function Reports() {
     const [employees, setEmployees] = useState([]);
     const [selectedCategory, setSelectedCategory] = useState('');
     const [selectedEmployees, setSelectedEmployees] = useState([]);
+    const [soldData, setSoldData] = useState({ sales: [], total: 0 });
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         loadReports();
         loadEmployees();
+        reportsAPI.getSales().then(setSoldData).catch(() => {});
     }, []);
 
     async function loadReports() {
@@ -139,7 +141,7 @@ export default function Reports() {
                                         </option>
                                     ))}
                                 </select>
-                                <button className="btn btn-secondary" onClick={exportByCategory}>
+                                <button className="download-only btn btn-secondary" onClick={exportByCategory}>
                                     Export CSV
                                 </button>
                             </div>
@@ -236,7 +238,7 @@ export default function Reports() {
                                             View items
                                         </Link>
                                         <button
-                                            className="btn btn-sm btn-primary"
+                                            className="download-only btn btn-sm btn-primary"
                                             style={{ marginLeft: '0.5rem' }}
                                             onClick={async () => {
                                                 try {
@@ -293,7 +295,7 @@ export default function Reports() {
                                             View items
                                         </button>
                                         <button
-                                            className="btn btn-sm btn-primary"
+                                            className="download-only btn btn-sm btn-primary"
                                             style={{ marginLeft: '0.5rem' }}
                                             onClick={async () => {
                                                 try {
@@ -381,7 +383,7 @@ export default function Reports() {
                     <div className="flex justify-between items-center">
                         <h3 className="card-title">Assets by Campus</h3>
                         <button
-                            className="btn btn-secondary"
+                            className="download-only btn btn-secondary"
                             disabled={campusExporting}
                             onClick={async () => {
                                 try {
@@ -397,7 +399,7 @@ export default function Reports() {
                             {campusExporting ? 'Exporting...' : 'Export CSV'}
                         </button>
                         <button
-                            className="btn btn-secondary"
+                            className="download-only btn btn-secondary"
                             disabled={campusExporting || selectedCampuses.length === 0}
                             onClick={async () => {
                                 try {
@@ -466,12 +468,58 @@ export default function Reports() {
                 </div>
             </div>
 
+            {soldData.sales.length > 0 && (
+                <div className="card mt-3">
+                    <div className="card-header">
+                        <h3 className="card-title">Sold devices</h3>
+                        <div className="text-muted">
+                            {soldData.sales.length} sold for £{soldData.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} in total.
+                            They stay on record but are not counted as stock.
+                        </div>
+                    </div>
+                    <div className="table-container">
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th>Asset</th>
+                                    <th>Serial number</th>
+                                    <th>Sold to</th>
+                                    <th>Date</th>
+                                    <th>Price</th>
+                                    <th>Bought for</th>
+                                    <th>Payment reference</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {soldData.sales.map((sale) => (
+                                    <tr key={sale.id}>
+                                        <td>
+                                            <Link to={`/assets/${sale.asset_id}`} className="text-primary"><strong>{sale.asset_number}</strong></Link>
+                                            <div>{sale.asset_name}</div>
+                                        </td>
+                                        <td>{sale.serial_number || '—'}</td>
+                                        <td>
+                                            {sale.buyer_name}
+                                            {sale.buyer_email && <div className="text-muted" style={{ fontSize: '0.8rem' }}>{sale.buyer_email}</div>}
+                                        </td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{new Date(`${sale.sold_on}T12:00:00Z`).toLocaleDateString()}</td>
+                                        <td>£{Number(sale.price).toFixed(2)}</td>
+                                        <td>{sale.purchase_price ? `£${Number(sale.purchase_price).toFixed(2)}` : '—'}</td>
+                                        <td>{sale.payment_reference || '—'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
             <div className="card mt-3">
                 <div className="card-header">
                     <div className="flex justify-between items-center">
                         <h3 className="card-title">Export Assigned Devices by Employee</h3>
                         <button
-                            className="btn btn-primary"
+                            className="download-only btn btn-primary"
                             onClick={exportAssignments}
                             disabled={employees.length === 0}
                         >

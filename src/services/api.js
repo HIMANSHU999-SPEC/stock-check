@@ -108,8 +108,24 @@ export const assetsAPI = {
     delete: (id) => apiCall(`/assets/${id}`, { method: 'DELETE' }),
     assign: (id, data) => apiCall(`/assets/${id}/assign`, { method: 'POST', body: JSON.stringify(data) }),
     return: (id, data) => apiCall(`/assets/${id}/return`, { method: 'POST', body: JSON.stringify(data) }),
-    importBulk: (items, createMissingCategories = true) =>
-        apiCall('/assets/import', { method: 'POST', body: JSON.stringify({ items, createMissingCategories }) }),
+    sell: (id, data) => apiCall(`/assets/${id}/sell`, { method: 'POST', body: JSON.stringify(data) }),
+    undoSale: (id, reason) => apiCall(`/assets/${id}/sale/undo`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    confirmHolder: (id, assignmentId) => apiCall(`/assets/${id}/assignments/${assignmentId}/confirm`, { method: 'POST' }),
+    reassign: (id, data) => apiCall(`/assets/${id}/reassign`, { method: 'POST', body: JSON.stringify(data) }),
+    transfer: (id, data) => apiCall(`/assets/${id}/transfer`, { method: 'POST', body: JSON.stringify(data) }),
+    // Move many assets to one campus: { ids, campus, location?, notes? }
+    bulkTransfer: (data) => apiCall('/assets/bulk-transfer', { method: 'POST', body: JSON.stringify(data) }),
+    // Resolve a scanned sticker (link or bare number) or a typed serial number
+    lookup: (code) => apiCall(`/assets/lookup?code=${encodeURIComponent(code)}`),
+    sendEmail: (id, template, assignmentId) =>
+        apiCall(`/assets/${id}/email`, {
+            method: 'POST',
+            body: JSON.stringify({ template, assignment_id: assignmentId })
+        }),
+    // date1904: the workbook counts dates from 1904 (old Mac files), so the
+    // server can turn its date cells into the right day.
+    importBulk: (items, createMissingCategories = true, date1904 = false) =>
+        apiCall('/assets/import', { method: 'POST', body: JSON.stringify({ items, createMissingCategories, date1904 }) }),
     restore: (id, password) =>
         apiCall(`/assets/${id}/restore`, { method: 'POST', body: JSON.stringify({ password }) }),
     recycleBin: {
@@ -158,6 +174,11 @@ export const employeesAPI = {
     create: (data) => apiCall('/employees', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => apiCall(`/employees/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id) => apiCall(`/employees/${id}`, { method: 'DELETE' }),
+    deactivate: (id, note) =>
+        apiCall(`/employees/${id}/deactivate`, { method: 'POST', body: JSON.stringify({ note }) }),
+    setKind: (id, kind) => apiCall(`/employees/${id}/kind`, { method: 'POST', body: JSON.stringify({ kind }) }),
+    confirmAssets: (id) => apiCall(`/employees/${id}/confirm-assets`, { method: 'POST' }),
+    reactivate: (id) => apiCall(`/employees/${id}/reactivate`, { method: 'POST' }),
     exportReport: (id) => downloadFile(`/employees/${id}/report`, `employee-${id}-report.pdf`),
 };
 
@@ -179,6 +200,7 @@ export const reportsAPI = {
     getByCampus: () => apiCall('/reports/by-campus'),
     getByModel: () => apiCall('/reports/by-model'),
     getByBrand: () => apiCall('/reports/by-brand'),
+    getSales: () => apiCall('/reports/sales'),
     getCategories: () => apiCall('/categories'),
 };
 
@@ -268,6 +290,7 @@ export const documentsAPI = {
 // Users API (admin-only)
 export const usersAPI = {
     getAll: () => apiCall('/users'),
+    staffCandidates: () => apiCall('/users/staff-candidates'),
     create: (data) => apiCall('/users', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => apiCall(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id) => apiCall(`/users/${id}`, { method: 'DELETE' }),
@@ -281,10 +304,91 @@ export const activityAPI = {
     },
 };
 
+// Campus-wise stock position
+export const inventoryAPI = {
+    summary: () => apiCall('/inventory/summary'),
+    // Each category with its makes, for the dashboard's drill-down
+    categories: () => apiCall('/inventory/categories'),
+    locations: (campus) =>
+        apiCall(`/inventory/locations${campus !== undefined ? `?campus=${encodeURIComponent(campus)}` : ''}`),
+};
+
+// Auto-categorising: suggestions for one asset, and the tidy-up of the register
+export const tidyAPI = {
+    classify: (fields) => apiCall(`/tidy/classify?${new URLSearchParams(fields)}`),
+    preview: () => apiCall('/tidy/preview'),
+    apply: (changes) => apiCall('/tidy/apply', { method: 'POST', body: JSON.stringify({ changes }) }),
+    // Ask the AI about the register (runs in the background; poll aiStatus)
+    aiRun: (redo = false) => apiCall('/tidy/ai-run', { method: 'POST', body: JSON.stringify({ redo }) }),
+    aiStatus: () => apiCall('/tidy/ai-status'),
+    getRules: () => apiCall('/tidy/rules'),
+    addRule: (keyword, category) =>
+        apiCall('/tidy/rules', { method: 'POST', body: JSON.stringify({ keyword, category }) }),
+    removeRule: (id) => apiCall(`/tidy/rules/${id}`, { method: 'DELETE' }),
+};
+
+// Settings: integrations, email templates, SharePoint sync
+let publicSettingsPromise = null;
+// Double-check of the register against Microsoft Intune (read-only)
+export const intuneAPI = {
+    check: (refresh = false) => apiCall(`/intune/check${refresh ? '?refresh=1' : ''}`),
+};
+
+export const settingsAPI = {
+    // Needed on most screens, so fetched once and shared.
+    getPublic: () => {
+        if (!publicSettingsPromise) {
+            publicSettingsPromise = apiCall('/settings/public').catch((err) => {
+                publicSettingsPromise = null;
+                throw err;
+            });
+        }
+        return publicSettingsPromise;
+    },
+    clearPublicCache: () => { publicSettingsPromise = null; },
+    getIntegrations: () => apiCall('/settings/integrations'),
+    saveIntegrations: (data) => apiCall('/settings/integrations', { method: 'PUT', body: JSON.stringify(data) }),
+    getTemplates: () => apiCall('/settings/email-templates'),
+    saveTemplate: (key, data) =>
+        apiCall(`/settings/email-templates/${key}`, { method: 'PUT', body: JSON.stringify(data) }),
+    resetTemplate: (key) => apiCall(`/settings/email-templates/${key}/reset`, { method: 'POST' }),
+    previewTemplate: (key, data) =>
+        apiCall(`/settings/email-templates/${key}/preview`, { method: 'POST', body: JSON.stringify(data) }),
+    sendTestEmail: (data) => apiCall('/settings/email-test', { method: 'POST', body: JSON.stringify(data) }),
+    getEmailLog: (limit = 100) => apiCall(`/settings/email-log?limit=${limit}`),
+    testSharePoint: () => apiCall('/settings/sharepoint/test', { method: 'POST' }),
+    syncSharePoint: () => apiCall('/settings/sharepoint/sync-all', { method: 'POST' }),
+    retrySharePoint: () => apiCall('/settings/sharepoint/retry-failed', { method: 'POST' }),
+};
+
+// Emails that are not about a single asset
+export const mailAPI = {
+    libraryOverdue: (borrowerId) =>
+        apiCall('/mail/library-overdue', { method: 'POST', body: JSON.stringify({ borrower_id: borrowerId }) }),
+};
+
+// What is recorded against the person signed in (open to all staff)
+export const myAPI = {
+    assets: () => apiCall('/my/assets'),
+    confirm: (assignmentId) => apiCall(`/my/assets/${assignmentId}/confirm`, { method: 'POST' }),
+    report: (data) => apiCall('/my/reports', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+// Problems staff have raised, for IT
+export const staffReportsAPI = {
+    list: () => apiCall('/staff-reports'),
+    count: () => apiCall('/staff-reports/count'),
+    leavers: (refresh = false) => apiCall(`/staff-reports/leavers${refresh ? '?refresh=1' : ''}`),
+    resolve: (id, note) => apiCall(`/staff-reports/${id}/resolve`, { method: 'POST', body: JSON.stringify({ note }) }),
+};
+
 // Auth & license
 export const authAPI = {
     login: (email, password) => apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
     me: () => apiCall('/auth/me'),
     license: () => apiCall('/auth/license'),
-    activate: (code) => apiCall('/auth/activate', { method: 'POST', body: JSON.stringify({ code }) }),
+    ssoConfig: () => apiCall('/auth/sso/config'),
+    // A full-page navigation, not a fetch: the browser has to follow the
+    // redirect to Microsoft and back.
+    ssoLoginUrl: (returnTo = '/') => `${API_BASE}/auth/sso/login?returnTo=${encodeURIComponent(returnTo)}`,
 };

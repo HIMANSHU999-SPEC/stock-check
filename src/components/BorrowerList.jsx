@@ -88,7 +88,7 @@ export default function BorrowerList() {
         <div>
             <div className="flex justify-between items-center mb-3">
                 <h2>Borrowers (Students &amp; Staff)</h2>
-                <button onClick={() => openModal()} className="btn btn-primary">
+                <button onClick={() => openModal()} className="write-only btn btn-primary">
                     + Add Borrower
                 </button>
             </div>
@@ -161,10 +161,10 @@ export default function BorrowerList() {
                                             </td>
                                             <td>
                                                 <div className="flex gap-1">
-                                                    <button onClick={() => openModal(b)} className="btn btn-sm btn-secondary">
+                                                    <button onClick={() => openModal(b)} className="write-only btn btn-sm btn-secondary">
                                                         Edit
                                                     </button>
-                                                    <button onClick={() => handleDelete(b.id)} className="btn btn-sm btn-danger">
+                                                    <button onClick={() => handleDelete(b.id)} className="write-only btn btn-sm btn-danger">
                                                         Delete
                                                     </button>
                                                 </div>

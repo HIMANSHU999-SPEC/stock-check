@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Local configuration and secrets (see .env.example)
+.env
+
 # Database files
 *.db
 *.sqlite
@@ -29,3 +32,7 @@ uploads/
 *.njsproj
 *.sln
 *.sw?
+
+# Backups of the local configuration (never commit these)
+.env.*
+!.env.example

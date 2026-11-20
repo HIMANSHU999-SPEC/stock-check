@@ -21,7 +21,7 @@ router.get('/summary', (req, res) => {
         COALESCE(SUM(assigned_quantity), 0) as assigned_quantity,
         COALESCE(SUM(
           CASE
-            WHEN status IN ('lost','stolen','damaged','retired') THEN 0
+            WHEN status IN ('lost','stolen','damaged','retired','sold') THEN 0
             WHEN (quantity - COALESCE(assigned_quantity, 0)) > 0 THEN (quantity - COALESCE(assigned_quantity, 0))
             ELSE 0
           END
@@ -166,6 +166,16 @@ router.get('/by-model', (req, res) => {
     `).all();
 
         res.json(data);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Devices sold, usually to the member of staff who used them
+router.get('/sales', (req, res) => {
+    try {
+        const sales = require('../services/sales').list();
+        res.json({ sales, total: sales.reduce((sum, sale) => sum + (sale.price || 0), 0) });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

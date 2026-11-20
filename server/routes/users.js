@@ -3,8 +3,16 @@ const crypto = require('crypto');
 const router = express.Router();
 const db = require('../database');
 const { logActivity } = require('../utils/activity');
+const { ssoEnabled } = require('./auth');
 
-const ALLOWED_ROLES = ['admin', 'subadmin'];
+// admin: everything. subadmin: day-to-day work, no users or settings.
+// inventory: look at everything and download it, change nothing.
+// viewer: look only.
+const ALLOWED_ROLES = ['admin', 'subadmin', 'inventory', 'viewer'];
+// Stored in place of a hash for accounts that only sign in with Microsoft.
+// It is not a valid SHA-256 digest, so no password can ever match it.
+const NO_PASSWORD = '!sso-only';
+const USER_COLUMNS = `id, name, email, role, created_at, (password_hash <> '${NO_PASSWORD}') as has_password`;
 
 function hashPassword(password) {
     return crypto.createHash('sha256').update(password).digest('hex');
@@ -23,8 +31,25 @@ router.use(requireAdmin);
 // List all users (no password hashes)
 router.get('/', (req, res) => {
     try {
-        const users = db.prepare('SELECT id, name, email, role, created_at FROM users ORDER BY role, name').all();
+        const users = db.prepare(`SELECT ${USER_COLUMNS} FROM users ORDER BY role, name`).all();
         res.json(users);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// People on the staff list who have no account here yet. They can already
+// sign in to see their own assets; picking one gives them more.
+router.get('/staff-candidates', (req, res) => {
+    try {
+        const staff = db.prepare(`
+          SELECT e.id, e.name, e.email, e.department
+          FROM employees e
+          WHERE e.status != 'inactive'
+            AND NOT EXISTS (SELECT 1 FROM users u WHERE LOWER(u.email) = LOWER(e.email))
+          ORDER BY e.name
+        `).all();
+        res.json(staff);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -33,11 +58,16 @@ router.get('/', (req, res) => {
 // Create a user
 router.post('/', (req, res) => {
     try {
-        const { name, email, role = 'subadmin', password } = req.body;
-        if (!email || !password) {
+        const { name, email, role = 'viewer', password } = req.body;
+        if (!email) {
+            return res.status(400).json({ error: 'Email is required' });
+        }
+        // Without single sign-on a password is the only way in.
+        if (!password && !ssoEnabled) {
             return res.status(400).json({ error: 'Email and password are required' });
         }
-        const safeRole = ALLOWED_ROLES.includes(role) ? role : 'subadmin';
+        // An unrecognised role gets the least access, never more.
+        const safeRole = ALLOWED_ROLES.includes(role) ? role : 'viewer';
 
         const existing = db.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').get(email);
         if (existing) {
@@ -46,7 +76,7 @@ router.post('/', (req, res) => {
 
         const result = db.prepare(
             'INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)'
-        ).run(name || null, email, hashPassword(password), safeRole);
+        ).run(name || null, String(email).trim(), password ? hashPassword(password) : NO_PASSWORD, safeRole);
 
         logActivity(req, {
             action: 'user_created',
@@ -55,7 +85,7 @@ router.post('/', (req, res) => {
             description: `Created ${safeRole} user ${email}`
         });
 
-        const created = db.prepare('SELECT id, name, email, role, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
+        const created = db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).get(result.lastInsertRowid);
         res.status(201).json(created);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -65,10 +95,13 @@ router.post('/', (req, res) => {
 // Update a user's name / role, and optionally reset password
 router.put('/:id', (req, res) => {
     try {
-        const { name, role, password } = req.body;
+        const { name, role, password, remove_password } = req.body;
         const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
+        }
+        if (remove_password && !ssoEnabled) {
+            return res.status(400).json({ error: 'Single sign-on must be working before a password can be removed' });
         }
 
         const safeRole = role && ALLOWED_ROLES.includes(role) ? role : user.role;
@@ -81,9 +114,9 @@ router.put('/:id', (req, res) => {
             }
         }
 
-        if (password) {
+        if (password || remove_password) {
             db.prepare('UPDATE users SET name = ?, role = ?, password_hash = ? WHERE id = ?')
-                .run(name ?? user.name, safeRole, hashPassword(password), user.id);
+                .run(name ?? user.name, safeRole, password ? hashPassword(password) : NO_PASSWORD, user.id);
         } else {
             db.prepare('UPDATE users SET name = ?, role = ? WHERE id = ?')
                 .run(name ?? user.name, safeRole, user.id);
@@ -93,10 +126,10 @@ router.put('/:id', (req, res) => {
             action: 'user_updated',
             entity_type: 'user',
             entity_id: user.id,
-            description: `Updated user ${user.email}${password ? ' (password reset)' : ''}`
+            description: `Updated user ${user.email}${safeRole !== user.role ? ` (role ${user.role} → ${safeRole})` : ''}${password ? ' (password reset)' : remove_password ? ' (password removed — Microsoft sign-in only)' : ''}`
         });
 
-        const updated = db.prepare('SELECT id, name, email, role, created_at FROM users WHERE id = ?').get(user.id);
+        const updated = db.prepare(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`).get(user.id);
         res.json(updated);
     } catch (error) {
         res.status(500).json({ error: error.message });

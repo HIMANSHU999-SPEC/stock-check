@@ -1,17 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
-import { assetsAPI, employeesAPI, documentsAPI } from '../services/api';
-import { generateEmailDraft, openEmailDraft } from '../utils/emailTemplates';
+import { assetsAPI, documentsAPI, settingsAPI } from '../services/api';
+import { handleEmailResult } from '../utils/emailTemplates';
+import { assetScanUrl, statusColor, outcomeLabel } from '../utils/scan';
+import { useAssetActions } from './AssetActions';
 import QRCode from 'react-qr-code';
 
 export default function AssetDetails() {
-    const ADMIN_MAILBOX = 'admin@stock.local';
     const { id } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
     const [asset, setAsset] = useState(null);
-    const [employees, setEmployees] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [notice, setNotice] = useState('');
+    const [appBaseUrl, setAppBaseUrl] = useState('');
+    const actions = useAssetActions((message) => {
+        setNotice(message);
+        loadAsset();
+    });
     const [documents, setDocuments] = useState([]);
     const [uploadingDoc, setUploadingDoc] = useState(false);
 
@@ -48,27 +54,23 @@ export default function AssetDetails() {
             alert('Delete failed: ' + err.message);
         }
     }
-    const [showAssignModal, setShowAssignModal] = useState(false);
-    const [selectedEmployee, setSelectedEmployee] = useState('');
-    const [assignQuantity, setAssignQuantity] = useState(1);
-    const [showNewEmployeeForm, setShowNewEmployeeForm] = useState(false);
-    const [newEmployee, setNewEmployee] = useState({
-        name: '',
-        email: '',
-        department: '',
-        phone: ''
-    });
-
     useEffect(() => {
         loadAsset();
         loadDocuments();
-        loadEmployees();
+        settingsAPI.getPublic().then((s) => setAppBaseUrl(s.app_base_url || '')).catch(() => {});
     }, [id]);
 
+    // Arriving from "Register new asset" opens the assign dialog straight away.
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         if (params.get('assign') === '1') {
-            setShowAssignModal(true);
+            const suggest = params.get('assign_to')
+                ? { employeeId: params.get('assign_to') }
+                : params.get('assign_email')
+                    ? { name: params.get('assign_name') || '', email: params.get('assign_email') }
+                    : undefined;
+            actions.open('assign', id, undefined, suggest);
+            navigate(location.pathname, { replace: true });
         }
     }, [location.search]);
 
@@ -76,55 +78,11 @@ export default function AssetDetails() {
         try {
             const data = await assetsAPI.getById(id);
             setAsset(data);
-            setAssignQuantity(Math.max(1, (data.quantity || 1) - (data.assigned_quantity || 0)));
         } catch (error) {
             alert('Error loading asset: ' + error.message);
             navigate('/assets');
         } finally {
             setLoading(false);
-        }
-    }
-
-    async function loadEmployees() {
-        try {
-            const data = await employeesAPI.getAll();
-            setEmployees(data);
-        } catch (error) {
-            console.error('Error loading employees:', error);
-        }
-    }
-
-    async function handleAssign() {
-        if (!selectedEmployee) {
-            alert('Please select an employee');
-            return;
-        }
-        // Reassigning moves the assignment, so the whole quantity is in play;
-        // a fresh assignment can only use what's not already assigned.
-        const available = Math.max(0, (asset?.quantity || 0) - (asset?.assigned_quantity || 0));
-        const maxQty = asset?.assigned_to ? (asset?.quantity || 1) : available;
-        if (assignQuantity < 1 || assignQuantity > maxQty) {
-            alert(`Select a quantity between 1 and ${maxQty}`);
-            return;
-        }
-
-        try {
-            await assetsAPI.assign(id, { employee_id: selectedEmployee, quantity: assignQuantity });
-            setShowAssignModal(false);
-            loadAsset();
-        } catch (error) {
-            alert('Error assigning asset: ' + error.message);
-        }
-    }
-
-    async function handleReturn() {
-        if (!confirm('Return this asset?')) return;
-
-        try {
-            await assetsAPI.return(id, {});
-            loadAsset();
-        } catch (error) {
-            alert('Error returning asset: ' + error.message);
         }
     }
 
@@ -139,39 +97,34 @@ export default function AssetDetails() {
         }
     }
 
-    async function handleCreateEmployee(e) {
-        e.preventDefault();
+    async function handleEmail(template, assignmentId) {
         try {
-            const created = await employeesAPI.create(newEmployee);
-            await loadEmployees();
-            setSelectedEmployee(created.id);
-            setShowNewEmployeeForm(false);
-            setNewEmployee({ name: '', email: '', department: '', phone: '' });
+            const result = await assetsAPI.sendEmail(id, template, assignmentId);
+            const line = handleEmailResult(result);
+            if (line) setNotice(line);
         } catch (error) {
-            alert('Error creating employee: ' + error.message);
+            setNotice('The email could not be sent: ' + error.message);
         }
-    }
-
-    function handleEmailEmployee(type = 'assignment') {
-        if (!asset.employee_email) {
-            alert('No employee assigned to this asset');
-            return;
-        }
-
-        const employee = {
-            name: asset.employee_name,
-            email: asset.employee_email
-        };
-
-        const emailData = generateEmailDraft(asset, employee, type);
-        openEmailDraft(employee.email, emailData.subject, emailData.body, ADMIN_MAILBOX);
-    }
-
-    function handlePrintTag() {
-        window.print();
     }
 
     const availableQuantity = Math.max(0, (asset?.quantity || 1) - (asset?.assigned_quantity || 0));
+    const holders = asset?.assignments || [];
+    const isBulk = (asset?.quantity || 1) > 1;
+    const inService = ['available', 'assigned'].includes(asset?.status);
+    const sale = asset?.sale || null;
+    const canSell = Boolean(asset) && !isBulk && !['sold', 'lost', 'stolen', 'retired'].includes(asset.status);
+
+    async function handleUndoSale() {
+        const reason = window.prompt(`Undo the sale of ${asset.asset_number} to ${sale.buyer_name}? It goes back into stock, not back to whoever had it.\n\nReason (optional):`, '');
+        if (reason === null) return;
+        try {
+            await assetsAPI.undoSale(id, reason.trim());
+            setNotice(`Sale undone. ${asset.asset_number} is back in stock.`);
+            loadAsset();
+        } catch (error) {
+            setNotice('The sale could not be undone: ' + error.message);
+        }
+    }
     const warrantyMonths = asset?.warranty_period_months || 0;
     let warrantyExpiry = null;
     if (warrantyMonths > 0 && asset?.purchase_date) {
@@ -195,14 +148,32 @@ export default function AssetDetails() {
             <div className="flex justify-between items-center mb-3">
                 <h2>Asset Details</h2>
                 <div className="flex gap-2">
-                    <Link to={`/assets/${id}/edit`} className="btn btn-secondary">
+                    {canSell && (
+                        <button
+                            onClick={() => actions.open('sell', id)} className="write-only btn btn-secondary"
+                            title="Record that this device has been sold, for example to the person who uses it"
+                        >
+                            Sell
+                        </button>
+                    )}
+                    <button onClick={() => actions.open('transfer', id)} className="write-only btn btn-secondary">
+                        Move campus
+                    </button>
+                    <Link to={`/assets/${id}/edit`} className="write-only btn btn-secondary">
                         Edit
                     </Link>
-                    <button onClick={handleDelete} className="btn btn-danger">
+                    <button onClick={handleDelete} className="write-only btn btn-danger">
                         Delete
                     </button>
                 </div>
             </div>
+
+            {notice && (
+                <div className="alert alert-info flex justify-between items-center">
+                    <span>{notice}</span>
+                    <button className="btn btn-sm btn-secondary" onClick={() => setNotice('')}>Dismiss</button>
+                </div>
+            )}
 
             <div className="grid grid-2">
                 <div className="card">
@@ -256,7 +227,7 @@ export default function AssetDetails() {
                         <div className="form-group">
                             <label className="form-label">Status</label>
                             <div>
-                                <span className={`badge badge-${getStatusColor(asset.status)}`}>
+                                <span className={`badge badge-${statusColor(asset.status)}`}>
                                     {asset.status}
                                 </span>
                             </div>
@@ -331,7 +302,7 @@ export default function AssetDetails() {
                     <div className="card-header">
                         <div className="flex justify-between items-center">
                             <h3 className="card-title">📎 Invoices & Documents</h3>
-                            <label className="btn btn-sm btn-primary" style={{ cursor: 'pointer', marginBottom: 0 }}>
+                            <label className="write-only btn btn-sm btn-primary" style={{ cursor: 'pointer', marginBottom: 0 }}>
                                 {uploadingDoc ? 'Uploading…' : '+ Attach file'}
                                 <input
                                     type="file"
@@ -371,13 +342,13 @@ export default function AssetDetails() {
                                                             href={documentsAPI.viewUrl(id, doc.id)}
                                                             target="_blank"
                                                             rel="noreferrer"
-                                                            className="btn btn-sm btn-secondary"
+                                                            className="download-only btn btn-sm btn-secondary"
                                                         >
                                                             View
                                                         </a>
                                                         <button
                                                             onClick={() => handleDocDelete(doc)}
-                                                            className="btn btn-sm btn-danger"
+                                                            className="write-only btn btn-sm btn-danger"
                                                         >
                                                             Delete
                                                         </button>
@@ -394,85 +365,183 @@ export default function AssetDetails() {
 
                 <div className="card">
                     <div className="card-header">
-                        <h3 className="card-title">Assignment</h3>
+                        <div className="flex justify-between items-center">
+                            <h3 className="card-title">Assignment</h3>
+                            {inService && availableQuantity > 0 && (
+                                <button onClick={() => actions.open('assign', id)} className="write-only btn btn-sm btn-primary">
+                                    {holders.length > 0 ? `Assign more (${availableQuantity} left)` : 'Assign'}
+                                </button>
+                            )}
+                        </div>
                     </div>
                     <div className="card-body">
-                        {asset.assigned_to ? (
-                            <>
-                                <div className="form-group">
-                                    <label className="form-label">Assigned To</label>
-                                    <div style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
-                                        {asset.employee_name}
-                                    </div>
+                        {sale ? (
+                            <div>
+                                <div style={{ fontWeight: 'bold' }}>
+                                    Sold to{' '}
+                                    {sale.employee_id ? (
+                                        <Link to={`/employees/${sale.employee_id}`} className="text-primary">{sale.buyer_name}</Link>
+                                    ) : sale.buyer_name}
+                                    {' '}for £{Number(sale.price).toFixed(2)}
                                 </div>
-
-                                <div className="form-group">
-                                    <label className="form-label">Email</label>
-                                    <div>{asset.employee_email}</div>
+                                <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                    {[
+                                        `on ${new Date(`${sale.sold_on}T12:00:00Z`).toLocaleDateString()}`,
+                                        sale.buyer_email,
+                                        sale.payment_reference && `ref ${sale.payment_reference}`,
+                                        sale.recorded_by && `recorded by ${sale.recorded_by}`
+                                    ].filter(Boolean).join(' · ')}
                                 </div>
-
-                                <div className="form-group">
-                                    <label className="form-label">Department</label>
-                                    <div>{asset.department || 'N/A'}</div>
-                                </div>
-
-                                <div className="flex gap-2 mt-3">
-                                    <button onClick={handleEmailEmployee} className="btn btn-primary">
-                                        Email Employee
-                                    </button>
-                                    <button onClick={handleReturn} className="btn btn-secondary">
-                                        Return Asset
-                                    </button>
-                                    <button onClick={() => handleEmailEmployee('return')} className="btn btn-secondary">
-                                        Email Return Notice
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            setAssignQuantity(asset.assigned_quantity || 1);
-                                            setShowAssignModal(true);
-                                        }}
-                                        className="btn btn-secondary"
-                                    >
-                                        Reassign
-                                    </button>
-                                </div>
-                            </>
+                                {sale.notes && <p className="mt-1">{sale.notes}</p>}
+                                <p className="text-muted mt-2" style={{ fontSize: '0.85rem' }}>
+                                    No longer ours: it is kept here for the record and is not counted as stock.
+                                    If it still appears in Intune, remove it there.
+                                </p>
+                                <button onClick={handleUndoSale} className="write-only btn btn-sm btn-secondary">Undo sale</button>
+                            </div>
+                        ) : holders.length === 0 ? (
+                            <p className="text-muted">
+                                {inService
+                                    ? 'Not currently assigned to anyone.'
+                                    : `Marked "${asset.status}" — set the status back to available (Edit) before assigning it.`}
+                            </p>
                         ) : (
-                            <>
-                                <p className="text-muted">This asset is not currently assigned</p>
-                                <button
-                                    onClick={() => setShowAssignModal(true)}
-                                    className="btn btn-primary mt-2"
-                                    disabled={availableQuantity === 0}
-                                >
-                                    Assign to Employee
-                                </button>
-                                {availableQuantity === 0 && (
-                                    <div className="text-muted" style={{ marginTop: '0.5rem' }}>
-                                        No available quantity to assign. Increase stock or return items first.
+                            holders.map((row) => (
+                                <div key={row.id} className="holder-row">
+                                    <div>
+                                        <div style={{ fontWeight: 'bold' }}>
+                                            {row.employee_id ? (
+                                                <Link to={`/employees/${row.employee_id}`} className="text-primary">
+                                                    {row.employee_name}
+                                                </Link>
+                                            ) : (
+                                                <>📍 {row.location_label}</>
+                                            )}
+                                            {isBulk && <span className="badge badge-info" style={{ marginLeft: '0.5rem' }}>× {row.quantity}</span>}
+                                        </div>
+                                        <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                            {row.employee_id
+                                                ? [row.employee_email, row.department].filter(Boolean).join(' · ')
+                                                : 'Room / location'}
+                                            {' · since '}
+                                            {new Date(row.assigned_at.replace(' ', 'T') + 'Z').toLocaleDateString()}
+                                            {row.confirmed_at
+                                                ? ` · ✓ confirmed ${new Date(row.confirmed_at.replace(' ', 'T') + 'Z').toLocaleDateString()} by ${
+                                                    String(row.confirmed_by || '').toLowerCase() === String(row.employee_email || '').toLowerCase()
+                                                        ? 'the holder' : `IT (${row.confirmed_by})`}`
+                                                : isBulk || !row.employee_id
+                                                    ? ' · not yet confirmed by IT'
+                                                    : ' · not yet confirmed'}
+                                        </div>
                                     </div>
-                                )}
-                            </>
+                                    <div className="flex gap-1" style={{ flexWrap: 'wrap' }}>
+                                        {!row.confirmed_at && (
+                                            <button
+                                                className="write-only btn btn-sm btn-secondary"
+                                                title="Record that you have checked this holder really has it"
+                                                onClick={() => assetsAPI.confirmHolder(id, row.id).then(loadAsset).catch((e) => alert(e.message))}
+                                            >
+                                                ✓ Confirm
+                                            </button>
+                                        )}
+                                        <button onClick={() => actions.open('return', id, row.id)} className="write-only btn btn-sm btn-primary">
+                                            Return
+                                        </button>
+                                        <button onClick={() => actions.open('reassign', id, row.id)} className="write-only btn btn-sm btn-secondary">
+                                            Reassign
+                                        </button>
+                                        {canSell && row.employee_id && (
+                                            <button
+                                                onClick={() => actions.open('sell', id, row.id)} className="write-only btn btn-sm btn-secondary"
+                                                title="They are buying this device"
+                                            >
+                                                Sell to them
+                                            </button>
+                                        )}
+                                        {row.employee_id && (
+                                            <select
+                                                className="write-only form-control email-menu"
+                                                value=""
+                                                onChange={(e) => e.target.value && handleEmail(e.target.value, row.id)}
+                                                aria-label="Send an email"
+                                            >
+                                                <option value="">Email…</option>
+                                                <option value="asset_assigned">Assignment confirmation</option>
+                                                <option value="asset_return_request">Return request</option>
+                                                <option value="asset_maintenance">Maintenance required</option>
+                                            </select>
+                                        )}
+                                    </div>
+                                </div>
+                            ))
                         )}
                     </div>
                 </div>
 
                 <div className="card">
                     <div className="card-header">
-                        <h3 className="card-title">QR Code</h3>
+                        <h3 className="card-title">Sticker</h3>
                     </div>
                     <div className="card-body">
                         <div style={{ background: 'white', padding: '1rem', borderRadius: '8px', display: 'inline-block' }}>
-                            <QRCode value={asset.asset_number} size={200} />
+                            <QRCode value={assetScanUrl(appBaseUrl, asset.asset_number)} size={180} />
                         </div>
+                        <p className="text-muted mt-1" style={{ fontSize: '0.85rem' }}>
+                            Scanning this with a phone camera or a handheld scanner opens this asset.
+                        </p>
                         <div className="mt-2">
-                            <button onClick={handlePrintTag} className="btn btn-secondary">
-                                Print Tag
-                            </button>
+                            <Link to={`/tags?ids=${id}`} className="btn btn-secondary">
+                                Print sticker
+                            </Link>
                         </div>
                     </div>
                 </div>
             </div>
+
+            {asset.previous_holders && asset.previous_holders.length > 0 && (
+                <div className="card mt-3">
+                    <div className="card-header">
+                        <h3 className="card-title">Previous Holders</h3>
+                    </div>
+                    <div className="table-container">
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th>Held by</th>
+                                    {isBulk && <th>Qty</th>}
+                                    <th>From</th>
+                                    <th>Until</th>
+                                    <th>Outcome</th>
+                                    <th>Recorded by</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {asset.previous_holders.map((row) => (
+                                    <tr key={row.id}>
+                                        <td>
+                                            {row.employee_id ? (
+                                                <Link to={`/employees/${row.employee_id}`} className="text-primary">
+                                                    <strong>{row.employee_name || 'Unknown'}</strong>
+                                                </Link>
+                                            ) : (
+                                                <strong>{row.location_label || 'Unknown'}</strong>
+                                            )}
+                                            {row.employee_status === 'inactive' && (
+                                                <span className="badge badge-warning" style={{ marginLeft: '0.5rem' }}>Inactive</span>
+                                            )}
+                                        </td>
+                                        {isBulk && <td>{row.quantity}</td>}
+                                        <td style={{ whiteSpace: 'nowrap' }}>{row.assigned_at ? new Date(row.assigned_at).toLocaleDateString() : '—'}</td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{new Date(row.returned_at).toLocaleDateString()}</td>
+                                        <td>{outcomeLabel(row.return_condition)}</td>
+                                        <td>{row.returned_by_email || '—'}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
             {asset.history && asset.history.length > 0 && (
                 <div className="card mt-3">
@@ -487,6 +556,7 @@ export default function AssetDetails() {
                                     <th>Action</th>
                                     <th>Employee</th>
                                     <th>Notes</th>
+                                    <th>By</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -498,6 +568,7 @@ export default function AssetDetails() {
                                         </td>
                                         <td>{entry.employee_name || '-'}</td>
                                         <td>{entry.notes || '-'}</td>
+                                        <td>{entry.performed_by || '—'}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -506,150 +577,7 @@ export default function AssetDetails() {
                 </div>
             )}
 
-            {showAssignModal && (
-                <div
-                    className="modal-overlay"
-                    onClick={() => {
-                        setShowAssignModal(false);
-                        setShowNewEmployeeForm(false);
-                    }}
-                >
-                    <div className="modal" onClick={(e) => e.stopPropagation()}>
-                        <h3>{asset.assigned_to ? 'Reassign Asset' : 'Assign Asset to Employee'}</h3>
-                        {asset.assigned_to && (
-                            <p className="text-muted" style={{ marginTop: '0.5rem' }}>
-                                Currently with <strong>{asset.employee_name}</strong> — assigning moves it to the
-                                selected employee.
-                            </p>
-                        )}
-                        <div className="form-group mt-3">
-                            <label className="form-label">Select Employee</label>
-                            <select
-                                className="form-control"
-                                value={selectedEmployee}
-                                onChange={(e) => setSelectedEmployee(e.target.value)}
-                            >
-                                <option value="">Choose an employee...</option>
-                                {employees.map((emp) => (
-                                    <option key={emp.id} value={emp.id}>
-                                        {emp.name} - {emp.department || 'No department'}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="form-group mt-2">
-                            <label className="form-label">Quantity to Assign</label>
-                            <input
-                                type="number"
-                                className="form-control"
-                                min="1"
-                                max={asset.assigned_to ? (asset.quantity || 1) : Math.max(availableQuantity, 1)}
-                                value={assignQuantity}
-                                onChange={(e) => setAssignQuantity(parseInt(e.target.value, 10) || 1)}
-                            />
-                            <div className="text-muted" style={{ fontSize: '0.85rem' }}>
-                                {asset.assigned_to
-                                    ? `Total quantity: ${asset.quantity || 1}`
-                                    : `Available: ${availableQuantity}`}
-                            </div>
-                        </div>
-
-                        <div className="form-group mt-2">
-                            <button
-                                type="button"
-                                className="btn btn-secondary"
-                                onClick={() => setShowNewEmployeeForm((v) => !v)}
-                            >
-                                {showNewEmployeeForm ? 'Cancel new employee' : 'Create new employee'}
-                            </button>
-                        </div>
-
-                        {showNewEmployeeForm && (
-                            <form onSubmit={handleCreateEmployee} className="card mt-2">
-                                <div className="card-body">
-                                    <div className="grid grid-2">
-                                        <div className="form-group">
-                                            <label className="form-label">Name *</label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={newEmployee.name}
-                                                onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
-                                                required
-                                            />
-                                        </div>
-                                        <div className="form-group">
-                                            <label className="form-label">Email *</label>
-                                            <input
-                                                type="email"
-                                                className="form-control"
-                                                value={newEmployee.email}
-                                                onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
-                                                required
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-2">
-                                        <div className="form-group">
-                                            <label className="form-label">Department</label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={newEmployee.department}
-                                                onChange={(e) => setNewEmployee({ ...newEmployee, department: e.target.value })}
-                                            />
-                                        </div>
-                                        <div className="form-group">
-                                            <label className="form-label">Phone</label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={newEmployee.phone}
-                                                onChange={(e) => setNewEmployee({ ...newEmployee, phone: e.target.value })}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="card-footer">
-                                    <button type="submit" className="btn btn-primary">
-                                        Save & select
-                                    </button>
-                                </div>
-                            </form>
-                        )}
-
-                        <div className="flex gap-2 mt-3">
-                            <button
-                                onClick={() => {
-                                    setShowAssignModal(false);
-                                    setShowNewEmployeeForm(false);
-                                }}
-                                className="btn btn-secondary"
-                            >
-                                Cancel
-                            </button>
-                            <button onClick={handleAssign} className="btn btn-primary">
-                                Assign
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            {actions.dialogs}
         </div>
     );
 }
-
-function getStatusColor(status) {
-    const colors = {
-        available: 'success',
-        assigned: 'info',
-        maintenance: 'warning',
-        repair: 'warning',
-        damaged: 'danger',
-        lost: 'danger',
-        stolen: 'danger',
-        retired: 'danger'
-    };
-    return colors[status] || 'primary';
-}
-

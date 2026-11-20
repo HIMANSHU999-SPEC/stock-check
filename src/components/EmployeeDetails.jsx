@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { formatStamp } from './MyAssets';
 import { employeesAPI, assetsAPI } from '../services/api';
+import { outcomeLabel } from '../utils/scan';
 
 export default function EmployeeDetails() {
     const { id } = useParams();
@@ -50,7 +52,7 @@ export default function EmployeeDetails() {
             <div className="flex justify-between items-center mb-3">
                 <h2>Employee Details</h2>
                 <div className="flex gap-2">
-                    <button onClick={handleExport} className="btn btn-secondary" disabled={exporting}>
+                    <button onClick={handleExport} className="download-only btn btn-secondary" disabled={exporting}>
                         {exporting ? 'Exporting...' : 'Export PDF'}
                     </button>
                     <Link to="/employees" className="btn btn-secondary">Back</Link>
@@ -79,6 +81,21 @@ export default function EmployeeDetails() {
                     </div>
                     <div>
                         <div className="form-group">
+                            <label className="form-label">Status</label>
+                            <div>
+                                <span className={`badge badge-${employee.status === 'inactive' ? 'warning' : 'success'}`}>
+                                    {employee.status === 'inactive' ? 'Inactive' : 'Active'}
+                                </span>
+                            </div>
+                            {employee.status === 'inactive' && (
+                                <div className="text-muted mt-1" style={{ fontSize: '0.9rem' }}>
+                                    Since {employee.deactivated_at ? new Date(employee.deactivated_at).toLocaleDateString() : 'unknown'}
+                                    {employee.deactivated_by ? `, by ${employee.deactivated_by}` : ''}
+                                    {employee.deactivation_note ? ` — ${employee.deactivation_note}` : ''}
+                                </div>
+                            )}
+                        </div>
+                        <div className="form-group">
                             <label className="form-label">Assigned Assets</label>
                             <div className="badge badge-info">{employee.assets?.length || 0}</div>
                         </div>
@@ -88,7 +105,22 @@ export default function EmployeeDetails() {
 
             <div className="card mb-3">
                 <div className="card-header">
-                    <h3 className="card-title">Current Assigned Assets</h3>
+                    <div className="flex justify-between items-center" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <h3 className="card-title">Current Assigned Assets</h3>
+                        {(employee.assets || []).some((a) => !a.confirmed_at) && (
+                            <button
+                                type="button" className="write-only btn btn-sm btn-primary"
+                                title="Record that you have checked this person or department really has these"
+                                onClick={() => {
+                                    const waiting = employee.assets.filter((a) => !a.confirmed_at).length;
+                                    if (!window.confirm(`Confirm that ${employee.name} has all ${waiting} unconfirmed item(s)? This is recorded under your name.`)) return;
+                                    employeesAPI.confirmAssets(id).then(loadEmployee).catch((e) => alert(e.message));
+                                }}
+                            >
+                                ✓ Confirm all ({employee.assets.filter((a) => !a.confirmed_at).length})
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <div className="table-container">
                     <table className="table">
@@ -98,12 +130,13 @@ export default function EmployeeDetails() {
                                 <th>Name</th>
                                 <th>Category</th>
                                 <th>Status</th>
+                                <th>Confirmed</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {(employee.assets || []).length === 0 ? (
-                                <tr><td colSpan="5" className="text-center text-muted">No assets assigned</td></tr>
+                                <tr><td colSpan="6" className="text-center text-muted">No assets assigned</td></tr>
                             ) : (
                                 employee.assets.map((a) => (
                                     <tr key={a.id}>
@@ -111,12 +144,61 @@ export default function EmployeeDetails() {
                                         <td>{a.name}</td>
                                         <td>{a.category_name || 'N/A'}</td>
                                         <td><span className={`badge badge-${getStatusColor(a.status)}`}>{a.status}</span></td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>
+                                            {a.confirmed_at ? (
+                                                <>
+                                                    <span className="badge badge-success">✓ {formatStamp(a.confirmed_at)}</span>
+                                                    <div className="text-muted" style={{ fontSize: '0.8rem' }}>
+                                                        {String(a.confirmed_by || '').toLowerCase() === String(employee.email || '').toLowerCase()
+                                                            ? 'by the holder' : `by IT (${a.confirmed_by})`}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <span className="text-muted">{a.quantity > 1 ? 'Not yet (IT confirms bulk)' : 'Not yet'}</span>
+                                            )}
+                                        </td>
                                         <td>
                                             <div className="flex gap-1">
                                                 <Link to={`/assets/${a.id}`} className="btn btn-sm btn-secondary">View</Link>
-                                                <Link to={`/assets/${a.id}/edit`} className="btn btn-sm btn-secondary">Edit</Link>
+                                                <Link to={`/assets/${a.id}/edit`} className="write-only btn btn-sm btn-secondary">Edit</Link>
                                             </div>
                                         </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div className="card mb-3">
+                <div className="card-header">
+                    <h3 className="card-title">Previously Held</h3>
+                </div>
+                <div className="table-container">
+                    <table className="table">
+                        <thead>
+                            <tr>
+                                <th>Asset Number</th>
+                                <th>Name</th>
+                                <th>Qty</th>
+                                <th>From</th>
+                                <th>Until</th>
+                                <th>Outcome</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {(employee.past_assets || []).length === 0 ? (
+                                <tr><td colSpan="6" className="text-center text-muted">Nothing handed back yet</td></tr>
+                            ) : (
+                                employee.past_assets.map((p) => (
+                                    <tr key={p.assignment_id}>
+                                        <td><Link to={`/assets/${p.asset_id}`} className="text-primary"><strong>{p.asset_number}</strong></Link></td>
+                                        <td><div className="cell-clamp" title={p.name}>{p.name}</div></td>
+                                        <td>{p.quantity}</td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{p.assigned_at ? new Date(p.assigned_at).toLocaleDateString() : '—'}</td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{new Date(p.returned_at).toLocaleDateString()}</td>
+                                        <td>{outcomeLabel(p.return_condition)}</td>
                                     </tr>
                                 ))
                             )}

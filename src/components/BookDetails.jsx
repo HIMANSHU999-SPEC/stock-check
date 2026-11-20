@@ -49,10 +49,10 @@ export default function BookDetails() {
                 <h2>{book.title}</h2>
                 <div className="flex gap-2">
                     <Link to="/books" className="btn btn-secondary">Back to Books</Link>
-                    <Link to={`/books/${book.id}/edit`} className="btn btn-secondary">Edit</Link>
+                    <Link to={`/books/${book.id}/edit`} className="write-only btn btn-secondary">Edit</Link>
                     <Link
                         to={`/library/issue?book=${encodeURIComponent(book.book_number)}`}
-                        className="btn btn-primary"
+                        className="write-only btn btn-primary"
                     >
                         Issue this Book
                     </Link>
@@ -145,7 +145,7 @@ export default function BookDetails() {
                                             {loan.status === 'issued' && (
                                                 <button
                                                     onClick={() => handleReturn(loan.id)}
-                                                    className="btn btn-sm btn-primary"
+                                                    className="write-only btn btn-sm btn-primary"
                                                 >
                                                     Return
                                                 </button>

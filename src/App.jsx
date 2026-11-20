@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import AssetList from './components/AssetList';
 import AssetDetails from './components/AssetDetails';
@@ -21,129 +21,25 @@ import UserManagement from './components/UserManagement';
 import ActivityLog from './components/ActivityLog';
 import RapidCatalogue from './components/RapidCatalogue';
 import InvoiceImport from './components/InvoiceImport';
+import Inventory from './components/Inventory';
+import TidyAssets from './components/TidyAssets';
+import IntuneCheck from './components/IntuneCheck';
+import Scan from './components/Scan';
+import Settings from './components/Settings';
+import SsoComplete from './components/SsoComplete';
+import Navbar from './components/Navbar';
+import MyAssets from './components/MyAssets';
+import EmailDraftBar from './components/EmailDraftBar';
+import StaffReports from './components/StaffReports';
 import { authAPI, saveAuthToken, clearAuthToken } from './services/api';
 import './index.css';
-
-function Navbar({ user, onLogout, license }) {
-    const location = useLocation();
-
-    const isActive = (path) => location.pathname === path;
-
-    return (
-        <nav className="navbar">
-            <div className="container navbar-content">
-                <div className="navbar-brand">
-                    <img
-                        src="/laat-logo.png"
-                        alt="London Academy for Applied Technology"
-                        style={{ height: '40px', width: 'auto', background: '#fff', borderRadius: '6px', padding: '3px' }}
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
-                    <div>
-                        <h1>Stock Management System</h1>
-                        <div className="navbar-subtitle">
-                            London Academy for Applied Technology — Built by JH Infotech
-                        </div>
-                    </div>
-                </div>
-                <ul className="navbar-nav">
-                    <li>
-                        <Link to="/" className={`nav-link ${isActive('/') ? 'active' : ''}`}>
-                            Dashboard
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/assets" className={`nav-link ${isActive('/assets') ? 'active' : ''}`}>
-                            Assets
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/employees" className={`nav-link ${isActive('/employees') ? 'active' : ''}`}>
-                            Employees
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/categories" className={`nav-link ${isActive('/categories') ? 'active' : ''}`}>
-                            Categories
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/reports" className={`nav-link ${isActive('/reports') ? 'active' : ''}`}>
-                            Reports
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/books" className={`nav-link ${isActive('/books') ? 'active' : ''}`}>
-                            Books
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/borrowers" className={`nav-link ${isActive('/borrowers') ? 'active' : ''}`}>
-                            Borrowers
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/library/issue" className={`nav-link ${isActive('/library/issue') ? 'active' : ''}`}>
-                            Issue Desk
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/activity" className={`nav-link ${isActive('/activity') ? 'active' : ''}`}>
-                            Activity
-                        </Link>
-                    </li>
-                    {user?.role === 'admin' && (
-                        <li>
-                            <Link to="/users" className={`nav-link ${isActive('/users') ? 'active' : ''}`}>
-                                Users
-                            </Link>
-                        </li>
-                    )}
-                    <li>
-                        <Link to="/recycle-bin" className={`nav-link ${isActive('/recycle-bin') ? 'active' : ''}`}>
-                            Recycle Bin
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/tags" className={`nav-link ${isActive('/tags') ? 'active' : ''}`}>
-                            Print Tags
-                        </Link>
-                    </li>
-                    {user ? (
-                        <>
-                            <li className="text-muted" style={{ padding: '0 0.5rem' }}>
-                                {user.name} ({user.role})
-                            </li>
-                            <li>
-                                <button className="btn btn-sm btn-secondary" onClick={onLogout}>
-                                    Logout
-                                </button>
-                            </li>
-                        </>
-                    ) : (
-                        <li>
-                            <Link to="/login" className="btn btn-sm btn-secondary">
-                                Login
-                            </Link>
-                        </li>
-                    )}
-                    {license?.expired && (
-                        <li>
-                            <span className="badge badge-danger">License expired</span>
-                        </li>
-                    )}
-                </ul>
-            </div>
-        </nav>
-    );
-}
 
 function Footer() {
     return (
         <footer className="footer">
             <div className="container">
                 <p className="footer-text">
-                    © 2025 London Academy for Applied Technology — Developed by{' '}
+                    © {new Date().getFullYear()} London Academy for Applied Technology — Developed by{' '}
                     <span className="footer-link">JH Infotech</span>
                 </p>
             </div>
@@ -151,20 +47,55 @@ function Footer() {
     );
 }
 
-function ProtectedRoute({ user, license, authLoading, children }) {
+// Pages that exist to change something, or to run the system. View-only
+// accounts are sent back to the dashboard; the server refuses them anyway.
+const READ_ONLY_ROLES = ['viewer', 'inventory'];
+const NOT_FOR_READ_ONLY = /^\/(assets\/(new|import-invoice|tidy)|assets\/[^/]+\/edit|books\/new|books\/[^/]+\/edit|library\/(issue|rapid)|recycle-bin|activity|users|settings|staff-reports|intune)\/?$/;
+
+function ProtectedRoute({ user, license, authLoading, children, staffAllowed = false }) {
+    const location = useLocation();
+
     if (authLoading) {
         return <div className="spinner"></div>;
     }
 
-    if (!license || license.expired) {
-        return <Navigate to="/login" replace />;
+    // Remember where they were heading (e.g. a scanned sticker's link) so
+    // signing in takes them straight there.
+    if (!license || license.expired || !user) {
+        return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
     }
 
-    if (!user) {
-        return <Navigate to="/login" replace />;
+    // Staff who do not run the system have one page: their own assets. The
+    // server refuses them everything else in any case.
+    if (user.role === 'staff' && !staffAllowed) {
+        return <Navigate to="/my-assets" replace />;
+    }
+
+    if (READ_ONLY_ROLES.includes(user.role) && NOT_FOR_READ_ONLY.test(location.pathname)) {
+        return <Navigate to="/" replace />;
     }
 
     return children;
+}
+
+function LoggedInRedirect({ user }) {
+    const location = useLocation();
+    if (user?.role === 'staff') return <Navigate to="/my-assets" replace />;
+    return <Navigate to={location.state?.from || '/'} replace />;
+}
+
+// Finishes a Microsoft sign-in: the token is already stored, so load the
+// user and move on to where they were going.
+function SsoLanding({ onSignedIn }) {
+    const navigate = useNavigate();
+    return (
+        <SsoComplete
+            onSignedIn={async (returnTo) => {
+                await onSignedIn();
+                navigate(returnTo, { replace: true });
+            }}
+        />
+    );
 }
 
 function App() {
@@ -192,6 +123,13 @@ function App() {
         bootstrap();
     }, []);
 
+    // Lets the stylesheet hide the buttons an account cannot use
+    // (see .write-only / .download-only in index.css).
+    React.useEffect(() => {
+        if (user?.role) document.body.dataset.access = user.role;
+        else delete document.body.dataset.access;
+    }, [user]);
+
     async function handleLogin(email, password) {
         const res = await authAPI.login(email, password);
         saveAuthToken(res.token);
@@ -201,22 +139,25 @@ function App() {
         return res;
     }
 
-    async function handleActivate(code) {
-        const res = await authAPI.activate(code);
-        if (res.license) setLicense(res.license);
-        return res;
+    async function handleSsoSignedIn() {
+        const me = await authAPI.me();
+        setUser(me.user);
+        setLicense(await authAPI.license());
     }
 
     function handleLogout() {
         clearAuthToken();
         setUser(null);
-        setLicense(null);
+        // Signed-out visitors only learn whether the app is usable.
+        authAPI.license().then(setLicense).catch(() => setLicense(null));
     }
 
     return (
         <Router>
             <div className="app">
-                <Navbar user={user} onLogout={handleLogout} license={license} />
+                {/* Nothing of the application is shown until someone has signed in:
+                    the sign-in page carries just the logo and the sign-in card. */}
+                {user && <Navbar user={user} onLogout={handleLogout} license={license} />}
                 <main className="main-content">
                     <div className="container">
                         <Routes>
@@ -224,22 +165,72 @@ function App() {
                                 path="/login"
                                 element={
                                     user && license && !license.expired ? (
-                                        <Navigate to="/" replace />
+                                        <LoggedInRedirect user={user} />
                                     ) : (
                                         <Login
                                             onLogin={handleLogin}
-                                            onActivate={handleActivate}
                                             license={license}
                                             authLoading={authLoading}
+                                            user={user}
                                         />
                                     )
                                 }
                             />
+                            <Route path="/sso-complete" element={<SsoLanding onSignedIn={handleSsoSignedIn} />} />
                             <Route
                                 path="/"
                                 element={
                                     <ProtectedRoute user={user} license={license} authLoading={authLoading}>
                                         <Dashboard />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/my-assets"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading} staffAllowed>
+                                        <MyAssets />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/staff-reports"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <StaffReports />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/inventory"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <Inventory />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/scan"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <Scan />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            {/* The link printed in every sticker's QR code */}
+                            <Route
+                                path="/s/:code"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <Scan />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/settings"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <Settings currentUser={user} license={license} />
                                     </ProtectedRoute>
                                 }
                             />
@@ -256,6 +247,22 @@ function App() {
                                 element={
                                     <ProtectedRoute user={user} license={license} authLoading={authLoading}>
                                         <AssetForm />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/assets/tidy"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <TidyAssets />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="/intune"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <IntuneCheck />
                                     </ProtectedRoute>
                                 }
                             />
@@ -414,7 +421,8 @@ function App() {
                         </Routes>
                     </div>
                 </main>
-                <Footer />
+                {user && <Footer />}
+                {user && <EmailDraftBar />}
             </div>
         </Router>
     );

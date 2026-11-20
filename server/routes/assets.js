@@ -3,6 +3,13 @@ const router = express.Router();
 const db = require('../database');
 const { generateAssetNumber } = require('../utils/assetNumber');
 const { logActivity } = require('../utils/activity');
+const assignments = require('../services/assignments');
+const mailer = require('../services/mailer');
+const sharepoint = require('../services/sharepoint');
+const { getSettings } = require('../services/appSettings');
+const tidy = require('../services/tidy');
+const sales = require('../services/sales');
+const cells = require('../utils/importValues');
 const PDFDocument = require('pdfkit');
 const archiver = require('archiver');
 const { PassThrough } = require('stream');
@@ -74,12 +81,38 @@ function toCsv(rows) {
     return lines.join('\n');
 }
 
+// Everyone (and every room) currently holding an asset, as one display string.
+const HOLDERS_SQL = `(
+      SELECT GROUP_CONCAT(COALESCE(he.name, x.location_label), ', ')
+      FROM asset_assignments x LEFT JOIN employees he ON x.employee_id = he.id
+      WHERE x.asset_id = a.id AND x.returned_at IS NULL
+    )`;
+const HOLDER_COUNT_SQL = '(SELECT COUNT(*) FROM asset_assignments x WHERE x.asset_id = a.id AND x.returned_at IS NULL)';
+
+// Send an email about an asset without letting a mail problem fail the
+// action that triggered it. Resolves with the outcome for the UI to show.
+async function notify(templateKey, asset, employee, extra, req) {
+    if (!employee) return { status: 'no_recipient' };
+    return mailer.sendTemplate(templateKey, {
+        to: employee.email,
+        context: mailer.assetContext(asset, { employee, user: req.user, ...extra }),
+        entity: { type: 'asset', id: asset.id },
+        user: req.user
+    });
+}
+
+function handleError(res, error) {
+    res.status(error.status || 500).json({ error: error.message });
+}
+
 // Get all assets with optional filtering
 router.get('/', (req, res) => {
     try {
         const { status, category, search, supplier, campus, model, brand } = req.query;
         let query = `
-      SELECT a.*, c.name as category_name, e.name as employee_name, e.email as employee_email
+      SELECT a.*, c.name as category_name, e.name as employee_name, e.email as employee_email,
+             ${HOLDERS_SQL} as holders, ${HOLDER_COUNT_SQL} as holder_count,
+             (SELECT s.buyer_name FROM asset_sales s WHERE s.asset_id = a.id AND s.cancelled_at IS NULL ORDER BY s.id DESC LIMIT 1) as sold_to
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN employees e ON a.assigned_to = e.id
@@ -87,12 +120,20 @@ router.get('/', (req, res) => {
     `;
         const params = [];
 
-        if (status) {
+        // "assigned" / "available" follow the stock actually out or in hand, so
+        // partly-assigned bulk items show up under both.
+        if (status === 'assigned') {
+            query += ' AND a.assigned_quantity > 0';
+        } else if (status === 'available') {
+            query += " AND a.status IN ('available', 'assigned') AND a.quantity > COALESCE(a.assigned_quantity, 0)";
+        } else if (status) {
             query += ' AND a.status = ?';
             params.push(status);
         }
 
-        if (category) {
+        if (category === '__none__') {
+            query += ' AND a.category_id IS NULL';
+        } else if (category) {
             query += ' AND a.category_id = ?';
             params.push(category);
         }
@@ -106,7 +147,9 @@ router.get('/', (req, res) => {
             }
         }
 
-        if (campus) {
+        if (campus === '__unassigned__') {
+            query += " AND TRIM(COALESCE(a.campus, '')) = ''";
+        } else if (campus) {
             query += " AND LOWER(TRIM(COALESCE(a.campus, ''))) = LOWER(TRIM(?))";
             params.push(campus);
         }
@@ -130,9 +173,14 @@ router.get('/', (req, res) => {
         }
 
         if (search) {
-            query += ' AND (a.name LIKE ? OR a.asset_number LIKE ? OR a.model LIKE ? OR a.serial_number LIKE ?)';
+            query += ` AND (a.name LIKE ? OR a.asset_number LIKE ? OR a.model LIKE ? OR a.serial_number LIKE ?
+              OR EXISTS (
+                SELECT 1 FROM asset_assignments x LEFT JOIN employees he ON x.employee_id = he.id
+                WHERE x.asset_id = a.id AND x.returned_at IS NULL
+                  AND (he.name LIKE ? OR x.location_label LIKE ?)
+              ))`;
             const searchParam = `%${search}%`;
-            params.push(searchParam, searchParam, searchParam, searchParam);
+            params.push(searchParam, searchParam, searchParam, searchParam, searchParam, searchParam);
         }
 
         query += ' ORDER BY a.created_at DESC';
@@ -151,7 +199,7 @@ router.get('/export/by-category', (req, res) => {
         let query = `
       SELECT a.asset_number, a.name, a.brand, a.model, a.serial_number, a.quantity, a.assigned_quantity,
              a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
-             c.name as category, e.name as assigned_to, e.email as assigned_email, a.created_at as date_added
+             c.name as category, ${HOLDERS_SQL} as assigned_to, e.email as assigned_email, a.created_at as date_added
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN employees e ON a.assigned_to = e.id
@@ -179,7 +227,7 @@ router.get('/export/by-supplier', (req, res) => {
         let query = `
       SELECT a.asset_number, a.name, a.brand, a.model, a.serial_number, a.quantity, a.assigned_quantity,
              a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
-             c.name as category, e.name as assigned_to, e.email as assigned_email, a.created_at as date_added
+             c.name as category, ${HOLDERS_SQL} as assigned_to, e.email as assigned_email, a.created_at as date_added
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN employees e ON a.assigned_to = e.id
@@ -211,7 +259,7 @@ router.get('/export/by-model', (req, res) => {
         let query = `
       SELECT a.asset_number, a.name, a.brand, a.model, a.serial_number, a.quantity, a.assigned_quantity,
              a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
-             c.name as category, e.name as assigned_to, e.email as assigned_email, a.created_at as date_added
+             c.name as category, ${HOLDERS_SQL} as assigned_to, e.email as assigned_email, a.created_at as date_added
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN employees e ON a.assigned_to = e.id
@@ -243,7 +291,7 @@ router.get('/export/by-campus', (req, res) => {
         let query = `
       SELECT a.asset_number, a.name, a.brand, a.model, a.serial_number, a.quantity, a.assigned_quantity,
              a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
-             c.name as category, e.name as assigned_to, e.email as assigned_email, a.created_at as date_added
+             c.name as category, ${HOLDERS_SQL} as assigned_to, e.email as assigned_email, a.created_at as date_added
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN employees e ON a.assigned_to = e.id
@@ -295,16 +343,17 @@ function buildEmployeePdf(employee, assets) {
 function exportAssignments(res, ids) {
     let query = `
       SELECT e.id as employee_id, e.name as employee_name, e.email as employee_email, e.department,
-             a.asset_number, a.name as asset_name, a.model, a.serial_number, a.quantity, a.assigned_quantity,
+             a.asset_number, a.name as asset_name, a.model, a.serial_number, a.quantity, x.quantity as assigned_quantity,
              a.status, c.name as category, a.location
-      FROM assets a
-      JOIN employees e ON a.assigned_to = e.id
+      FROM asset_assignments x
+      JOIN assets a ON x.asset_id = a.id
+      JOIN employees e ON x.employee_id = e.id
       LEFT JOIN categories c ON a.category_id = c.id
-      WHERE a.assigned_to IS NOT NULL AND a.deleted_at IS NULL
+      WHERE x.returned_at IS NULL AND a.deleted_at IS NULL
     `;
     if (ids.length > 0) {
         const placeholders = ids.map(() => '?').join(',');
-        query += ` AND a.assigned_to IN (${placeholders})`;
+        query += ` AND x.employee_id IN (${placeholders})`;
     }
     query += ' ORDER BY e.name';
 
@@ -513,6 +562,47 @@ router.get('/export/by-employees', (req, res) => {
     }
 });
 
+// A scanned sticker carries the asset's link (…/s/AST-2026-0001); handheld
+// scanners and older stickers give the bare number. Accept either, and a
+// serial number typed by hand.
+function codeFromScan(raw) {
+    let code = String(raw || '').trim();
+    if (/^https?:\/\//i.test(code)) {
+        try {
+            const segments = new URL(code).pathname.split('/').filter(Boolean);
+            code = decodeURIComponent(segments[segments.length - 1] || '');
+        } catch (err) {
+            // not a URL after all — use the text as scanned
+        }
+    }
+    return code.trim();
+}
+
+// Find an asset from a scanned or typed code
+router.get('/lookup', (req, res) => {
+    try {
+        const code = codeFromScan(req.query.code);
+        if (!code) {
+            return res.status(400).json({ error: 'Scan or type an asset number' });
+        }
+        const asset = db.prepare(`
+      SELECT id, asset_number FROM assets
+      WHERE deleted_at IS NULL AND (
+        UPPER(asset_number) = UPPER(?)
+        OR (serial_number IS NOT NULL AND TRIM(serial_number) <> '' AND UPPER(TRIM(serial_number)) = UPPER(?))
+      )
+      ORDER BY CASE WHEN UPPER(asset_number) = UPPER(?) THEN 0 ELSE 1 END
+      LIMIT 1
+    `).get(code, code, code);
+        if (!asset) {
+            return res.status(404).json({ error: `No asset found for "${code}"`, code });
+        }
+        res.json(asset);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // Get single asset by ID
 router.get('/:id', (req, res) => {
     try {
@@ -534,17 +624,23 @@ router.get('/:id', (req, res) => {
       FROM asset_history ah
       LEFT JOIN employees e ON ah.employee_id = e.id
       WHERE ah.asset_id = ?
-      ORDER BY ah.timestamp DESC
+      ORDER BY ah.timestamp DESC, ah.id DESC
     `).all(req.params.id);
 
-        res.json({ ...asset, history });
+        res.json({
+            ...asset,
+            assignments: assignments.openAssignments(asset.id),
+            previous_holders: assignments.closedAssignments(asset.id),
+            sale: sales.activeSale(asset.id),
+            history
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
 // Create new asset
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     try {
         const assetNumber = generateAssetNumber();
         const {
@@ -566,6 +662,13 @@ router.post('/', (req, res) => {
     } = req.body;
 
         const safeQuantity = Math.max(1, parseInt(quantity, 10) || 1);
+        // Whatever was left blank is worked out from the name: the category,
+        // the brand, and the home campus for electronics with no campus.
+        // The form normally sends a category; when one is missing (or the
+        // brand is), ask for a suggestion. This never fails the save.
+        const needsGuess = !category_id || !String(brand || '').trim();
+        const [guess] = needsGuess ? await tidy.suggestForNew([{ name, model, brand }], { timeout: 8000 }) : [];
+        const filled = tidy.defaultsForNew({ name, model, brand, category_id, campus }, guess ? { guess } : {});
 
         const result = db.prepare(`
       INSERT INTO assets (
@@ -573,17 +676,19 @@ router.post('/', (req, res) => {
         purchase_date, purchase_price, supplier_name, warranty_period_months, intune_price, status, campus, location, notes
       ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-            assetNumber, name, category_id, model, serial_number, brand || null, safeQuantity,
-            purchase_date, purchase_price, supplier_name, Math.max(0, parseInt(warranty_period_months, 10) || 0), intune_price, status, campus, location, notes
+            assetNumber, name, filled.category_id, model, serial_number, filled.brand, safeQuantity,
+            purchase_date, purchase_price, supplier_name, Math.max(0, parseInt(warranty_period_months, 10) || 0), intune_price, status, filled.campus, location, notes
         );
 
         // Add to history
         db.prepare(`
-      INSERT INTO asset_history (asset_id, action, notes)
-      VALUES (?, 'created', 'Asset registered in system')
-    `).run(result.lastInsertRowid);
+      INSERT INTO asset_history (asset_id, action, notes, performed_by)
+      VALUES (?, 'created', 'Asset registered in system', ?)
+    `).run(result.lastInsertRowid, req.user?.email || null);
 
         const newAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(result.lastInsertRowid);
+        tidy.rememberAi(newAsset.id, newAsset, filled.ai_answer);
+        sharepoint.enqueue(newAsset.id);
         res.status(201).json(newAsset);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -591,12 +696,40 @@ router.post('/', (req, res) => {
 });
 
 // Bulk import assets (expects parsed Excel/JSON on client)
-router.post('/import', (req, res) => {
+router.post('/import', async (req, res) => {
     try {
-        const { items = [], createMissingCategories = true } = req.body;
-        if (!Array.isArray(items) || items.length === 0) {
+        const { items: sheetRows = [], createMissingCategories = true, date1904 = false } = req.body || {};
+        if (!Array.isArray(sheetRows) || sheetRows.length === 0) {
             return res.status(400).json({ error: 'No items provided for import' });
         }
+
+        // A spreadsheet cell can hold anything: a serial number typed as a
+        // number, a real Excel date, TRUE/FALSE. Settle every value into what
+        // its column stores before anything else looks at it.
+        let unreadDates = 0;
+        const number = (value) => (typeof value === 'number' || typeof value === 'string' ? value : undefined);
+        const items = sheetRows.map((row) => {
+            const cell = row && typeof row === 'object' ? row : {};
+            const purchased = cells.date(cell.purchase_date, { date1904: Boolean(date1904) });
+            if (!purchased.ok) unreadDates += 1;
+            return {
+                name: cells.text(cell.name, 300),
+                category: cells.text(cell.category, 100),
+                brand: cells.text(cell.brand, 100) || cells.text(cell.manufacturer, 100),
+                model: cells.text(cell.model, 300),
+                serial_number: cells.text(cell.serial_number, 200),
+                quantity: number(cell.quantity),
+                purchase_date: purchased.date,
+                purchase_price: cells.money(cell.purchase_price),
+                supplier_name: cells.text(cell.supplier_name, 200) || cells.text(cell.supplier, 200),
+                warranty_period_months: number(cell.warranty_period_months) ?? number(cell.warranty)
+                    ?? number(cell['warranty months']) ?? number(cell['warranty period']),
+                status: (cells.text(cell.status, 30) || '').toLowerCase(),
+                campus: cells.text(cell.campus, 100),
+                location: cells.text(cell.location, 200),
+                notes: cells.text(cell.notes, 5000)
+            };
+        });
 
         const allowedStatuses = ['available', 'assigned', 'maintenance', 'repair', 'damaged', 'lost', 'stolen', 'retired'];
         const categoryCache = new Map();
@@ -625,41 +758,68 @@ router.post('/import', (req, res) => {
       INSERT INTO assets (
         asset_number, name, category_id, model, serial_number, brand, quantity, assigned_quantity,
         purchase_date, purchase_price, supplier_name, warranty_period_months, intune_price, status, campus, location, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
+        const insertedIds = [];
+        // One round of suggestions for the whole sheet, before anything is
+        // written: rows with no category or brand are worked out from the name.
+        const guesses = await tidy.suggestForNew(items.map((item) => {
+            const brand = item.brand || item.manufacturer;
+            return {
+                name: item.name, model: item.model, brand,
+                ask: !(String(item.category || '').trim() && String(brand || '').trim())
+            };
+        }));
+        const aiAnswers = [];
         const importResult = db.transaction(() => {
             let inserted = 0;
-            for (const item of items) {
-                const status = allowedStatuses.includes(item.status) ? item.status : 'available';
-                const categoryId = resolveCategoryId(item.category);
+            for (const [index, item] of items.entries()) {
+                // An imported row has no holder yet, so "assigned" becomes available.
+                const status = allowedStatuses.includes(item.status) && item.status !== 'assigned' ? item.status : 'available';
+                // A row with no category is categorised from its name; a
+                // blank brand or campus is filled in the same way.
+                const filled = tidy.defaultsForNew({
+                    name: item.name,
+                    model: item.model,
+                    brand: item.brand || item.manufacturer,
+                    category_id: resolveCategoryId(item.category),
+                    campus: item.campus
+                }, { guess: guesses[index] });
+                const categoryId = filled.category_id;
 
                 const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
                 const warrantyMonths = Math.max(0, parseInt(item.warranty_period_months || item.warranty || item['warranty months'] || item['warranty period'], 10) || 0);
-                insertStmt.run(
+                const inserted_row = insertStmt.run(
                     generateAssetNumber(),
                     item.name || 'Unnamed Asset',
                     categoryId,
                     item.model || null,
                     item.serial_number || null,
-                    item.brand || item.manufacturer || null,
+                    filled.brand,
                     qty,
-                    item.purchase_date || null,
-                    item.purchase_price || null,
-                    item.supplier_name || item.supplier || null,
+                    item.purchase_date,
+                    item.purchase_price,
+                    item.supplier_name,
                     warrantyMonths,
                     null, // intune_price removed from input
                     status,
-                    item.campus || '',
+                    filled.campus,
                     item.location || null,
                     item.notes || null
                 );
+                insertedIds.push(inserted_row.lastInsertRowid);
+                aiAnswers.push([inserted_row.lastInsertRowid, item, filled.ai_answer]);
                 inserted += 1;
             }
+            aiAnswers.forEach(([id, item, answer]) => tidy.rememberAi(id, item, answer));
             return { inserted };
         })();
 
-        res.json({ message: 'Import completed', ...importResult });
+        insertedIds.forEach((id) => sharepoint.enqueue(id));
+        // Dates that could not be read are left blank rather than stored as
+        // they came; say how many so they can be put right by hand.
+        res.json({ message: 'Import completed', ...importResult, unread_dates: unreadDates });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -673,62 +833,95 @@ router.put('/:id', (req, res) => {
             category_id,
             model,
             serial_number,
-        brand,
-        quantity = 1,
-        purchase_date,
-        purchase_price,
-        supplier_name,
-        warranty_period_months,
-        intune_price,
-        status,
-        campus = '',
-        location,
-        notes
-    } = req.body;
+            brand,
+            quantity = 1,
+            purchase_date,
+            purchase_price,
+            supplier_name,
+            warranty_period_months,
+            intune_price,
+            status,
+            campus = '',
+            location,
+            notes
+        } = req.body;
 
-    const current = db.prepare('SELECT status, assigned_quantity, assigned_to FROM assets WHERE id = ? AND deleted_at IS NULL').get(req.params.id);
-    if (!current) {
-        return res.status(404).json({ error: 'Asset not found' });
+        const current = db.prepare('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL').get(req.params.id);
+        if (!current) {
+            return res.status(404).json({ error: 'Asset not found' });
         }
 
         const safeQuantity = Math.max(1, parseInt(quantity, 10) || 1);
-        if (safeQuantity < current.assigned_quantity) {
+        const requestedStatus = assignments.ALL_STATUSES.includes(status) ? status : current.status;
+        // "Sold" goes with a record of who bought it, so it is set and
+        // cleared by the sale actions, never by editing the status.
+        if (requestedStatus === 'sold' && current.status !== 'sold') {
+            return res.status(400).json({ error: 'To mark this as sold, use "Sell" on the asset\'s page so the buyer and price are recorded.' });
+        }
+        if (current.status === 'sold' && requestedStatus !== 'sold') {
+            return res.status(400).json({ error: 'This asset has been sold. Undo the sale on the asset\'s page before changing its status.' });
+        }
+        const outOfService = assignments.OUT_OF_SERVICE_STATUSES.includes(requestedStatus);
+        // Taking an item out of service — or explicitly flipping an assigned
+        // item back to available — returns it from whoever holds it.
+        const releaseHolders = outOfService || (requestedStatus === 'available' && current.status === 'assigned');
+
+        if (!releaseHolders && safeQuantity < current.assigned_quantity) {
             return res.status(400).json({ error: 'Quantity cannot be lower than currently assigned amount' });
         }
 
-        const unassignStatuses = ['lost', 'stolen', 'damaged', 'repair'];
-        const shouldUnassign = unassignStatuses.includes(status) || status !== 'assigned';
-        const newAssignedTo = shouldUnassign ? null : current.assigned_to;
-        const newAssignedQty = shouldUnassign ? 0 : current.assigned_quantity;
-        const statusChanged = current.status !== status;
+        const released = db.transaction(() => {
+            const closed = releaseHolders ? assignments.closeAll(current.id, req.user?.id, 'status_change') : [];
 
-        db.prepare(`
-      UPDATE assets SET
-        name = ?, category_id = ?, model = ?, serial_number = ?, brand = ?, quantity = ?,
-        purchase_date = ?, purchase_price = ?, supplier_name = ?, warranty_period_months = ?, intune_price = ?,
-        status = ?, assigned_to = ?, assigned_quantity = ?, campus = ?, location = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(
-            name, category_id, model, serial_number, brand || null, safeQuantity,
-            purchase_date, purchase_price, supplier_name, Math.max(0, parseInt(warranty_period_months, 10) || 0), intune_price,
-            status, newAssignedTo, newAssignedQty, campus, location, notes, req.params.id
-        );
+            db.prepare(`
+        UPDATE assets SET
+          name = ?, category_id = ?, model = ?, serial_number = ?, brand = ?, quantity = ?,
+          purchase_date = ?, purchase_price = ?, supplier_name = ?, warranty_period_months = ?, intune_price = ?,
+          status = ?, campus = ?, location = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(
+                name, category_id, model, serial_number, brand || null, safeQuantity,
+                purchase_date, purchase_price, supplier_name, Math.max(0, parseInt(warranty_period_months, 10) || 0), intune_price,
+                // available / assigned are worked out from the assignments below
+                outOfService ? requestedStatus : current.status, campus, location, notes, current.id
+            );
+            if (!outOfService && assignments.OUT_OF_SERVICE_STATUSES.includes(current.status)) {
+                // back in service
+                db.prepare("UPDATE assets SET status = 'available' WHERE id = ?").run(current.id);
+            }
+            assignments.syncAssetSummary(current.id);
 
-        if (statusChanged) {
-            const statusNote = shouldUnassign && current.assigned_to
-                ? `Status changed from ${current.status} to ${status} (auto-unassigned from employee ID ${current.assigned_to})`
-                : `Status changed from ${current.status} to ${status}`;
-            db.prepare(`
-        INSERT INTO asset_history (asset_id, action, employee_id, notes)
-        VALUES (?, 'status_change', ?, ?)
-      `).run(req.params.id, current.assigned_to || null, statusNote);
-        } else {
-            db.prepare(`
-        INSERT INTO asset_history (asset_id, action, notes)
-        VALUES (?, 'updated', 'Asset information updated')
-      `).run(req.params.id);
+            const after = db.prepare('SELECT status, campus, location FROM assets WHERE id = ?').get(current.id);
+            if (after.status !== current.status) {
+                const holders = closed.map(assignments.holderLabel).join(', ');
+                db.prepare(`
+          INSERT INTO asset_history (asset_id, action, employee_id, notes, performed_by)
+          VALUES (?, 'status_change', ?, ?, ?)
+        `).run(current.id, closed.length === 1 ? closed[0].employee_id : null,
+                    `Status changed from ${current.status} to ${after.status}${holders ? ` (returned from ${holders})` : ''}`, req.user?.email || null);
+            } else {
+                db.prepare(`
+          INSERT INTO asset_history (asset_id, action, notes, performed_by)
+          VALUES (?, 'updated', 'Asset information updated', ?)
+        `).run(current.id, req.user?.email || null);
+            }
+            if ((after.campus || '') !== (current.campus || '')) {
+                db.prepare(`
+          INSERT INTO asset_history (asset_id, action, notes, performed_by)
+          VALUES (?, 'transferred', ?, ?)
+        `).run(current.id, `Campus changed from ${current.campus || 'Unassigned'} to ${after.campus || 'Unassigned'}`, req.user?.email || null);
+            }
+            return closed;
+        })();
+
+        if (released.length > 0) {
+            logActivity(req, {
+                action: 'asset_returned', entity_type: 'asset', entity_id: current.id,
+                description: `${current.asset_number} set to ${requestedStatus}; returned from ${released.map(assignments.holderLabel).join(', ')}`
+            });
         }
 
+        sharepoint.enqueue(current.id);
         const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.id);
         res.json(updatedAsset);
     } catch (error) {
@@ -753,13 +946,18 @@ router.delete('/:id', (req, res) => {
         if (!asset || asset.deleted_at) {
             return res.status(404).json({ error: 'Asset not found' });
         }
+        if (asset.assigned_quantity > 0) {
+            return res.status(400).json({ error: 'This asset is still assigned — return it before deleting' });
+        }
 
         const userId = req.user?.id || null;
 
         const doDelete = db.transaction(() => {
+            // Kept indefinitely: nothing purges the bin. can_restore_until is a
+            // leftover NOT NULL column from the old 90-day rule and is ignored.
             db.prepare(`
         INSERT INTO recycle_bin (entity_type, entity_id, payload, deleted_at, deleted_by, can_restore_until)
-        VALUES ('asset', ?, ?, datetime('now','localtime'), ?, datetime('now','localtime', '+90 days'))
+        VALUES ('asset', ?, ?, datetime('now','localtime'), ?, '9999-12-31 00:00:00')
       `).run(asset.id, JSON.stringify(asset), userId);
 
             db.prepare(`
@@ -772,97 +970,273 @@ router.delete('/:id', (req, res) => {
                 db.prepare('INSERT INTO delete_logs (user_id, target_type, target_id) VALUES (?, ?, ?)')
                     .run(req.user.id, 'asset', req.params.id);
             }
+            assignments.addHistory(asset.id, 'deleted', null, 'Moved to the recycle bin', req.user);
         });
 
         doDelete();
+        sharepoint.enqueue(asset.id);
 
-        res.json({ message: 'Asset moved to recycle bin (retained for 90 days)' });
+        res.json({ message: 'Asset moved to the recycle bin. Its history is kept and it can be restored at any time.' });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-// Assign asset to employee
-router.post('/:id/assign', (req, res) => {
+// Assign available stock to a person or a room
+router.post('/:id/assign', async (req, res) => {
     try {
-        const { employee_id, notes, quantity } = req.body;
-        if (!employee_id) {
-            return res.status(400).json({ error: 'Employee is required for assignment' });
-        }
-        // The frontend sends the employee id as a string (select value); the DB
-        // stores a number. Coerce so the same-employee comparison below works.
-        const empId = Number(employee_id);
+        const result = assignments.assign(req.params.id, req.body, req.user);
+        const { asset, holder, quantity } = result;
 
-        const asset = db.prepare('SELECT quantity, assigned_quantity, assigned_to FROM assets WHERE id = ? AND deleted_at IS NULL').get(req.params.id);
+        logActivity(req, {
+            action: 'asset_assigned', entity_type: 'asset', entity_id: asset.id,
+            description: `Assigned ${asset.asset_number} (${asset.name})${asset.quantity > 1 ? ` × ${quantity}` : ''} to ${holder.label}`
+        });
+        sharepoint.enqueue(asset.id);
+
+        const wantsEmail = req.body.send_email === undefined ? getSettings().mail_on_assign : Boolean(req.body.send_email);
+        const email = wantsEmail && holder.employee
+            ? await notify('asset_assigned', asset, holder.employee, { quantity, notes: req.body.notes }, req)
+            : null;
+
+        res.json({ ...asset, email });
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
+// IT confirms that a holder has what is assigned to them (one line)
+router.post('/:id/assignments/:assignmentId/confirm', (req, res) => {
+    try {
+        const open = assignments.openAssignments(req.params.id).find((row) => row.id === Number(req.params.assignmentId));
+        if (!open) {
+            return res.status(404).json({ error: 'That assignment is no longer open' });
+        }
+        const confirmed = assignments.confirmByStaff({ assignmentId: open.id }, req.user);
+        for (const row of confirmed) {
+            logActivity(req, {
+                action: 'asset_confirmed', entity_type: 'asset', entity_id: row.asset_id,
+                description: `Confirmed ${row.asset_number} (${row.asset_name}) is with ${assignments.holderLabel(row)}`
+            });
+        }
+        res.json({ confirmed: confirmed.length });
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
+// Return stock from a holder
+router.post('/:id/return', async (req, res) => {
+    try {
+        const result = assignments.giveBack(req.params.id, req.body || {}, req.user);
+        const { asset, previous, quantity, condition } = result;
+        const from = assignments.holderLabel(previous);
+
+        logActivity(req, {
+            action: 'asset_returned', entity_type: 'asset', entity_id: asset.id,
+            description: `Returned ${asset.asset_number} (${asset.name})${asset.quantity > 1 ? ` × ${quantity}` : ''} from ${from}${condition !== 'good' ? ` — ${condition.replace('_', ' ')}` : ''}`
+        });
+        sharepoint.enqueue(asset.id);
+
+        const wantsEmail = req.body?.send_email === undefined ? getSettings().mail_on_return : Boolean(req.body.send_email);
+        const email = wantsEmail && previous.employee_id
+            ? await notify('asset_returned', asset,
+                { name: previous.employee_name, email: previous.employee_email, department: previous.department },
+                { quantity, condition, notes: req.body?.notes }, req)
+            : null;
+
+        res.json({ ...asset, email });
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
+// Sell the asset, usually to the person who has been using it. It stays on
+// record as "sold"; whoever held it is booked as having handed it back.
+router.post('/:id/sell', async (req, res) => {
+    try {
+        const { asset, sale, buyer, previous } = sales.sell(req.params.id, req.body || {}, req.user);
+        logActivity(req, {
+            action: 'asset_sold', entity_type: 'asset', entity_id: asset.id,
+            description: `Sold ${asset.asset_number} (${asset.name}) to ${buyer.name} for ${sales.money(sale.price)}`
+                + (previous.length ? `; was with ${previous.map(assignments.holderLabel).join(', ')}` : '')
+        });
+        sharepoint.enqueue(asset.id);
+
+        const email = req.body?.send_email && buyer.email
+            ? await mailer.sendTemplate('asset_sold', {
+                to: buyer.email,
+                context: {
+                    ...mailer.assetContext(asset, { employee: buyer, user: req.user, notes: sale.notes }),
+                    price: sales.money(sale.price),
+                    sale_date: new Date(`${sale.sold_on}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+                    payment_reference: sale.payment_reference || ''
+                },
+                entity: { type: 'asset', id: asset.id },
+                user: req.user
+            })
+            : null;
+
+        res.json({ ...asset, sale, email });
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
+// Undo a sale recorded by mistake: the asset goes back into stock.
+router.post('/:id/sale/undo', (req, res) => {
+    try {
+        const { asset, sale } = sales.undo(req.params.id, req.body || {}, req.user);
+        logActivity(req, {
+            action: 'asset_sale_undone', entity_type: 'asset', entity_id: asset.id,
+            description: `Undid the sale of ${asset.asset_number} (${asset.name}) to ${sale.buyer_name}`
+        });
+        sharepoint.enqueue(asset.id);
+        res.json(asset);
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
+// Move stock directly from one holder to another
+router.post('/:id/reassign', async (req, res) => {
+    try {
+        const result = assignments.reassign(req.params.id, req.body, req.user);
+        const { asset, previous, holder, quantity } = result;
+        const from = assignments.holderLabel(previous);
+
+        logActivity(req, {
+            action: 'asset_reassigned', entity_type: 'asset', entity_id: asset.id,
+            description: `Reassigned ${asset.asset_number} (${asset.name})${asset.quantity > 1 ? ` × ${quantity}` : ''} from ${from} to ${holder.label}`
+        });
+        sharepoint.enqueue(asset.id);
+
+        const wantsEmail = req.body.send_email === undefined ? getSettings().mail_on_assign : Boolean(req.body.send_email);
+        let email = null;
+        let previous_email = null;
+        if (wantsEmail) {
+            const extra = { quantity, previousHolder: from, newHolder: holder.label, notes: req.body.notes };
+            [email, previous_email] = await Promise.all([
+                holder.employee ? notify('asset_assigned', asset, holder.employee, extra, req) : null,
+                previous.employee_id
+                    ? notify('asset_handed_over', asset,
+                        { name: previous.employee_name, email: previous.employee_email, department: previous.department },
+                        extra, req)
+                    : null
+            ]);
+        }
+
+        res.json({ ...asset, email, previous_email });
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
+// Move an asset to another campus / location
+router.post('/:id/transfer', (req, res) => {
+    try {
+        const { asset, from, to } = assignments.transfer(req.params.id, req.body || {}, req.user);
+        logActivity(req, {
+            action: 'asset_transferred', entity_type: 'asset', entity_id: asset.id,
+            description: `Moved ${asset.asset_number} (${asset.name}) from ${from} to ${to}`
+        });
+        sharepoint.enqueue(asset.id);
+        res.json(asset);
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
+// Move several assets to a campus in one go (typically the ones that were
+// never given a campus). Who holds each item is unaffected. Every asset gets
+// its own history entry; anything already at that campus is left alone.
+router.post('/bulk-transfer', (req, res) => {
+    try {
+        const { ids, campus, location, notes } = req.body || {};
+        const assetIds = [...new Set((Array.isArray(ids) ? ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+        const targetCampus = String(campus || '').trim();
+        if (assetIds.length === 0) {
+            return res.status(400).json({ error: 'Select at least one asset to move' });
+        }
+        if (assetIds.length > 1000) {
+            return res.status(400).json({ error: 'Move at most 1000 assets at a time' });
+        }
+        if (!targetCampus) {
+            return res.status(400).json({ error: 'Choose the campus to move them to' });
+        }
+
+        // Only change the room when one was typed; otherwise each keeps its own.
+        const body = { campus: targetCampus.slice(0, 80), notes: String(notes || '').trim() || undefined };
+        const room = String(location || '').trim();
+        if (room) body.location = room.slice(0, 120);
+
+        const moved = [];
+        const skipped = [];
+        db.transaction(() => {
+            for (const id of assetIds) {
+                try {
+                    const { asset } = assignments.transfer(id, body, req.user);
+                    moved.push(asset);
+                } catch (err) {
+                    if (!(err instanceof assignments.AssignmentError)) throw err;
+                    skipped.push({ id, reason: err.message });
+                }
+            }
+        })();
+
+        if (moved.length > 0) {
+            const numbers = moved.map((a) => a.asset_number);
+            const listed = numbers.length > 12 ? `${numbers.slice(0, 12).join(', ')} and ${numbers.length - 12} more` : numbers.join(', ');
+            logActivity(req, {
+                action: 'assets_bulk_transferred', entity_type: 'asset', entity_id: null,
+                description: `Moved ${moved.length} asset${moved.length === 1 ? '' : 's'} to ${body.campus}${body.location ? ` / ${body.location}` : ''}: ${listed}`
+            });
+            moved.forEach((a) => sharepoint.enqueue(a.id));
+        }
+
+        res.json({ moved: moved.length, skipped, campus: body.campus });
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
+// Email a holder about an asset on demand (return request, maintenance…)
+router.post('/:id/email', async (req, res) => {
+    try {
+        const { template, assignment_id } = req.body || {};
+        const allowed = ['asset_assigned', 'asset_return_request', 'asset_maintenance'];
+        if (!allowed.includes(template)) {
+            return res.status(400).json({ error: 'Unknown email type' });
+        }
+        const asset = db.prepare('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL').get(req.params.id);
         if (!asset) {
             return res.status(404).json({ error: 'Asset not found' });
         }
-
-        const requestedQty = Math.max(1, parseInt(quantity, 10) || 1);
-        const currentAssigned = Math.max(0, parseInt(asset.assigned_quantity, 10) || 0);
-        const available = Math.max(asset.quantity - currentAssigned, 0);
-
-        let newAssignedQty = requestedQty;
-        let action = 'assigned';
-        let note = notes || `Assigned quantity ${requestedQty}`;
-
-        if (asset.assigned_to && asset.assigned_to === empId) {
-            if (requestedQty > available) {
-                return res.status(400).json({ error: `Only ${available} available to assign` });
-            }
-            newAssignedQty = currentAssigned + requestedQty;
-            action = 'assigned_more';
-            note = notes || `Increased assignment by ${requestedQty} (total ${newAssignedQty})`;
-        } else {
-            if (requestedQty > asset.quantity) {
-                return res.status(400).json({ error: `Cannot assign more than total quantity (${asset.quantity})` });
-            }
-            action = asset.assigned_to ? 'reassigned' : 'assigned';
-            note = asset.assigned_to
-                ? notes || `Reassigned from employee ${asset.assigned_to} to ${empId} (qty ${requestedQty})`
-                : note;
+        const open = assignments.openAssignments(asset.id).filter((row) => row.employee_id);
+        const row = assignment_id ? open.find((r) => r.id === Number(assignment_id)) : open[0];
+        if (!row) {
+            return res.status(400).json({ error: 'This asset is not assigned to a member of staff' });
         }
+        const employee = { name: row.employee_name, email: row.employee_email, department: row.department };
+        const context = mailer.assetContext(asset, { employee, quantity: row.quantity, user: req.user });
 
-        // If reassigning to the same employee, allow updating quantity; if to a different employee, move assignment.
-        db.prepare(`
-      UPDATE assets SET
-        assigned_to = ?, status = 'assigned', assigned_quantity = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(empId, newAssignedQty, req.params.id);
-
-        db.prepare(`
-      INSERT INTO asset_history (asset_id, action, employee_id, notes)
-      VALUES (?, ?, ?, ?)
-    `).run(req.params.id, action, empId, note);
-
-        const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.id);
-        res.json(updatedAsset);
+        // Without a configured mailbox the client opens the user's own mail
+        // app instead, using the same (editable) wording.
+        if (!mailer.mailStatus().configured) {
+            return res.json({ status: 'not_configured', to: employee.email, ...mailer.render(template, context) });
+        }
+        const result = await mailer.sendTemplate(template, {
+            to: employee.email, context, entity: { type: 'asset', id: asset.id }, user: req.user
+        });
+        if (result.status === 'sent') {
+            logActivity(req, {
+                action: 'email_sent', entity_type: 'asset', entity_id: asset.id,
+                description: `Emailed ${employee.email} about ${asset.asset_number} (${mailer.getTemplate(template).name})`
+            });
+        }
+        res.json(result);
     } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// Return asset from employee
-router.post('/:id/return', (req, res) => {
-    try {
-        const { notes } = req.body;
-        const asset = db.prepare('SELECT assigned_to FROM assets WHERE id = ? AND deleted_at IS NULL').get(req.params.id);
-
-        db.prepare(`
-      UPDATE assets SET
-        assigned_to = NULL, status = 'available', assigned_quantity = 0, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(req.params.id);
-
-        db.prepare(`
-      INSERT INTO asset_history (asset_id, action, employee_id, notes)
-      VALUES (?, 'returned', ?, ?)
-    `).run(req.params.id, asset.assigned_to, notes || 'Asset returned');
-
-        const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.id);
-        res.json(updatedAsset);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+        handleError(res, error);
     }
 });
 
@@ -883,15 +1257,6 @@ router.post('/:id/restore', (req, res) => {
             return res.status(404).json({ error: 'No recycle bin entry for this asset' });
         }
 
-        const isExpired = db.prepare(`
-      SELECT CASE WHEN can_restore_until <= datetime('now','localtime') THEN 1 ELSE 0 END as expired
-      FROM recycle_bin WHERE id = ?
-    `).get(binItem.id)?.expired;
-
-        if (isExpired) {
-            return res.status(410).json({ error: 'Recycle bin entry expired and cannot be restored' });
-        }
-
         let payload = {};
         try {
             payload = JSON.parse(binItem.payload || '{}');
@@ -904,8 +1269,8 @@ router.post('/:id/restore', (req, res) => {
             db.prepare(`
         UPDATE assets SET
           asset_number = ?, name = ?, category_id = ?, model = ?, serial_number = ?, brand = ?, quantity = ?,
-          assigned_quantity = ?, purchase_date = ?, purchase_price = ?, supplier_name = ?, warranty_period_months = ?,
-          intune_price = ?, status = ?, assigned_to = ?, campus = ?, location = ?, notes = ?,
+          purchase_date = ?, purchase_price = ?, supplier_name = ?, warranty_period_months = ?,
+          intune_price = ?, status = ?, campus = ?, location = ?, notes = ?,
           deleted_at = NULL, deleted_by = NULL, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `).run(
@@ -916,24 +1281,27 @@ router.post('/:id/restore', (req, res) => {
                 payload.serial_number,
                 payload.brand || null,
                 payload.quantity || 1,
-                payload.assigned_quantity || 0,
                 payload.purchase_date || null,
                 payload.purchase_price || null,
                 payload.supplier_name || null,
                 Math.max(0, parseInt(payload.warranty_period_months, 10) || 0),
                 payload.intune_price || null,
                 payload.status || 'available',
-                payload.assigned_to || null,
                 campus,
                 payload.location || null,
                 payload.notes || null,
                 binItem.entity_id
             );
+            // Who holds it is read back from the assignment records, which a
+            // delete never touches.
+            assignments.syncAssetSummary(binItem.entity_id);
+            assignments.addHistory(binItem.entity_id, 'restored', null, 'Restored from the recycle bin', req.user);
 
             db.prepare('DELETE FROM recycle_bin WHERE id = ?').run(binItem.id);
         });
 
         restoreTx();
+        sharepoint.enqueue(binItem.entity_id);
 
         const restored = db.prepare('SELECT * FROM assets WHERE id = ?').get(binItem.entity_id);
         res.json({ message: 'Asset restored successfully', asset: restored });
@@ -948,29 +1316,55 @@ router.post('/:id/restore', (req, res) => {
 // invoice attached. Parsing is heuristic — the frontend always shows a
 // review/edit step before anything is created.
 // ---------------------------------------------------------------------------
-const pdfjs = require('pdfjs-dist/legacy/build/pdf.js');
+// pdf.js ships as an ES module, so it is loaded on first use (the "legacy"
+// build is the one meant for Node). Pinned in package.json to the newest
+// release that supports Node 20; later ones need Node 22.
+let pdfjsModule = null;
+function loadPdfjs() {
+    if (!pdfjsModule) {
+        pdfjsModule = import('pdfjs-dist/legacy/build/pdf.mjs').catch((error) => {
+            pdfjsModule = null;
+            throw error;
+        });
+    }
+    return pdfjsModule;
+}
 
 // Extract text from a PDF, reconstructing visual lines by grouping text
 // fragments that share a y-coordinate (invoice tables rely on this).
 async function extractPdfText(buffer) {
-    const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer), useSystemFonts: true }).promise;
-    let text = '';
-    for (let p = 1; p <= doc.numPages; p++) {
-        const page = await doc.getPage(p);
-        const content = await page.getTextContent();
-        const rows = new Map();
-        for (const item of content.items) {
-            if (!item.str || !item.str.trim()) continue;
-            const y = Math.round(item.transform[5] / 2) * 2; // tolerate tiny baseline jitter
-            if (!rows.has(y)) rows.set(y, []);
-            rows.get(y).push({ x: item.transform[4], str: item.str });
+    const pdfjs = await loadPdfjs();
+    const task = pdfjs.getDocument({
+        data: new Uint8Array(buffer),
+        useSystemFonts: true,
+        // Only the text is read: never run anything a PDF carries, and keep
+        // font and rendering chatter out of the server log.
+        isEvalSupported: false,
+        verbosity: pdfjs.VerbosityLevel.ERRORS
+    });
+    try {
+        const doc = await task.promise;
+        let text = '';
+        for (let p = 1; p <= doc.numPages; p++) {
+            const page = await doc.getPage(p);
+            const content = await page.getTextContent();
+            const rows = new Map();
+            for (const item of content.items) {
+                if (!item.str || !item.str.trim()) continue;
+                const y = Math.round(item.transform[5] / 2) * 2; // tolerate tiny baseline jitter
+                if (!rows.has(y)) rows.set(y, []);
+                rows.get(y).push({ x: item.transform[4], str: item.str });
+            }
+            const ordered = [...rows.entries()].sort((a, b) => b[0] - a[0]);
+            for (const [, parts] of ordered) {
+                text += parts.sort((a, b) => a.x - b.x).map((t) => t.str).join(' ') + '\n';
+            }
         }
-        const ordered = [...rows.entries()].sort((a, b) => b[0] - a[0]);
-        for (const [, parts] of ordered) {
-            text += parts.sort((a, b) => a.x - b.x).map((t) => t.str).join(' ') + '\n';
-        }
+        return { text, numpages: doc.numPages };
+    } finally {
+        // Release the parsed document whether or not it could be read.
+        await task.destroy().catch(() => {});
     }
-    return { text, numpages: doc.numPages };
 }
 
 const invoiceUpload = multer({
@@ -985,35 +1379,6 @@ const invoiceUpload = multer({
         cb(new Error('Invoices must be PDF files'));
     }
 });
-
-const CATEGORY_RULES = [
-    [/laptop|notebook|elitebook|thinkpad|ideapad|vivobook|macbook|chromebook|zbook|latitude|inspiron/i, 'Laptop'],
-    [/\bmonitor\b|(\d{2}["”]?\s*(inch)?\s*(led|lcd|ips).*(screen|display))/i, 'Monitor'],
-    [/\btablet\b|ipad|surface go/i, 'Tablet'],
-    [/printer|toner|ink cartridge/i, 'Printer'],
-    [/mouse|keyboard|headset|headphone|earbud|webcam|speaker|microphone/i, 'Peripheral'],
-    [/cable|adapter|charger|\bhub\b|dock|usb[- ]?c|hdmi|power supply|extension lead|surge/i, 'Accessory'],
-    [/router|switch|access point|ethernet|wi-?fi extender/i, 'Network'],
-    [/\bssd\b|\bram\b|hard drive|\bhdd\b|memory card|\busb stick\b|flash drive/i, 'Storage & Components'],
-    [/phone|iphone|galaxy s|pixel \d/i, 'Phone']
-];
-
-const KNOWN_BRANDS = [
-    'Amazon Basics', 'HP', 'Dell', 'Lenovo', 'Apple', 'Microsoft', 'Samsung', 'Asus', 'Acer', 'Logitech',
-    'Anker', 'Ugreen', 'Belkin', 'Kensington', 'TP-Link', 'Netgear', 'Cisco', 'Canon',
-    'Epson', 'Brother', 'Jabra', 'Sony', 'LG', 'Philips', 'Sandisk', 'Kingston', 'Crucial',
-    'Seagate', 'Toshiba', 'Duracell', 'Trust', 'Targus'
-];
-
-function guessCategoryAndBrand(name) {
-    let category = 'Electronics';
-    for (const [re, cat] of CATEGORY_RULES) {
-        if (re.test(name)) { category = cat; break; }
-    }
-    const lower = name.toLowerCase();
-    const brand = KNOWN_BRANDS.find((b) => lower.includes(b.toLowerCase())) || '';
-    return { category, brand };
-}
 
 // Best-effort extraction of item lines from invoice text: a line qualifies if
 // it carries a price and isn't a totals/header/address line. The user reviews
@@ -1048,8 +1413,7 @@ function parseInvoiceItems(text) {
         items.push({
             name: name.slice(0, 150),
             quantity,
-            unit_price,
-            ...guessCategoryAndBrand(name)
+            unit_price
         });
     }
 
@@ -1070,7 +1434,18 @@ router.post('/parse-invoice', (req, res) => {
             if (!req.file) return res.status(400).json({ error: 'No file provided' });
 
             const data = await extractPdfText(fs.readFileSync(req.file.path));
-            const items = parseInvoiceItems(data.text);
+            const lines = parseInvoiceItems(data.text);
+            // Category and brand for each line, in the register's own
+            // category names. A line nothing can place is filed as general
+            // electronics for the reviewer to correct.
+            const names = tidy.categories().map((c) => c.name);
+            const fallback = names.find((n) => ['other electronics', 'electronics'].includes(n.toLowerCase())) || 'Other Electronics';
+            const guesses = await tidy.suggestForNew(lines.map((line) => ({ name: line.name })));
+            const items = lines.map((line, index) => ({
+                ...line,
+                category: guesses[index].category || fallback,
+                brand: guesses[index].brand
+            }));
 
             res.json({
                 items,
@@ -1101,12 +1476,6 @@ router.post('/import-invoice', (req, res) => {
             }
         }
 
-        const catId = (name) => {
-            const clean = (name || 'Electronics').trim() || 'Electronics';
-            const row = db.prepare('SELECT id FROM categories WHERE LOWER(name) = LOWER(?)').get(clean);
-            if (row) return row.id;
-            return db.prepare('INSERT INTO categories (name, description) VALUES (?, ?)').run(clean, '').lastInsertRowid;
-        };
 
         const created = [];
         db.transaction(() => {
@@ -1116,15 +1485,18 @@ router.post('/import-invoice', (req, res) => {
                 const quantity = Math.min(999, Math.max(1, parseInt(it.quantity, 10) || 1));
                 const price = it.unit_price === '' || it.unit_price == null ? null : Math.max(0, parseFloat(it.unit_price) || 0);
                 const assetNumber = generateAssetNumber();
+                // The reviewer's category and brand stand; blanks are worked
+                // out from the name, and electronics start at the home campus.
+                const filled = tidy.defaultsForNew({ name, model: it.model, brand: it.brand, category: it.category });
                 const result = db.prepare(`
           INSERT INTO assets (
             asset_number, name, category_id, brand, model, serial_number, quantity, assigned_quantity,
             purchase_date, purchase_price, status, campus, notes
-          ) VALUES (?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, 'available', '', ?)
+          ) VALUES (?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, 'available', ?, ?)
         `).run(
-                    assetNumber, name.slice(0, 150), catId(it.category),
-                    (it.brand || '').trim() || null, (it.model || '').trim() || null,
-                    quantity, it.purchase_date || null, price,
+                    assetNumber, name.slice(0, 150), filled.category_id,
+                    filled.brand, (it.model || '').trim() || null,
+                    quantity, it.purchase_date || null, price, filled.campus,
                     `Imported from invoice${file_name ? ` "${file_name}"` : ''}`
                 );
 
@@ -1139,6 +1511,7 @@ router.post('/import-invoice', (req, res) => {
             }
         })();
 
+        created.forEach((c) => sharepoint.enqueue(c.id));
         logActivity(req, {
             action: 'invoice_imported', entity_type: 'asset', entity_id: null,
             description: `Imported ${created.length} item(s) from invoice${file_name ? ` "${file_name}"` : ''}`

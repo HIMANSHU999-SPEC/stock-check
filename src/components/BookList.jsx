@@ -111,13 +111,13 @@ export default function BookList() {
                     )}
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={handleExport} className="btn btn-secondary">
+                    <button onClick={handleExport} className="download-only btn btn-secondary">
                         Export CSV
                     </button>
-                    <Link to="/library/rapid" className="btn btn-secondary">
+                    <Link to="/library/rapid" className="write-only btn btn-secondary">
                         ⚡ Rapid Catalogue
                     </Link>
-                    <Link to="/books/new" className="btn btn-primary">
+                    <Link to="/books/new" className="write-only btn btn-primary">
                         + Add New Book
                     </Link>
                 </div>
@@ -244,12 +244,12 @@ export default function BookList() {
                                                     <Link to={`/books/${book.id}`} className="btn btn-sm btn-secondary">
                                                         View
                                                     </Link>
-                                                    <Link to={`/books/${book.id}/edit`} className="btn btn-sm btn-secondary">
+                                                    <Link to={`/books/${book.id}/edit`} className="write-only btn btn-sm btn-secondary">
                                                         Edit
                                                     </Link>
                                                     <button
                                                         onClick={() => handleDelete(book.id)}
-                                                        className="btn btn-sm btn-danger"
+                                                        className="write-only btn btn-sm btn-danger"
                                                     >
                                                         Delete
                                                     </button>
