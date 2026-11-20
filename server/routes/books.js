@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../database');
 const { generateBookNumber } = require('../utils/bookNumber');
 const { logActivity } = require('../utils/activity');
+const cells = require('../utils/importValues');
 
 function toCsv(rows) {
     if (!rows || rows.length === 0) return '';
@@ -650,21 +651,25 @@ router.post('/import', (req, res) => {
 
         const importResult = db.transaction(() => {
             let inserted = 0;
-            for (const item of items) {
-                const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
-                const year = item.published_year ? parseInt(item.published_year, 10) || null : null;
+            for (const row of items) {
+                const item = row && typeof row === 'object' ? row : {};
+                // Cells arrive as typed in the sheet: an ISBN or a year may be
+                // a number, any column may hold TRUE/FALSE.
+                const whole = (value) => (typeof value === 'number' || typeof value === 'string' ? parseInt(value, 10) : NaN);
+                const qty = Math.max(1, whole(item.quantity) || 1);
+                const year = whole(item.published_year);
                 insertStmt.run(
                     generateBookNumber(),
-                    item.title || 'Untitled',
-                    item.author || null,
-                    item.isbn || null,
-                    item.category || null,
-                    item.publisher || null,
-                    year,
+                    cells.text(item.title, 500) || 'Untitled',
+                    cells.text(item.author, 300),
+                    cells.isbn(item.isbn),
+                    cells.text(item.category, 100),
+                    cells.text(item.publisher, 300),
+                    year >= 1000 && year <= 2200 ? year : null,
                     qty,
-                    item.shelf_location || null,
-                    item.campus || '',
-                    item.notes || null
+                    cells.text(item.shelf_location, 200),
+                    cells.text(item.campus, 100) || '',
+                    cells.text(item.notes, 5000)
                 );
                 inserted += 1;
             }

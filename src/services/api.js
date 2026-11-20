@@ -122,8 +122,10 @@ export const assetsAPI = {
             method: 'POST',
             body: JSON.stringify({ template, assignment_id: assignmentId })
         }),
-    importBulk: (items, createMissingCategories = true) =>
-        apiCall('/assets/import', { method: 'POST', body: JSON.stringify({ items, createMissingCategories }) }),
+    // date1904: the workbook counts dates from 1904 (old Mac files), so the
+    // server can turn its date cells into the right day.
+    importBulk: (items, createMissingCategories = true, date1904 = false) =>
+        apiCall('/assets/import', { method: 'POST', body: JSON.stringify({ items, createMissingCategories, date1904 }) }),
     restore: (id, password) =>
         apiCall(`/assets/${id}/restore`, { method: 'POST', body: JSON.stringify({ password }) }),
     recycleBin: {

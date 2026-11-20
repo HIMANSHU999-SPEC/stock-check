@@ -192,7 +192,7 @@ export default function AssetList() {
             purchase_price: data['purchase price'] || '',
             warranty_period_months: data['warranty period'] || data['warranty'] || data['warranty months'] || '',
             supplier_name: data['supplier'] || data['supplier name'] || '',
-            status: (data['status'] || '').toLowerCase(),
+            status: String(data['status'] || '').toLowerCase(),
             location: data['location'] || '',
             campus: data['campus'] || '',
             notes: data['notes'] || ''
@@ -214,8 +214,12 @@ export default function AssetList() {
                 alert('No valid rows found in the sheet (it needs a Name column).');
                 return;
             }
-            const result = await assetsAPI.importBulk(items, createMissingCategories);
-            alert(`Imported ${result.inserted} assets successfully.`);
+            const result = await assetsAPI.importBulk(
+                items, createMissingCategories, Boolean(workbook.Workbook?.WBProps?.date1904)
+            );
+            const unread = result.unread_dates || 0;
+            alert(`Imported ${result.inserted} assets successfully.`
+                + (unread ? `\n\n${unread} purchase date${unread === 1 ? '' : 's'} could not be read and ${unread === 1 ? 'was' : 'were'} left blank. Dates work best as real Excel dates, or typed as 15/01/2026 or 2026-01-15.` : ''));
             loadAssets();
         } catch (error) {
             alert('Import failed: ' + error.message);

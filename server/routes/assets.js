@@ -9,6 +9,7 @@ const sharepoint = require('../services/sharepoint');
 const { getSettings } = require('../services/appSettings');
 const tidy = require('../services/tidy');
 const sales = require('../services/sales');
+const cells = require('../utils/importValues');
 const PDFDocument = require('pdfkit');
 const archiver = require('archiver');
 const { PassThrough } = require('stream');
@@ -697,10 +698,38 @@ router.post('/', async (req, res) => {
 // Bulk import assets (expects parsed Excel/JSON on client)
 router.post('/import', async (req, res) => {
     try {
-        const { items = [], createMissingCategories = true } = req.body;
-        if (!Array.isArray(items) || items.length === 0) {
+        const { items: sheetRows = [], createMissingCategories = true, date1904 = false } = req.body || {};
+        if (!Array.isArray(sheetRows) || sheetRows.length === 0) {
             return res.status(400).json({ error: 'No items provided for import' });
         }
+
+        // A spreadsheet cell can hold anything: a serial number typed as a
+        // number, a real Excel date, TRUE/FALSE. Settle every value into what
+        // its column stores before anything else looks at it.
+        let unreadDates = 0;
+        const number = (value) => (typeof value === 'number' || typeof value === 'string' ? value : undefined);
+        const items = sheetRows.map((row) => {
+            const cell = row && typeof row === 'object' ? row : {};
+            const purchased = cells.date(cell.purchase_date, { date1904: Boolean(date1904) });
+            if (!purchased.ok) unreadDates += 1;
+            return {
+                name: cells.text(cell.name, 300),
+                category: cells.text(cell.category, 100),
+                brand: cells.text(cell.brand, 100) || cells.text(cell.manufacturer, 100),
+                model: cells.text(cell.model, 300),
+                serial_number: cells.text(cell.serial_number, 200),
+                quantity: number(cell.quantity),
+                purchase_date: purchased.date,
+                purchase_price: cells.money(cell.purchase_price),
+                supplier_name: cells.text(cell.supplier_name, 200) || cells.text(cell.supplier, 200),
+                warranty_period_months: number(cell.warranty_period_months) ?? number(cell.warranty)
+                    ?? number(cell['warranty months']) ?? number(cell['warranty period']),
+                status: (cells.text(cell.status, 30) || '').toLowerCase(),
+                campus: cells.text(cell.campus, 100),
+                location: cells.text(cell.location, 200),
+                notes: cells.text(cell.notes, 5000)
+            };
+        });
 
         const allowedStatuses = ['available', 'assigned', 'maintenance', 'repair', 'damaged', 'lost', 'stolen', 'retired'];
         const categoryCache = new Map();
@@ -769,9 +798,9 @@ router.post('/import', async (req, res) => {
                     item.serial_number || null,
                     filled.brand,
                     qty,
-                    item.purchase_date || null,
-                    item.purchase_price || null,
-                    item.supplier_name || item.supplier || null,
+                    item.purchase_date,
+                    item.purchase_price,
+                    item.supplier_name,
                     warrantyMonths,
                     null, // intune_price removed from input
                     status,
@@ -788,7 +817,9 @@ router.post('/import', async (req, res) => {
         })();
 
         insertedIds.forEach((id) => sharepoint.enqueue(id));
-        res.json({ message: 'Import completed', ...importResult });
+        // Dates that could not be read are left blank rather than stored as
+        // they came; say how many so they can be put right by hand.
+        res.json({ message: 'Import completed', ...importResult, unread_dates: unreadDates });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
