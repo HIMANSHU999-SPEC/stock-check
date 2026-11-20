@@ -111,6 +111,20 @@ export default function AssetDetails() {
     const holders = asset?.assignments || [];
     const isBulk = (asset?.quantity || 1) > 1;
     const inService = ['available', 'assigned'].includes(asset?.status);
+    const sale = asset?.sale || null;
+    const canSell = Boolean(asset) && !isBulk && !['sold', 'lost', 'stolen', 'retired'].includes(asset.status);
+
+    async function handleUndoSale() {
+        const reason = window.prompt(`Undo the sale of ${asset.asset_number} to ${sale.buyer_name}? It goes back into stock, not back to whoever had it.\n\nReason (optional):`, '');
+        if (reason === null) return;
+        try {
+            await assetsAPI.undoSale(id, reason.trim());
+            setNotice(`Sale undone. ${asset.asset_number} is back in stock.`);
+            loadAsset();
+        } catch (error) {
+            setNotice('The sale could not be undone: ' + error.message);
+        }
+    }
     const warrantyMonths = asset?.warranty_period_months || 0;
     let warrantyExpiry = null;
     if (warrantyMonths > 0 && asset?.purchase_date) {
@@ -134,6 +148,14 @@ export default function AssetDetails() {
             <div className="flex justify-between items-center mb-3">
                 <h2>Asset Details</h2>
                 <div className="flex gap-2">
+                    {canSell && (
+                        <button
+                            onClick={() => actions.open('sell', id)} className="write-only btn btn-secondary"
+                            title="Record that this device has been sold, for example to the person who uses it"
+                        >
+                            Sell
+                        </button>
+                    )}
                     <button onClick={() => actions.open('transfer', id)} className="write-only btn btn-secondary">
                         Move campus
                     </button>
@@ -353,7 +375,31 @@ export default function AssetDetails() {
                         </div>
                     </div>
                     <div className="card-body">
-                        {holders.length === 0 ? (
+                        {sale ? (
+                            <div>
+                                <div style={{ fontWeight: 'bold' }}>
+                                    Sold to{' '}
+                                    {sale.employee_id ? (
+                                        <Link to={`/employees/${sale.employee_id}`} className="text-primary">{sale.buyer_name}</Link>
+                                    ) : sale.buyer_name}
+                                    {' '}for £{Number(sale.price).toFixed(2)}
+                                </div>
+                                <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                    {[
+                                        `on ${new Date(`${sale.sold_on}T12:00:00Z`).toLocaleDateString()}`,
+                                        sale.buyer_email,
+                                        sale.payment_reference && `ref ${sale.payment_reference}`,
+                                        sale.recorded_by && `recorded by ${sale.recorded_by}`
+                                    ].filter(Boolean).join(' · ')}
+                                </div>
+                                {sale.notes && <p className="mt-1">{sale.notes}</p>}
+                                <p className="text-muted mt-2" style={{ fontSize: '0.85rem' }}>
+                                    No longer ours: it is kept here for the record and is not counted as stock.
+                                    If it still appears in Intune, remove it there.
+                                </p>
+                                <button onClick={handleUndoSale} className="write-only btn btn-sm btn-secondary">Undo sale</button>
+                            </div>
+                        ) : holders.length === 0 ? (
                             <p className="text-muted">
                                 {inService
                                     ? 'Not currently assigned to anyone.'
@@ -404,6 +450,14 @@ export default function AssetDetails() {
                                         <button onClick={() => actions.open('reassign', id, row.id)} className="write-only btn btn-sm btn-secondary">
                                             Reassign
                                         </button>
+                                        {canSell && row.employee_id && (
+                                            <button
+                                                onClick={() => actions.open('sell', id, row.id)} className="write-only btn btn-sm btn-secondary"
+                                                title="They are buying this device"
+                                            >
+                                                Sell to them
+                                            </button>
+                                        )}
                                         {row.employee_id && (
                                             <select
                                                 className="write-only form-control email-menu"

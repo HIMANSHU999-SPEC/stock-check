@@ -8,6 +8,7 @@ const mailer = require('../services/mailer');
 const sharepoint = require('../services/sharepoint');
 const { getSettings } = require('../services/appSettings');
 const tidy = require('../services/tidy');
+const sales = require('../services/sales');
 const PDFDocument = require('pdfkit');
 const archiver = require('archiver');
 const { PassThrough } = require('stream');
@@ -109,7 +110,8 @@ router.get('/', (req, res) => {
         const { status, category, search, supplier, campus, model, brand } = req.query;
         let query = `
       SELECT a.*, c.name as category_name, e.name as employee_name, e.email as employee_email,
-             ${HOLDERS_SQL} as holders, ${HOLDER_COUNT_SQL} as holder_count
+             ${HOLDERS_SQL} as holders, ${HOLDER_COUNT_SQL} as holder_count,
+             (SELECT s.buyer_name FROM asset_sales s WHERE s.asset_id = a.id AND s.cancelled_at IS NULL ORDER BY s.id DESC LIMIT 1) as sold_to
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       LEFT JOIN employees e ON a.assigned_to = e.id
@@ -628,6 +630,7 @@ router.get('/:id', (req, res) => {
             ...asset,
             assignments: assignments.openAssignments(asset.id),
             previous_holders: assignments.closedAssignments(asset.id),
+            sale: sales.activeSale(asset.id),
             history
         });
     } catch (error) {
@@ -819,6 +822,14 @@ router.put('/:id', (req, res) => {
 
         const safeQuantity = Math.max(1, parseInt(quantity, 10) || 1);
         const requestedStatus = assignments.ALL_STATUSES.includes(status) ? status : current.status;
+        // "Sold" goes with a record of who bought it, so it is set and
+        // cleared by the sale actions, never by editing the status.
+        if (requestedStatus === 'sold' && current.status !== 'sold') {
+            return res.status(400).json({ error: 'To mark this as sold, use "Sell" on the asset\'s page so the buyer and price are recorded.' });
+        }
+        if (current.status === 'sold' && requestedStatus !== 'sold') {
+            return res.status(400).json({ error: 'This asset has been sold. Undo the sale on the asset\'s page before changing its status.' });
+        }
         const outOfService = assignments.OUT_OF_SERVICE_STATUSES.includes(requestedStatus);
         // Taking an item out of service — or explicitly flipping an assigned
         // item back to available — returns it from whoever holds it.
@@ -1004,6 +1015,53 @@ router.post('/:id/return', async (req, res) => {
             : null;
 
         res.json({ ...asset, email });
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
+// Sell the asset, usually to the person who has been using it. It stays on
+// record as "sold"; whoever held it is booked as having handed it back.
+router.post('/:id/sell', async (req, res) => {
+    try {
+        const { asset, sale, buyer, previous } = sales.sell(req.params.id, req.body || {}, req.user);
+        logActivity(req, {
+            action: 'asset_sold', entity_type: 'asset', entity_id: asset.id,
+            description: `Sold ${asset.asset_number} (${asset.name}) to ${buyer.name} for ${sales.money(sale.price)}`
+                + (previous.length ? `; was with ${previous.map(assignments.holderLabel).join(', ')}` : '')
+        });
+        sharepoint.enqueue(asset.id);
+
+        const email = req.body?.send_email && buyer.email
+            ? await mailer.sendTemplate('asset_sold', {
+                to: buyer.email,
+                context: {
+                    ...mailer.assetContext(asset, { employee: buyer, user: req.user, notes: sale.notes }),
+                    price: sales.money(sale.price),
+                    sale_date: new Date(`${sale.sold_on}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+                    payment_reference: sale.payment_reference || ''
+                },
+                entity: { type: 'asset', id: asset.id },
+                user: req.user
+            })
+            : null;
+
+        res.json({ ...asset, sale, email });
+    } catch (error) {
+        handleError(res, error);
+    }
+});
+
+// Undo a sale recorded by mistake: the asset goes back into stock.
+router.post('/:id/sale/undo', (req, res) => {
+    try {
+        const { asset, sale } = sales.undo(req.params.id, req.body || {}, req.user);
+        logActivity(req, {
+            action: 'asset_sale_undone', entity_type: 'asset', entity_id: asset.id,
+            description: `Undid the sale of ${asset.asset_number} (${asset.name}) to ${sale.buyer_name}`
+        });
+        sharepoint.enqueue(asset.id);
+        res.json(asset);
     } catch (error) {
         handleError(res, error);
     }

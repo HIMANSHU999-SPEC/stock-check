@@ -13,7 +13,8 @@ export const STATUS_COLORS = {
     damaged: 'danger',
     lost: 'danger',
     stolen: 'danger',
-    retired: 'danger'
+    retired: 'danger',
+    sold: 'primary'
 };
 
 export function statusColor(status) {

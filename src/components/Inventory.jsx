@@ -50,7 +50,7 @@ export default function Inventory() {
                     'Assigned': c.assigned,
                     'Available': c.available,
                     'In repair / maintenance': c.in_repair,
-                    'Damaged / lost / retired': c.written_off,
+                    'Damaged / lost / retired / sold': c.written_off,
                     'Value (£)': Math.round(c.value || 0)
                 });
             });
@@ -106,7 +106,7 @@ export default function Inventory() {
                 <span><i style={{ background: 'var(--info)' }} /> Assigned</span>
                 <span><i style={{ background: 'var(--success)' }} /> Available</span>
                 <span><i style={{ background: 'var(--warning)' }} /> Repair / maintenance</span>
-                <span><i style={{ background: 'var(--danger)' }} /> Damaged / lost / retired</span>
+                <span><i style={{ background: 'var(--danger)' }} /> Damaged / lost / retired / sold</span>
             </div>
 
             {campuses.length === 0 && (

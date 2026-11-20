@@ -18,7 +18,7 @@ router.get('/summary', (req, res) => {
                  THEN MAX(a.quantity - COALESCE(a.assigned_quantity, 0), 0) ELSE 0 END) AS available,
         SUM(CASE WHEN a.status IN ('maintenance', 'repair')
                  THEN a.quantity - COALESCE(a.assigned_quantity, 0) ELSE 0 END) AS in_repair,
-        SUM(CASE WHEN a.status IN ('damaged', 'lost', 'stolen', 'retired')
+        SUM(CASE WHEN a.status IN ('damaged', 'lost', 'stolen', 'retired', 'sold')
                  THEN a.quantity - COALESCE(a.assigned_quantity, 0) ELSE 0 END) AS written_off,
         SUM(COALESCE(a.purchase_price, 0) * a.quantity) AS value
       FROM assets a

@@ -12,6 +12,7 @@ Built and maintained by **Himanshu Chadha**. Hosting for the deployed instance i
 - **Automatic asset numbering** — `AST-YYYY-NNNN`, generated on creation
 - **Assign, reassign, return** — to a person or to a room; bulk stock (chairs, tables, cables) can be split across several holders, returned in part, and returned in a recorded condition
 - **Auto-categorising, with AI** — an asset's category and brand are worked out from its name (on the form, in Excel and invoice imports). With an Anthropic API key configured, Claude does the working out; without one, built-in rules do. Your own "names containing X are Y" rules win over both. A tidy-up screen proposes fixes for the existing register and applies only what you approve
+- **Sell to staff** — record that a device has been sold, usually to the person who used it: buyer, price, date and payment reference are kept, the asset stays on record as *sold* and drops out of stock, and the buyer can be emailed a confirmation. A sale can be undone
 - **Intune check** — compares the register with Microsoft Intune by serial number: who Intune says uses each device against who it is assigned to here, plus devices known to only one side
 - **What we have** — dashboard tiles for laptops, desktops and every other type; click one to split it by brand, click a brand to see those assets
 - **Stock by campus** — quantities per campus and category: assigned, available, in repair, written off; move items between campuses with a history trail
@@ -72,6 +73,8 @@ For production deployment and the full environment variable reference, see `DEPL
 
 **Tidy up** — Assets → Tidy up lists every asset with no real category, a missing or oddly spelt brand, or (for electronics) no campus, with a suggested fix for each. Untick or change anything, then Apply. Electronics with no campus go under Towerhill (set `HOME_CAMPUS` to change it), ready to be moved on with the bulk move on the asset list. Categories somebody chose by hand are only ever questioned, never changed unless ticked.
 
+**Selling a device** — on an asset's page, press **Sell to them** beside the person who has it (or **Sell** at the top for a device in stock, or to sell to somebody else). Enter the price (0 if it is being given away), the date and a payment reference, confirm the device has been wiped and removed from Intune, and press *Record sale*. The device comes off the holder's list, its status becomes *sold*, and it is no longer counted as stock; it is never deleted, so the record of who bought it and for how much stays. Leavers can be chosen as buyers. Sold devices are listed with their prices under Reports, can be filtered on the asset list, and the Intune check flags any that are still checking in. **Undo sale** on the asset's page puts it back into stock. Only single items can be sold, not a stock line of several; the wording of the confirmation email is under Settings → Email templates (*Asset sold*).
+
 **Intune check** — Assets → Intune check reads every device Microsoft Intune manages and compares it, by serial number, with the register: devices Intune shows with a different person than the one recorded here, devices in use that are still "in stock" here, devices marked lost, stolen or retired that are still checking in, devices Intune knows that are not in the register (and the other way round), and devices that cannot be checked because they have no serial number. Each finding has the obvious next step beside it (reassign to the Intune user, add to the register with the details filled in, add the serial number), and the whole comparison downloads as a CSV. It is read-only on both sides until you press one of those buttons, and never changes anything in Intune. Needs the `DeviceManagementManagedDevices.Read.All` application permission (see [docs/MICROSOFT365_SETUP.md](docs/MICROSOFT365_SETUP.md)). Administrators and sub-administrators only.
 
 **Categorise with AI** — on the Tidy up screen, press *Categorise with AI* to have Claude look at every asset. It runs in the background and its answers appear in the same list as suggestions, marked ✨ AI; nothing changes until you apply them. It asks about each asset once, and again only if the name or model changes. To turn it on, set `ANTHROPIC_API_KEY` in `.env` and restart. Only each asset's name, model, brand and current category are sent to Anthropic — never holders, locations, serial numbers or prices. If the AI cannot be reached, adding and importing assets carries on with the built-in rules.
@@ -107,6 +110,7 @@ stock-check/
 │   │   ├── classifier.js   # the same from built-in rules (fallback)
 │   │   ├── tidy.js         # defaults for new assets, tidy-up of existing ones
 │   │   ├── intune.js       # register compared with Intune's device list
+│   │   ├── sales.js        # devices sold to staff: record and undo
 │   │   ├── sso.js          # Microsoft sign-in (OpenID Connect + PKCE)
 │   │   ├── graph.js        # Microsoft Graph client (app identity)
 │   │   ├── mailer.js       # email templates, sending, log
@@ -148,6 +152,9 @@ stock-check/
 
 ### Tidy-up
 `GET /api/tidy/preview` — proposed fixes (changes nothing) · `POST /api/tidy/apply` · `POST /api/tidy/ai-run` and `GET /api/tidy/ai-status` — ask the AI about the register · `GET /api/tidy/classify?name=&model=` · `/api/tidy/rules`
+
+### Selling
+`POST /api/assets/:id/sell` — `{ employee_id | buyer_name, price, sold_on, payment_reference, notes, send_email }` · `POST /api/assets/:id/sale/undo` · `GET /api/reports/sales`
 
 ### Intune check
 `GET /api/intune/check` — the register compared with Intune (changes nothing; `?refresh=1` re-reads Intune instead of using the last ten minutes' copy)

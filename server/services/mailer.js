@@ -14,6 +14,7 @@ const ASSET_PLACEHOLDERS = [
     'campus', 'location', 'quantity', 'previous_holder', 'new_holder',
     'condition', 'notes', 'date', 'sent_by', 'asset_url', 'my_assets_url', 'org_name', 'support_email'
 ];
+const SALE_PLACEHOLDERS = [...ASSET_PLACEHOLDERS.filter((name) => !['previous_holder', 'new_holder', 'condition', 'quantity', 'my_assets_url'].includes(name)), 'price', 'sale_date', 'payment_reference'];
 const LIBRARY_PLACEHOLDERS = ['borrower_name', 'items', 'date', 'sent_by', 'org_name', 'support_email'];
 
 const ASSET_BLOCK = `Asset number: {{asset_number}}
@@ -67,6 +68,30 @@ ${ASSET_BLOCK}
 Condition on return: {{condition}}
 
 It is no longer recorded against your name. Thank you.
+
+${SIGN_OFF}`
+    },
+    asset_sold: {
+        name: 'Asset sold',
+        description: 'Confirmation sent to the buyer when IT records that a device has been sold to them.',
+        placeholders: SALE_PLACEHOLDERS,
+        subject: 'Sale confirmed: {{asset_number}} – {{asset_name}}',
+        body: `Dear {{employee_name}},
+
+This confirms that {{org_name}} has sold the following item to you:
+
+Asset number: {{asset_number}}
+Item: {{asset_name}}
+Brand / model: {{brand}} {{model}}
+Serial number: {{serial_number}}
+
+Price: {{price}}
+Date of sale: {{sale_date}}
+Payment reference: {{payment_reference}}
+
+The item is now yours and is no longer recorded against your name as {{org_name}} equipment. It is sold as seen, without warranty or ongoing IT support. If you find any {{org_name}} software, accounts or data still on it, please tell IT Support so they can be removed.
+
+Please keep this email as your record of the sale.
 
 ${SIGN_OFF}`
     },
@@ -314,6 +339,9 @@ function sampleContext(key) {
         new_holder: 'Sam Patel',
         condition: 'good',
         notes: '',
+        price: '£150.00',
+        sale_date: today(),
+        payment_reference: 'INV-2041',
         asset_url: `${appBaseUrl || 'https://stock.example.ac.uk'}/s/AST-2026-0123`,
         my_assets_url: `${appBaseUrl || 'https://stock.example.ac.uk'}/my-assets`
     };

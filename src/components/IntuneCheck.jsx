@@ -14,8 +14,8 @@ const KINDS = [
         help: 'Intune shows a user on these devices, but here they are sitting in stock. If that person does have it, assign it to them.'
     },
     {
-        key: 'gone_but_active', label: 'Written off, still active', tone: 'danger',
-        help: 'Marked lost, stolen or retired here, yet the device has checked in to Intune in the last 30 days. Somebody is using it.'
+        key: 'gone_but_active', label: 'Written off or sold, still active', tone: 'danger',
+        help: 'Marked lost, stolen, retired or sold here, yet the device has checked in to Intune in the last 30 days. Somebody is using it; a sold device should have been removed from Intune.'
     },
     {
         key: 'not_in_register', label: 'Not in the register', tone: 'warning',

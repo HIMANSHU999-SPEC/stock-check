@@ -333,6 +333,31 @@ function initializeDatabase() {
 
   // What the AI made of each asset, kept so it is only asked again when the
   // asset's name, model or brand changes (input_hash).
+  // A device sold to the person who used it (or anyone else). The asset
+  // stays on record with status "sold"; undoing a sale keeps the row and
+  // marks it cancelled.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS asset_sales (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_id INTEGER NOT NULL,
+      employee_id INTEGER,
+      buyer_name TEXT NOT NULL,
+      buyer_email TEXT,
+      price REAL NOT NULL DEFAULT 0,
+      sold_on DATE NOT NULL,
+      payment_reference TEXT,
+      notes TEXT,
+      recorded_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      cancelled_at DATETIME,
+      cancelled_by TEXT,
+      cancel_reason TEXT,
+      FOREIGN KEY (asset_id) REFERENCES assets(id),
+      FOREIGN KEY (employee_id) REFERENCES employees(id)
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_asset_sales_asset ON asset_sales (asset_id, cancelled_at)`);
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS ai_suggestions (
       asset_id INTEGER PRIMARY KEY,

@@ -365,7 +365,10 @@ export default function AssetForm() {
                                     className="form-control"
                                     value={formData.status}
                                     onChange={handleChange}
+                                    disabled={formData.status === 'sold'}
                                 >
+                                    {/* Set by recording a sale, cleared by undoing it. */}
+                                    {formData.status === 'sold' && <option value="sold">Sold</option>}
                                     <option value="available">Available</option>
                                     <option value="assigned">Assigned</option>
                                     <option value="maintenance">Maintenance</option>
@@ -375,6 +378,11 @@ export default function AssetForm() {
                                     <option value="stolen">Stolen</option>
                                     <option value="retired">Retired</option>
                                 </select>
+                                {formData.status === 'sold' && (
+                                    <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                        This asset has been sold. To change its status, undo the sale on the asset's page.
+                                    </div>
+                                )}
                             </div>
 
                             <div className="form-group">

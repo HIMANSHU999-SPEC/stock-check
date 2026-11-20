@@ -321,6 +321,7 @@ export default function AssetList() {
                                 <option value="lost">Lost</option>
                                 <option value="stolen">Stolen</option>
                                 <option value="retired">Retired</option>
+                                <option value="sold">Sold</option>
                             </select>
                         </div>
                         <div className="form-group">
@@ -542,7 +543,11 @@ export default function AssetList() {
                                                     {asset.status}
                                                 </span>
                                             </td>
-                                            <td><div className="cell-clamp" title={asset.holders || ''}>{asset.holders || '—'}</div></td>
+                                            <td>
+                                                <div className="cell-clamp" title={asset.status === 'sold' && asset.sold_to ? `Sold to ${asset.sold_to}` : asset.holders || ''}>
+                                                    {asset.status === 'sold' && asset.sold_to ? `Sold to ${asset.sold_to}` : asset.holders || '—'}
+                                                </div>
+                                            </td>
                                             <td style={{ whiteSpace: 'nowrap' }}>
                                                 {asset.created_at ? new Date(asset.created_at).toLocaleDateString() : '—'}
                                             </td>

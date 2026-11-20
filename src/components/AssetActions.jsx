@@ -211,7 +211,9 @@ export function AssignModal({ assetId, mode = 'assign', assignmentId, suggest, o
         return <Modal title="Loading…" onClose={onClose}><div className="spinner"></div></Modal>;
     }
 
-    const blocked = !['available', 'assigned'].includes(asset.status)
+    const blocked = asset.status === 'sold'
+        ? 'This asset has been sold. If that is wrong, undo the sale on the asset\'s page first.'
+        : !['available', 'assigned'].includes(asset.status)
         ? `This asset is marked "${asset.status}". Set it back to available (Edit) before assigning it.`
         : (!isReassign && available === 0)
             ? 'Nothing is available to assign — return or reassign it first.'
@@ -617,6 +619,198 @@ export function TransferModal({ assetId, onClose, onDone }) {
  * One place to hold "which dialog is open" for a screen. Render the returned
  * `dialogs` once and call open('assign' | 'reassign' | 'return' | 'transfer', assetId).
  */
+/**
+ * Sell the asset, usually to the person who has been using it. The asset
+ * stays on record as "sold" with the buyer, price and date.
+ */
+export function SellModal({ assetId, assignmentId, onClose, onDone }) {
+    const { asset, error: loadError } = useFreshAsset(assetId);
+    const mail = useMailSettings();
+    const [employees, setEmployees] = useState([]);
+    const [buyerType, setBuyerType] = useState('employee');
+    const [employeeId, setEmployeeId] = useState('');
+    const [buyerName, setBuyerName] = useState('');
+    const [buyerEmail, setBuyerEmail] = useState('');
+    const [price, setPrice] = useState('');
+    const [soldOn, setSoldOn] = useState(new Date().toISOString().slice(0, 10));
+    const [reference, setReference] = useState('');
+    const [notes, setNotes] = useState('');
+    const [cleared, setCleared] = useState(false);
+    const [sendEmail, setSendEmail] = useState(true);
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        employeesAPI.getAll().then(setEmployees).catch(() => {});
+    }, []);
+
+    // Start with whoever has it: they are nearly always the buyer.
+    const open = asset?.assignments || [];
+    const holder = open.find((row) => String(row.id) === String(assignmentId) && row.employee_id)
+        || open.find((row) => row.employee_id);
+    useEffect(() => {
+        if (holder && !employeeId) setEmployeeId(String(holder.employee_id));
+    }, [holder?.employee_id]);
+
+    // People first, leavers included; departments and shared mailboxes do not buy laptops.
+    const people = useMemo(() => employees
+        .filter((emp) => emp.kind !== 'shared')
+        .sort((a, b) => a.name.localeCompare(b.name)), [employees]);
+    const buyer = people.find((emp) => String(emp.id) === String(employeeId));
+    const buyerHasEmail = buyerType === 'employee' ? Boolean(buyer?.email) : Boolean(buyerEmail.trim());
+
+    async function submit() {
+        setError('');
+        if (buyerType === 'employee' && !employeeId) return setError('Choose who is buying it.');
+        if (buyerType === 'other' && !buyerName.trim()) return setError('Enter the name of the buyer.');
+        if (price === '' || Number.isNaN(Number(price)) || Number(price) < 0) {
+            return setError('Enter the price it is being sold for (0 if it is being given away).');
+        }
+        if (!cleared) return setError('Tick the box to confirm the device has been cleared for sale.');
+        setBusy(true);
+        try {
+            const result = await assetsAPI.sell(asset.id, {
+                ...(buyerType === 'employee'
+                    ? { employee_id: employeeId }
+                    : { buyer_name: buyerName.trim(), buyer_email: buyerEmail.trim() || undefined }),
+                price: Number(price),
+                sold_on: soldOn,
+                payment_reference: reference.trim() || undefined,
+                notes: notes.trim() || undefined,
+                send_email: Boolean(mail?.configured && sendEmail && buyerHasEmail)
+            });
+            const parts = [`${asset.asset_number} sold to ${result.sale.buyer_name} for £${Number(result.sale.price).toFixed(2)}.`];
+            const line = result.email ? handleEmailResult(result.email) : '';
+            if (line) parts.push(line);
+            onDone(parts.join(' '), result);
+        } catch (err) {
+            setError(err.message);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    if (loadError) {
+        return (
+            <Modal title="Asset unavailable" onClose={onClose}>
+                <div className="alert alert-danger">{loadError}</div>
+                <div className="flex mt-3"><button className="btn btn-secondary" onClick={onClose}>Close</button></div>
+            </Modal>
+        );
+    }
+    if (!asset) {
+        return <Modal title="Loading…" onClose={onClose}><div className="spinner"></div></Modal>;
+    }
+
+    const blocked = asset.status === 'sold'
+        ? 'This asset has already been sold.'
+        : ['lost', 'stolen', 'retired'].includes(asset.status)
+            ? `This asset is marked "${asset.status}" and cannot be sold. Change its status (Edit) first if that is wrong.`
+            : (asset.quantity || 1) > 1
+                ? 'This is a stock line of several items. Register the one being sold as its own asset, then sell that.'
+                : '';
+    const others = open.filter((row) => !holder || row.id !== holder.id);
+
+    return (
+        <Modal title="Sell asset" subtitle={`${asset.asset_number} — ${asset.name}`} onClose={onClose}>
+            {blocked ? (
+                <>
+                    <div className="alert alert-warning mt-2">{blocked}</div>
+                    <div className="flex mt-3"><button className="btn btn-secondary" onClick={onClose}>Close</button></div>
+                </>
+            ) : (
+                <>
+                    {error && <div className="alert alert-danger mt-2">{error}</div>}
+                    <p className="mt-2 text-muted">
+                        {open.length > 0
+                            ? <>Currently with <strong>{open.map(holderName).join(', ')}</strong>. Selling it takes it off their list and out of stock; it stays on record as sold.</>
+                            : 'Selling it takes it out of stock; it stays on record as sold.'}
+                        {asset.purchase_price ? ` Bought for £${Number(asset.purchase_price).toFixed(2)}${asset.purchase_date ? ` on ${asset.purchase_date}` : ''}.` : ''}
+                    </p>
+
+                    <div className="form-group">
+                        <label className="form-label">Sold to</label>
+                        <div className="segmented">
+                            <button type="button" className={buyerType === 'employee' ? 'active' : ''} onClick={() => setBuyerType('employee')}>
+                                Someone on the staff list
+                            </button>
+                            <button type="button" className={buyerType === 'other' ? 'active' : ''} onClick={() => setBuyerType('other')}>
+                                Someone else
+                            </button>
+                        </div>
+                    </div>
+                    {buyerType === 'employee' ? (
+                        <div className="form-group">
+                            <select className="form-control" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} aria-label="Buyer">
+                                <option value="">Choose…</option>
+                                {people.map((emp) => (
+                                    <option key={emp.id} value={emp.id}>
+                                        {emp.name}{emp.status === 'inactive' ? ' (left)' : ''} — {emp.email}
+                                    </option>
+                                ))}
+                            </select>
+                            {others.length > 0 && buyer && holder && String(holder.employee_id) !== String(employeeId) && (
+                                <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                    Not the person who has it now ({holderName(holder)}).
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="grid grid-2">
+                            <div className="form-group">
+                                <input type="text" className="form-control" placeholder="Buyer's name *" value={buyerName} onChange={(e) => setBuyerName(e.target.value)} />
+                            </div>
+                            <div className="form-group">
+                                <input type="email" className="form-control" placeholder="Buyer's email" value={buyerEmail} onChange={(e) => setBuyerEmail(e.target.value)} />
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="grid grid-2">
+                        <div className="form-group">
+                            <label className="form-label">Sale price (£)</label>
+                            <input
+                                type="number" className="form-control" min="0" step="0.01" placeholder="0.00"
+                                value={price} onChange={(e) => setPrice(e.target.value)}
+                            />
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Date of sale</label>
+                            <input type="date" className="form-control" value={soldOn} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setSoldOn(e.target.value)} />
+                        </div>
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Payment reference</label>
+                        <input
+                            type="text" className="form-control" placeholder="e.g. invoice or receipt number, payroll deduction"
+                            value={reference} onChange={(e) => setReference(e.target.value)}
+                        />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Notes</label>
+                        <textarea className="form-control" rows="2" placeholder="Who approved it, condition, anything agreed" value={notes} onChange={(e) => setNotes(e.target.value)} />
+                    </div>
+
+                    <label style={{ display: 'flex', flexWrap: 'nowrap', alignItems: 'flex-start', gap: '0.5rem' }}>
+                        <input type="checkbox" checked={cleared} onChange={(e) => setCleared(e.target.checked)} style={{ marginTop: '0.3rem', flexShrink: 0 }} />
+                        <span>
+                            The device has been wiped and removed from Intune / Autopilot and our Microsoft 365 tenant,
+                            and its asset sticker taken off.
+                        </span>
+                    </label>
+                    {mail?.configured && (
+                        <label className="flex items-center gap-1 mt-2">
+                            <input type="checkbox" checked={sendEmail && buyerHasEmail} disabled={!buyerHasEmail} onChange={(e) => setSendEmail(e.target.checked)} />
+                            Email the buyer a confirmation of the sale
+                        </label>
+                    )}
+                    <Footer onClose={onClose} onSubmit={submit} busy={busy} label="Record sale" />
+                </>
+            )}
+        </Modal>
+    );
+}
+
 export function useAssetActions(onChanged) {
     const [active, setActive] = useState(null); // { type, assetId, assignmentId }
 
@@ -639,6 +833,8 @@ export function useAssetActions(onChanged) {
         dialogs = (
             <ReturnModal assetId={active.assetId} assignmentId={active.assignmentId} onClose={close} onDone={done} />
         );
+    } else if (active && active.type === 'sell') {
+        dialogs = <SellModal assetId={active.assetId} assignmentId={active.assignmentId} onClose={close} onDone={done} />;
     } else if (active && active.type === 'transfer') {
         dialogs = <TransferModal assetId={active.assetId} onClose={close} onDone={done} />;
     }

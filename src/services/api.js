@@ -108,6 +108,8 @@ export const assetsAPI = {
     delete: (id) => apiCall(`/assets/${id}`, { method: 'DELETE' }),
     assign: (id, data) => apiCall(`/assets/${id}/assign`, { method: 'POST', body: JSON.stringify(data) }),
     return: (id, data) => apiCall(`/assets/${id}/return`, { method: 'POST', body: JSON.stringify(data) }),
+    sell: (id, data) => apiCall(`/assets/${id}/sell`, { method: 'POST', body: JSON.stringify(data) }),
+    undoSale: (id, reason) => apiCall(`/assets/${id}/sale/undo`, { method: 'POST', body: JSON.stringify({ reason }) }),
     confirmHolder: (id, assignmentId) => apiCall(`/assets/${id}/assignments/${assignmentId}/confirm`, { method: 'POST' }),
     reassign: (id, data) => apiCall(`/assets/${id}/reassign`, { method: 'POST', body: JSON.stringify(data) }),
     transfer: (id, data) => apiCall(`/assets/${id}/transfer`, { method: 'POST', body: JSON.stringify(data) }),
@@ -196,6 +198,7 @@ export const reportsAPI = {
     getByCampus: () => apiCall('/reports/by-campus'),
     getByModel: () => apiCall('/reports/by-model'),
     getByBrand: () => apiCall('/reports/by-brand'),
+    getSales: () => apiCall('/reports/sales'),
     getCategories: () => apiCall('/categories'),
 };
 

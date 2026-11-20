@@ -5,7 +5,9 @@ const db = require('../database');
 const ASSIGNABLE_STATUSES = ['available', 'assigned'];
 // Statuses that take an item out of circulation; moving an asset into one of
 // these closes every open assignment.
-const OUT_OF_SERVICE_STATUSES = ['maintenance', 'repair', 'damaged', 'lost', 'stolen', 'retired'];
+// "sold" is only ever set by recording a sale (services/sales.js), which
+// also says who bought it.
+const OUT_OF_SERVICE_STATUSES = ['maintenance', 'repair', 'damaged', 'lost', 'stolen', 'retired', 'sold'];
 const ALL_STATUSES = [...ASSIGNABLE_STATUSES, ...OUT_OF_SERVICE_STATUSES];
 
 // What a returned item's condition does to the asset's status.
@@ -201,7 +203,9 @@ function assign(assetId, body, user) {
         const asset = getAsset(assetId);
         if (!ASSIGNABLE_STATUSES.includes(asset.status)) {
             throw new AssignmentError(
-                `This asset is marked "${asset.status}" — set it back to available before assigning it`
+                asset.status === 'sold'
+                    ? 'This asset has been sold — undo the sale on its page first if that is wrong'
+                    : `This asset is marked "${asset.status}" — set it back to available before assigning it`
             );
         }
         const holder = resolveHolder(body);

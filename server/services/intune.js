@@ -37,7 +37,7 @@ const CONFIGURED_CATEGORIES = (process.env.INTUNE_CATEGORIES || '')
     .split(',').map((name) => name.trim().toLowerCase()).filter(Boolean);
 
 // Statuses that mean the organisation no longer has the device.
-const GONE_STATUSES = ['lost', 'stolen', 'retired'];
+const GONE_STATUSES = ['lost', 'stolen', 'retired', 'sold'];
 
 class IntuneError extends Error {
     constructor(message, status = 502) {

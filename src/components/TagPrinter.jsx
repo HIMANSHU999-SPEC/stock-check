@@ -251,7 +251,7 @@ export default function TagPrinter() {
                         </select>
                         <select className="form-control" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
                             <option value="">All statuses</option>
-                            {['available', 'assigned', 'maintenance', 'repair', 'damaged', 'lost', 'stolen', 'retired'].map((s) => (
+                            {['available', 'assigned', 'maintenance', 'repair', 'damaged', 'lost', 'stolen', 'retired', 'sold'].map((s) => (
                                 <option key={s} value={s}>{s}</option>
                             ))}
                         </select>
