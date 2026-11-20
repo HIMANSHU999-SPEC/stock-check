@@ -1285,29 +1285,55 @@ router.post('/:id/restore', (req, res) => {
 // invoice attached. Parsing is heuristic — the frontend always shows a
 // review/edit step before anything is created.
 // ---------------------------------------------------------------------------
-const pdfjs = require('pdfjs-dist/legacy/build/pdf.js');
+// pdf.js ships as an ES module, so it is loaded on first use (the "legacy"
+// build is the one meant for Node). Pinned in package.json to the newest
+// release that supports Node 20; later ones need Node 22.
+let pdfjsModule = null;
+function loadPdfjs() {
+    if (!pdfjsModule) {
+        pdfjsModule = import('pdfjs-dist/legacy/build/pdf.mjs').catch((error) => {
+            pdfjsModule = null;
+            throw error;
+        });
+    }
+    return pdfjsModule;
+}
 
 // Extract text from a PDF, reconstructing visual lines by grouping text
 // fragments that share a y-coordinate (invoice tables rely on this).
 async function extractPdfText(buffer) {
-    const doc = await pdfjs.getDocument({ data: new Uint8Array(buffer), useSystemFonts: true }).promise;
-    let text = '';
-    for (let p = 1; p <= doc.numPages; p++) {
-        const page = await doc.getPage(p);
-        const content = await page.getTextContent();
-        const rows = new Map();
-        for (const item of content.items) {
-            if (!item.str || !item.str.trim()) continue;
-            const y = Math.round(item.transform[5] / 2) * 2; // tolerate tiny baseline jitter
-            if (!rows.has(y)) rows.set(y, []);
-            rows.get(y).push({ x: item.transform[4], str: item.str });
+    const pdfjs = await loadPdfjs();
+    const task = pdfjs.getDocument({
+        data: new Uint8Array(buffer),
+        useSystemFonts: true,
+        // Only the text is read: never run anything a PDF carries, and keep
+        // font and rendering chatter out of the server log.
+        isEvalSupported: false,
+        verbosity: pdfjs.VerbosityLevel.ERRORS
+    });
+    try {
+        const doc = await task.promise;
+        let text = '';
+        for (let p = 1; p <= doc.numPages; p++) {
+            const page = await doc.getPage(p);
+            const content = await page.getTextContent();
+            const rows = new Map();
+            for (const item of content.items) {
+                if (!item.str || !item.str.trim()) continue;
+                const y = Math.round(item.transform[5] / 2) * 2; // tolerate tiny baseline jitter
+                if (!rows.has(y)) rows.set(y, []);
+                rows.get(y).push({ x: item.transform[4], str: item.str });
+            }
+            const ordered = [...rows.entries()].sort((a, b) => b[0] - a[0]);
+            for (const [, parts] of ordered) {
+                text += parts.sort((a, b) => a.x - b.x).map((t) => t.str).join(' ') + '\n';
+            }
         }
-        const ordered = [...rows.entries()].sort((a, b) => b[0] - a[0]);
-        for (const [, parts] of ordered) {
-            text += parts.sort((a, b) => a.x - b.x).map((t) => t.str).join(' ') + '\n';
-        }
+        return { text, numpages: doc.numPages };
+    } finally {
+        // Release the parsed document whether or not it could be read.
+        await task.destroy().catch(() => {});
     }
-    return { text, numpages: doc.numPages };
 }
 
 const invoiceUpload = multer({

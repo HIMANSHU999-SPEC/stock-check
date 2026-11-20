@@ -44,7 +44,7 @@ A few decisions worth explaining, since they were deliberate:
 
 ## Installation
 
-**Prerequisites:** Node.js v18 or higher, npm
+**Prerequisites:** Node.js 20.19 or higher (22 recommended: Node 20 is no longer supported upstream), npm
 
 ```bash
 git clone https://github.com/HIMANSHU999-SPEC/stock-check.git
