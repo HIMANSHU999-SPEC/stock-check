@@ -3,6 +3,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { formatStamp } from './MyAssets';
 import { employeesAPI, assetsAPI } from '../services/api';
 import { outcomeLabel } from '../utils/scan';
+import { formatDate, formatDateTime } from '../utils/dates';
+import { actionLabel } from '../utils/labels';
 
 export default function EmployeeDetails() {
     const { id } = useParams();
@@ -89,7 +91,7 @@ export default function EmployeeDetails() {
                             </div>
                             {employee.status === 'inactive' && (
                                 <div className="text-muted mt-1" style={{ fontSize: '0.9rem' }}>
-                                    Since {employee.deactivated_at ? new Date(employee.deactivated_at).toLocaleDateString() : 'unknown'}
+                                    Since {formatDate(employee.deactivated_at, 'unknown')}
                                     {employee.deactivated_by ? `, by ${employee.deactivated_by}` : ''}
                                     {employee.deactivation_note ? ` — ${employee.deactivation_note}` : ''}
                                 </div>
@@ -196,8 +198,8 @@ export default function EmployeeDetails() {
                                         <td><Link to={`/assets/${p.asset_id}`} className="text-primary"><strong>{p.asset_number}</strong></Link></td>
                                         <td><div className="cell-clamp" title={p.name}>{p.name}</div></td>
                                         <td>{p.quantity}</td>
-                                        <td style={{ whiteSpace: 'nowrap' }}>{p.assigned_at ? new Date(p.assigned_at).toLocaleDateString() : '—'}</td>
-                                        <td style={{ whiteSpace: 'nowrap' }}>{new Date(p.returned_at).toLocaleDateString()}</td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{formatDate(p.assigned_at)}</td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{formatDate(p.returned_at)}</td>
                                         <td>{outcomeLabel(p.return_condition)}</td>
                                     </tr>
                                 ))
@@ -227,8 +229,8 @@ export default function EmployeeDetails() {
                             ) : (
                                 employee.history.map((h) => (
                                     <tr key={h.id}>
-                                        <td>{new Date(h.timestamp).toLocaleString()}</td>
-                                        <td><span className="badge badge-primary">{h.action}</span></td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(h.timestamp)}</td>
+                                        <td><span className="badge badge-primary">{actionLabel(h.action)}</span></td>
                                         <td>{h.asset_number || '-'} {h.asset_name ? `(${h.asset_name})` : ''}</td>
                                         <td>{h.notes || '-'}</td>
                                     </tr>

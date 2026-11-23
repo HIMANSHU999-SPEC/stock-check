@@ -9,6 +9,9 @@ function getAuthToken() {
     return localStorage.getItem(TOKEN_KEY);
 }
 
+// Only for addresses the browser opens by itself (a document in a new tab),
+// where no header can be sent. Ordinary requests carry the token in the
+// Authorization header, which keeps it out of web-server logs.
 function withTokenQuery(endpoint) {
     const token = getAuthToken();
     if (!token) return endpoint;
@@ -16,11 +19,20 @@ function withTokenQuery(endpoint) {
     return `${endpoint}${separator}token=${encodeURIComponent(token)}`;
 }
 
+// The server refused the token we sent: the session has run out (or was
+// ended elsewhere). Tell the app, which sends the person to sign in again
+// and brings them back to the page they were on, rather than leaving them
+// looking at empty lists.
+function sessionEnded(response, sentToken) {
+    if (response.status !== 401 || !sentToken) return;
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('session-ended'));
+}
+
 async function apiDownload(endpoint, options = {}) {
     const token = getAuthToken();
     let response;
     try {
-        response = await fetch(`${API_BASE}${withTokenQuery(endpoint)}`, {
+        response = await fetch(`${API_BASE}${endpoint}`, {
             headers: {
                 ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 ...options.headers,
@@ -32,6 +44,7 @@ async function apiDownload(endpoint, options = {}) {
     }
 
     if (!response.ok) {
+        sessionEnded(response, token);
         let errorMsg = 'API request failed';
         try {
             const err = await response.json();
@@ -52,6 +65,9 @@ async function apiDownload(endpoint, options = {}) {
 
 export async function downloadCsv(endpoint, filename, options = {}) {
     const blob = await apiDownload(endpoint, options);
+    // The server sends one PDF, not a zip, when there is a single report (or
+    // nothing to report); name the file for what it is so it opens.
+    if (blob.type === 'application/pdf') filename = filename.replace(/\.zip$/, '.pdf');
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -69,7 +85,7 @@ export async function downloadFile(endpoint, filename, options = {}) {
 // Helper function for API calls
 async function apiCall(endpoint, options = {}) {
     const token = getAuthToken();
-    const response = await fetch(`${API_BASE}${withTokenQuery(endpoint)}`, {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
         headers: {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -79,6 +95,8 @@ async function apiCall(endpoint, options = {}) {
     });
 
     if (!response.ok) {
+        // A wrong password is also a 401, but no token went with that request.
+        if (!endpoint.startsWith('/auth/login')) sessionEnded(response, token);
         const error = await response.json().catch(() => ({}));
         const failure = new Error(error.error || 'API request failed');
         // Lets a screen react to a particular refusal, not just show it.
@@ -135,6 +153,7 @@ export const assetsAPI = {
         apiCall(`/assets/${id}/restore`, { method: 'POST', body: JSON.stringify({ password }) }),
     recycleBin: {
         list: () => apiCall('/assets/bin'),
+        rules: () => apiCall('/assets/bin-rules'),
         get: (id) => apiCall(`/assets/bin/${id}`)
     },
     exportByCategory: (category) =>
@@ -149,11 +168,15 @@ export const assetsAPI = {
             `/assets/export/by-campus${campus !== undefined ? `?campus=${encodeURIComponent(campus)}` : ''}`,
             'assets-by-campus.csv'
         ),
-    exportByModel: (model) =>
-        downloadCsv(
-            `/assets/export/by-model${model !== undefined ? `?model=${encodeURIComponent(model)}` : ''}`,
-            'assets-by-model.csv'
-        ),
+    // `category` narrows to one category ('__none__' for assets with none),
+    // matching a row of the model report.
+    exportByModel: (model, category) => {
+        const params = new URLSearchParams();
+        if (model !== undefined) params.set('model', model);
+        if (category !== undefined) params.set('category', category);
+        const query = params.toString();
+        return downloadCsv(`/assets/export/by-model${query ? `?${query}` : ''}`, 'assets-by-model.csv');
+    },
     exportAssignments: (employeeIds = []) => {
         const ids = Array.isArray(employeeIds) ? employeeIds.filter(Boolean) : [];
         if (ids.length === 1) {
@@ -161,11 +184,9 @@ export const assetsAPI = {
             return downloadFile(`/assets/export/by-employees?employee_ids=${encodeURIComponent(id)}`, `assigned-assets-${id}.pdf`);
         }
         if (ids.length > 1) {
-            return downloadFile('/assets/export/by-employees', 'assigned-assets.zip', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ employee_ids: ids })
-            });
+            // A plain GET, so accounts that may download but not change
+            // anything are not turned away.
+            return downloadFile(`/assets/export/by-employees?employee_ids=${ids.map(encodeURIComponent).join(',')}`, 'assigned-assets.zip');
         }
         // No selection: export all assigned as ZIP
         return downloadFile('/assets/export/by-employees', 'assigned-assets.zip');
@@ -264,7 +285,10 @@ export const invoiceAPI = {
             body: form
         });
         const data = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(data.error || 'Could not parse the invoice');
+        if (!response.ok) {
+            sessionEnded(response, token);
+            throw new Error(data.error || 'Could not parse the invoice');
+        }
         return data;
     },
     import: (payload) => apiCall('/assets/import-invoice', { method: 'POST', body: JSON.stringify(payload) })
@@ -284,6 +308,7 @@ export const documentsAPI = {
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
+            sessionEnded(response, token);
             throw new Error(data.error || 'Upload failed');
         }
         return data;

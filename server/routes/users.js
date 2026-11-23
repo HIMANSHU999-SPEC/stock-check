@@ -45,7 +45,7 @@ router.get('/staff-candidates', (req, res) => {
         const staff = db.prepare(`
           SELECT e.id, e.name, e.email, e.department
           FROM employees e
-          WHERE e.status != 'inactive'
+          WHERE e.status != 'inactive' AND e.kind != 'shared'
             AND NOT EXISTS (SELECT 1 FROM users u WHERE LOWER(u.email) = LOWER(e.email))
           ORDER BY e.name
         `).all();
@@ -105,6 +105,12 @@ router.put('/:id', (req, res) => {
         }
 
         const safeRole = role && ALLOWED_ROLES.includes(role) ? role : user.role;
+
+        // Changing your own role would lock you out of this page mid-way;
+        // another administrator has to do it.
+        if (String(user.id) === String(req.user?.id) && safeRole !== user.role) {
+            return res.status(400).json({ error: 'You cannot change your own role. Ask another administrator.' });
+        }
 
         // Don't allow demoting the last remaining admin.
         if (user.role === 'admin' && safeRole !== 'admin') {

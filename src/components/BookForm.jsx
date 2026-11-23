@@ -56,6 +56,10 @@ export default function BookForm() {
                 (meta.existing ? ` — note: already in library as ${meta.existing.book_number}` : '')
             );
         } catch (err) {
+            // Keep the ISBN: without it the book cannot be found by scanning
+            // its barcode later, and would be catalogued twice.
+            setFormData((prev) => ({ ...prev, isbn: prev.isbn || isbn }));
+            setShowMore(true);
             setLookupOk(false);
             setLookupMsg(err.message);
         } finally {
@@ -177,7 +181,8 @@ export default function BookForm() {
                                     min="1"
                                     className="form-control"
                                     value={formData.quantity}
-                                    onChange={(e) => update('quantity', parseInt(e.target.value, 10) || 1)}
+                                    onChange={(e) => update('quantity', e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value, 10) || 1))}
+                                    onBlur={() => { if (formData.quantity === '') update('quantity', 1); }}
                                     required
                                 />
                             </div>

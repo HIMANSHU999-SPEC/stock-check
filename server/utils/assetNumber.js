@@ -7,7 +7,7 @@ function generateAssetNumber() {
 
     // Get the last asset number for this year
     const lastAsset = db.prepare(
-        'SELECT asset_number FROM assets WHERE asset_number LIKE ? ORDER BY asset_number DESC LIMIT 1'
+        'SELECT asset_number FROM assets WHERE asset_number LIKE ? ORDER BY LENGTH(asset_number) DESC, asset_number DESC LIMIT 1'
     ).get(`${prefix}%`);
 
     let nextNumber = 1;

@@ -17,20 +17,17 @@ router.get('/summary', (req, res) => {
     try {
         const qty = db.prepare(`
       SELECT
-        COALESCE(SUM(quantity), 0) as total_quantity,
+        -- A sold item stays on record but is no longer ours to count.
+        COALESCE(SUM(CASE WHEN status = 'sold' THEN 0 ELSE quantity END), 0) as total_quantity,
         COALESCE(SUM(assigned_quantity), 0) as assigned_quantity,
-        COALESCE(SUM(
-          CASE
-            WHEN status IN ('lost','stolen','damaged','retired','sold') THEN 0
-            WHEN (quantity - COALESCE(assigned_quantity, 0)) > 0 THEN (quantity - COALESCE(assigned_quantity, 0))
-            ELSE 0
-          END
-        ), 0) as available_quantity,
+        -- "Ready to assign": in service and not already out. Anything in
+        -- repair, damaged, lost, stolen, retired or sold is not.
+        COALESCE(SUM(CASE WHEN status IN ('available','assigned') THEN MAX(COALESCE(quantity,0) - COALESCE(assigned_quantity,0), 0) ELSE 0 END), 0) as available_quantity,
         COALESCE(SUM(CASE WHEN status = 'maintenance' THEN quantity ELSE 0 END), 0) as maintenance_quantity
       FROM assets
       WHERE deleted_at IS NULL
     `).get();
-        const totalValue = db.prepare('SELECT SUM(purchase_price) as total FROM assets WHERE deleted_at IS NULL').get();
+        const totalValue = db.prepare("SELECT SUM(purchase_price) as total FROM assets WHERE deleted_at IS NULL AND status <> 'sold'").get();
         const totalIntuneValue = db.prepare('SELECT SUM(intune_price) as total FROM assets WHERE deleted_at IS NULL').get();
 
         res.json({
@@ -87,7 +84,7 @@ router.get('/by-supplier', (req, res) => {
         CASE WHEN supplier_name IS NULL OR TRIM(supplier_name) = '' THEN 'Unspecified' ELSE supplier_name END AS supplier_name,
         COUNT(*) as asset_count,
         SUM(quantity) as total_quantity,
-        SUM(COALESCE(quantity,0) - COALESCE(assigned_quantity,0)) as available_quantity,
+        SUM(CASE WHEN status IN ('available','assigned') THEN MAX(COALESCE(quantity,0) - COALESCE(assigned_quantity,0), 0) ELSE 0 END) as available_quantity,
         SUM(purchase_price) as total_value
       FROM assets
       WHERE deleted_at IS NULL
@@ -109,7 +106,7 @@ router.get('/by-campus', (req, res) => {
         CASE WHEN campus IS NULL OR TRIM(campus) = '' THEN 'Unspecified' ELSE campus END AS campus,
         COUNT(*) as asset_count,
         SUM(quantity) as total_quantity,
-        SUM(COALESCE(quantity,0) - COALESCE(assigned_quantity,0)) as available_quantity,
+        SUM(CASE WHEN status IN ('available','assigned') THEN MAX(COALESCE(quantity,0) - COALESCE(assigned_quantity,0), 0) ELSE 0 END) as available_quantity,
         SUM(purchase_price) as total_value
       FROM assets
       WHERE deleted_at IS NULL
@@ -131,7 +128,7 @@ router.get('/by-brand', (req, res) => {
         COALESCE(NULLIF(TRIM(MIN(a.brand)), ''), 'Unspecified') AS brand,
         COUNT(*) AS asset_count,
         SUM(COALESCE(a.quantity, 0)) AS total_quantity,
-        SUM(COALESCE(a.quantity, 0) - COALESCE(a.assigned_quantity, 0)) AS available_quantity,
+        SUM(CASE WHEN a.status IN ('available','assigned') THEN MAX(COALESCE(a.quantity,0) - COALESCE(a.assigned_quantity,0), 0) ELSE 0 END) AS available_quantity,
         SUM(a.purchase_price) AS total_value
       FROM assets a
       WHERE a.deleted_at IS NULL
@@ -153,10 +150,11 @@ router.get('/by-model', (req, res) => {
       SELECT
         COALESCE(NULLIF(TRIM(MIN(a.model)), ''), 'Unspecified') AS model,
         c.name AS category,
+        a.category_id AS category_id,
         COUNT(*) AS asset_count,
         SUM(COALESCE(a.quantity, 0)) AS total_quantity,
         SUM(COALESCE(a.assigned_quantity, 0)) AS assigned_quantity,
-        SUM(COALESCE(a.quantity, 0) - COALESCE(a.assigned_quantity, 0)) AS available_quantity,
+        SUM(CASE WHEN a.status IN ('available','assigned') THEN MAX(COALESCE(a.quantity,0) - COALESCE(a.assigned_quantity,0), 0) ELSE 0 END) AS available_quantity,
         SUM(a.purchase_price) AS total_value
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id

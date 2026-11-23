@@ -17,6 +17,8 @@ export default function Reports() {
     const [selectedCategory, setSelectedCategory] = useState('');
     const [selectedEmployees, setSelectedEmployees] = useState([]);
     const [soldData, setSoldData] = useState({ sales: [], total: 0 });
+    // The status table counts asset lines, so its percentages are of lines.
+    const statusLines = statusData.reduce((sum, item) => sum + (item.count || 0), 0);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -192,7 +194,7 @@ export default function Reports() {
                                         </td>
                                         <td>{item.count}</td>
                                         <td>
-                                            {summary?.total > 0 ? Math.round((item.count / summary.total) * 100) : 0}%
+                                            {statusLines > 0 ? Math.round((item.count / statusLines) * 100) : 0}%
                                         </td>
                                     </tr>
                                 ))}
@@ -232,7 +234,7 @@ export default function Reports() {
                                     <td>£{(item.total_value || 0).toLocaleString()}</td>
                                     <td>
                                         <Link
-                                            to={`/assets?model=${encodeURIComponent(item.model)}`}
+                                            to={`/assets?model=${encodeURIComponent(item.model)}&category=${item.category_id ?? '__none__'}`}
                                             className="btn btn-sm btn-secondary"
                                         >
                                             View items
@@ -242,7 +244,7 @@ export default function Reports() {
                                             style={{ marginLeft: '0.5rem' }}
                                             onClick={async () => {
                                                 try {
-                                                    await assetsAPI.exportByModel(item.model);
+                                                    await assetsAPI.exportByModel(item.model, item.category_id ?? '__none__');
                                                 } catch (error) {
                                                     alert('Export failed: ' + error.message);
                                                 }
@@ -432,8 +434,10 @@ export default function Reports() {
                         </thead>
                         <tbody>
                             {campusData.map((item, index) => {
-                                const displayName = item.campus && item.campus.trim() ? item.campus : 'Unassigned';
-                                const value = item.campus && item.campus.trim() ? item.campus : 'Unassigned';
+                                // The server calls assets with no campus "Unspecified".
+                                const named = item.campus && item.campus.trim() && item.campus !== 'Unspecified';
+                                const displayName = named ? item.campus : 'Unassigned';
+                                const value = named ? item.campus : 'Unassigned';
                                 const checked = selectedCampuses.includes(value);
                                 return (
                                     <tr key={index}>
@@ -523,7 +527,7 @@ export default function Reports() {
                             onClick={exportAssignments}
                             disabled={employees.length === 0}
                         >
-                            Export CSV
+                            Export PDF
                         </button>
                     </div>
                     <p className="text-muted" style={{ marginBottom: 0 }}>

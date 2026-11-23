@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import AssetList from './components/AssetList';
 import AssetDetails from './components/AssetDetails';
@@ -78,6 +78,26 @@ function ProtectedRoute({ user, license, authLoading, children, staffAllowed = f
     return children;
 }
 
+// An address that is not a page of the app: a mistyped link, or one from an
+// older version. Better a way back than a blank screen.
+function NotFound() {
+    const location = useLocation();
+    return (
+        <div className="card" style={{ maxWidth: '36rem', margin: '2rem auto' }}>
+            <div className="card-body">
+                <h2>Page not found</h2>
+                <p className="text-muted">
+                    There is nothing at <code>{location.pathname}</code>. The link may be mistyped or out of date.
+                </p>
+                <div className="flex gap-2 mt-3">
+                    <Link to="/" className="btn btn-primary">Go to the dashboard</Link>
+                    <Link to="/scan" className="btn btn-secondary">Look up an asset</Link>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function LoggedInRedirect({ user }) {
     const location = useLocation();
     if (user?.role === 'staff') return <Navigate to="/my-assets" replace />;
@@ -123,6 +143,20 @@ function App() {
         bootstrap();
     }, []);
 
+    // The server stopped accepting the session while the app was open.
+    const [sessionEnded, setSessionEnded] = React.useState(false);
+    React.useEffect(() => {
+        function onEnded() {
+            clearAuthToken();
+            setUser((current) => {
+                if (current) setSessionEnded(true);
+                return null;
+            });
+        }
+        window.addEventListener('session-ended', onEnded);
+        return () => window.removeEventListener('session-ended', onEnded);
+    }, []);
+
     // Lets the stylesheet hide the buttons an account cannot use
     // (see .write-only / .download-only in index.css).
     React.useEffect(() => {
@@ -133,6 +167,7 @@ function App() {
     async function handleLogin(email, password) {
         const res = await authAPI.login(email, password);
         saveAuthToken(res.token);
+        setSessionEnded(false);
         setUser(res.user);
         const lic = await authAPI.license();
         setLicense(lic);
@@ -140,12 +175,14 @@ function App() {
     }
 
     async function handleSsoSignedIn() {
+        setSessionEnded(false);
         const me = await authAPI.me();
         setUser(me.user);
         setLicense(await authAPI.license());
     }
 
     function handleLogout() {
+        setSessionEnded(false);
         clearAuthToken();
         setUser(null);
         // Signed-out visitors only learn whether the app is usable.
@@ -172,6 +209,7 @@ function App() {
                                             license={license}
                                             authLoading={authLoading}
                                             user={user}
+                                            sessionEnded={sessionEnded}
                                         />
                                     )
                                 }
@@ -181,7 +219,7 @@ function App() {
                                 path="/"
                                 element={
                                     <ProtectedRoute user={user} license={license} authLoading={authLoading}>
-                                        <Dashboard />
+                                        <Dashboard user={user} />
                                     </ProtectedRoute>
                                 }
                             />
@@ -415,6 +453,14 @@ function App() {
                                 element={
                                     <ProtectedRoute user={user} license={license} authLoading={authLoading}>
                                         <UserManagement currentUser={user} />
+                                    </ProtectedRoute>
+                                }
+                            />
+                            <Route
+                                path="*"
+                                element={
+                                    <ProtectedRoute user={user} license={license} authLoading={authLoading}>
+                                        <NotFound />
                                     </ProtectedRoute>
                                 }
                             />

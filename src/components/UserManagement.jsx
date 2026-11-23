@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { usersAPI, authAPI } from '../services/api';
+import { formatDate } from '../utils/dates';
 
 const EMPTY = { name: '', email: '', role: 'viewer', password: '' };
 
@@ -150,7 +151,7 @@ export default function UserManagement({ currentUser }) {
                                     <td>{u.email}{String(u.id) === String(currentUser.id) && <span className="text-muted"> (you)</span>}</td>
                                     <td><span className={`badge badge-${roleInfo(u.role).badge}`}>{roleInfo(u.role).label}</span></td>
                                     <td>{u.has_password ? 'Password' : 'Microsoft only'}{u.has_password && ssoEnabled ? ' or Microsoft' : ''}</td>
-                                    <td>{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
+                                    <td>{formatDate(u.created_at)}</td>
                                     <td>
                                         <div className="flex gap-1">
                                             <button onClick={() => openModal(u)} className="btn btn-sm btn-secondary">Edit</button>
@@ -205,6 +206,8 @@ export default function UserManagement({ currentUser }) {
                             <div className="form-group">
                                 <label className="form-label">Role</label>
                                 <select className="form-control" value={formData.role}
+                                    disabled={Boolean(editing) && String(editing.id) === String(currentUser.id)}
+                                    title={editing && String(editing.id) === String(currentUser.id) ? 'You cannot change your own role; another administrator has to' : undefined}
                                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}>
                                     {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                                 </select>

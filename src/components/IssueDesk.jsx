@@ -74,7 +74,7 @@ export default function IssueDesk() {
     async function handleSaveSettings() {
         setSavingSettings(true);
         try {
-            const saved = await booksAPI.saveSettings(settings);
+            const saved = await booksAPI.saveSettings({ ...settings, loan_days: settings.loan_days || 14 });
             setSettings(saved);
             alert('Loan limits saved.');
         } catch (err) {
@@ -182,7 +182,7 @@ export default function IssueDesk() {
         setCart((prev) =>
             prev.map((item) =>
                 item.book_id === bookId
-                    ? { ...item, quantity: Math.max(1, Math.min(qty, item.available)) }
+                    ? { ...item, quantity: qty === '' ? '' : Math.max(1, Math.min(qty, item.available)) }
                     : item
             )
         );
@@ -221,7 +221,7 @@ export default function IssueDesk() {
                 borrower_id: Number(selectedBorrower),
                 due_at: dueDate || null,
                 notes: notes || null,
-                items: cart.map((item) => ({ book_id: item.book_id, quantity: item.quantity }))
+                items: cart.map((item) => ({ book_id: item.book_id, quantity: item.quantity || 1 }))
             });
             setMessage(res.message);
             setCart([]);
@@ -330,8 +330,9 @@ export default function IssueDesk() {
                                                         style={{ width: '5rem' }}
                                                         value={item.quantity}
                                                         onChange={(e) =>
-                                                            updateQty(item.book_id, parseInt(e.target.value, 10) || 1)
+                                                            updateQty(item.book_id, e.target.value === '' ? '' : parseInt(e.target.value, 10) || 1)
                                                         }
+                                                        onBlur={() => { if (item.quantity === '') updateQty(item.book_id, 1); }}
                                                     />
                                                     <div className="text-muted" style={{ fontSize: '0.75rem' }}>
                                                         {item.available} avail.
@@ -572,7 +573,8 @@ export default function IssueDesk() {
                                 <input
                                     type="number" min="1" className="form-control"
                                     value={settings.loan_days}
-                                    onChange={(e) => setSettings({ ...settings, loan_days: parseInt(e.target.value, 10) || 14 })}
+                                    onChange={(e) => setSettings({ ...settings, loan_days: e.target.value === '' ? '' : parseInt(e.target.value, 10) || 14 })}
+                                    onBlur={() => { if (settings.loan_days === '') setSettings({ ...settings, loan_days: 14 }); }}
                                 />
                             </div>
                         </div>

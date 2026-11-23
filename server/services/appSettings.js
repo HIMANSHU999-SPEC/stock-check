@@ -54,6 +54,9 @@ function saveSettings(changes) {
             value = Boolean(value);
         } else {
             value = String(value || '').trim();
+            // A blanked organisation name would leave gaps in every email
+            // ("the property of  and must be returned").
+            if (key === 'org_name' && !value) value = field.fallback();
             if (field.type === 'email' && value && !EMAIL_RE.test(value)) {
                 throw new Error(`"${value}" is not a valid email address`);
             }

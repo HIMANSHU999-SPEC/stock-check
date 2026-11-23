@@ -90,10 +90,27 @@ router.get('/:id', (req, res) => {
     }
 });
 
+// Someone else on the staff list already using this email address, whatever
+// its case. Says so in words instead of letting the database refuse it.
+function emailInUse(email, exceptId = 0) {
+    const other = db.prepare('SELECT id, name, status FROM employees WHERE LOWER(email) = LOWER(?) AND id != ?').get(email, exceptId);
+    if (!other) return null;
+    return `${other.name} already has that email address`
+        + (other.status === 'inactive' ? ' (they are marked inactive: reactivate them rather than adding them again).' : '.');
+}
+
+function employeeFields(body = {}) {
+    const text = (value) => (typeof value === 'string' ? value.trim() : (value === null || value === undefined ? '' : String(value).trim()));
+    return { name: text(body.name), email: text(body.email), department: text(body.department) || null, phone: text(body.phone) || null };
+}
+
 // Create employee
 router.post('/', (req, res) => {
     try {
-        const { name, email, department, phone } = req.body;
+        const { name, email, department, phone } = employeeFields(req.body);
+        if (!name || !email) return res.status(400).json({ error: 'A name and an email address are needed.' });
+        const clash = emailInUse(email);
+        if (clash) return res.status(409).json({ error: clash });
 
         const result = db.prepare(`
       INSERT INTO employees (name, email, department, phone, kind)
@@ -114,11 +131,14 @@ router.post('/', (req, res) => {
 // Update employee
 router.put('/:id', (req, res) => {
     try {
-        const { name, email, department, phone } = req.body;
+        const { name, email, department, phone } = employeeFields(req.body);
         const before = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
         if (!before) {
             return res.status(404).json({ error: 'Employee not found' });
         }
+        if (!name || !email) return res.status(400).json({ error: 'A name and an email address are needed.' });
+        const clash = emailInUse(email, before.id);
+        if (clash) return res.status(409).json({ error: clash });
 
         db.prepare(`
       UPDATE employees SET name = ?, email = ?, department = ?, phone = ?, kind = ?

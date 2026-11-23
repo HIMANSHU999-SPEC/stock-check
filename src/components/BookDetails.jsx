@@ -42,6 +42,8 @@ export default function BookDetails() {
     if (!book) return null;
 
     const activeLoans = (book.loans || []).filter((l) => l.status === 'issued');
+    // One loan can be for several copies of the same title.
+    const onLoan = activeLoans.reduce((sum, l) => sum + (l.quantity || 1), 0);
 
     return (
         <div>
@@ -161,7 +163,7 @@ export default function BookDetails() {
 
             {activeLoans.length > 0 && (
                 <p className="text-muted mt-2">
-                    {activeLoans.length} copy(ies) currently on loan.
+                    {onLoan} {onLoan === 1 ? 'copy' : 'copies'} currently on loan.
                 </p>
             )}
         </div>

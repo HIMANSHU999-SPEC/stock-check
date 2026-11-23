@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { employeesAPI } from '../services/api';
+import { formatDate } from '../utils/dates';
 
 export default function EmployeeList() {
     const [employees, setEmployees] = useState([]);
@@ -191,7 +192,7 @@ export default function EmployeeList() {
                                                 <span
                                                     className={`badge badge-${inactive ? 'warning' : 'success'}`}
                                                     title={inactive && employee.deactivated_at
-                                                        ? `Since ${new Date(employee.deactivated_at).toLocaleDateString()}${employee.deactivation_note ? ` — ${employee.deactivation_note}` : ''}`
+                                                        ? `Since ${formatDate(employee.deactivated_at)}${employee.deactivation_note ? ` — ${employee.deactivation_note}` : ''}`
                                                         : undefined}
                                                 >
                                                     {inactive ? 'Inactive' : 'Active'}

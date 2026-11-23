@@ -31,7 +31,7 @@ function BarChart({ data, unit = '' }) {
     );
 }
 
-export default function Dashboard() {
+export default function Dashboard({ user }) {
     const [stats, setStats] = useState(null);
     const [recentAssets, setRecentAssets] = useState([]);
     const [campusStats, setCampusStats] = useState([]);
@@ -47,7 +47,7 @@ export default function Dashboard() {
 
     useEffect(() => {
         // Only the people who deal with the reports are told about them.
-        if (['viewer', 'inventory'].includes(document.body.dataset.access)) return;
+        if (['viewer', 'inventory'].includes(user?.role)) return;
         staffReportsAPI.count().then((r) => { setOpenReports(r.open || 0); setLeaversHolding(r.leavers_holding || 0); }).catch(() => {});
     }, []);
 

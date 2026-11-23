@@ -15,7 +15,7 @@ router.post('/library-overdue', async (req, res) => {
       SELECT l.due_at, b.book_number, b.title
       FROM book_loans l JOIN books b ON l.book_id = b.id
       WHERE l.borrower_id = ? AND l.status = 'issued'
-        AND l.due_at IS NOT NULL AND l.due_at < datetime('now','localtime')
+        AND l.due_at IS NOT NULL AND date(l.due_at) < date('now','localtime')
       ORDER BY l.due_at
     `).all(borrower.id);
         if (loans.length === 0) {

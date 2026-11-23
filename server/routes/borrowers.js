@@ -29,7 +29,7 @@ router.get('/', (req, res) => {
 
         const withCounts = borrowers.map((b) => {
             const active = db.prepare(
-                "SELECT COUNT(*) as count FROM book_loans WHERE borrower_id = ? AND status = 'issued'"
+                "SELECT COALESCE(SUM(quantity), 0) as count FROM book_loans WHERE borrower_id = ? AND status = 'issued'"
             ).get(b.id);
             return { ...b, active_loans: active.count };
         });
@@ -96,11 +96,14 @@ router.put('/:id', (req, res) => {
             return res.status(404).json({ error: 'Borrower not found' });
         }
         const safeType = ALLOWED_TYPES.includes(type) ? type : 'student';
+        if (!name || !String(name).trim()) {
+            return res.status(400).json({ error: 'Name is required' });
+        }
 
         db.prepare(`
       UPDATE borrowers SET name = ?, type = ?, identifier = ?, email = ?, class_dept = ?, phone = ?, campus = ?
       WHERE id = ?
-    `).run(name, safeType, identifier || null, email || null, class_dept || null, phone || null, campus || '', req.params.id);
+    `).run(String(name).trim(), safeType, identifier || null, email || null, class_dept || null, phone || null, campus || '', req.params.id);
 
         const updated = db.prepare('SELECT * FROM borrowers WHERE id = ?').get(req.params.id);
         res.json(updated);

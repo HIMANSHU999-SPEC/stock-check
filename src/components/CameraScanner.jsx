@@ -30,6 +30,9 @@ export default function CameraScanner({
                 (decodedText) => {
                     const now = Date.now();
                     if (decodedText === lastScan.current.text && now - lastScan.current.at < 2500) {
+                        // Still looking at the same code: keep waiting, so a
+                        // tag held in view is read once, not every 2.5 seconds.
+                        lastScan.current.at = now;
                         return;
                     }
                     lastScan.current = { text: decodedText, at: now };
