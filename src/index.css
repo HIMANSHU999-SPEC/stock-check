@@ -2087,3 +2087,83 @@ body[data-access="viewer"] .download-only { display: none !important; }
   color: var(--text-muted);
   font-weight: 600;
 }
+
+/* Choosing a person in the assign window: a list to click, then a box that
+   names whoever was chosen */
+.person-list {
+  max-height: 15rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+
+.person-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.person-row:last-child {
+  border-bottom: none;
+}
+
+.person-row span,
+.person-text span {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.person-row:hover,
+.person-row:focus-visible,
+.person-row.at-cursor {
+  background: var(--bg-tertiary);
+  outline: none;
+  box-shadow: inset 3px 0 0 var(--primary-light);
+}
+
+.person-empty {
+  padding: 0.75rem;
+  color: var(--text-muted);
+}
+
+.person-chosen {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  border: 2px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+}
+
+.person-tick {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.person-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
