@@ -91,6 +91,89 @@ function EmailOption({ mail, checked, onChange, to }) {
  * Assign available stock, or (mode="reassign") move it from one holder
  * straight to another. The new holder is a person or a room / location.
  */
+/**
+ * Choosing one person from the staff list. Nobody counts as chosen until a
+ * row is clicked (or Enter is pressed on it); once chosen, the list gives way
+ * to a box naming them, so what will be saved is always what is on screen.
+ */
+function PersonPicker({ people, value, onChange, filter, onFilterChange }) {
+    const [cursor, setCursor] = useState(-1); // row the arrow keys are on; not a choice
+    const chosen = people.find((emp) => String(emp.id) === String(value));
+
+    const matches = useMemo(() => {
+        const term = filter.trim().toLowerCase();
+        if (!term) return people;
+        return people.filter((emp) =>
+            [emp.name, emp.email, emp.department].some((v) => (v || '').toLowerCase().includes(term)));
+    }, [people, filter]);
+
+    useEffect(() => { setCursor(-1); }, [filter]);
+
+    if (chosen) {
+        return (
+            <div className="person-chosen">
+                <span className="person-tick" aria-hidden="true">✓</span>
+                <div className="person-text">
+                    <strong>{chosen.name}</strong>
+                    <span>{[chosen.department || 'No department', chosen.email].filter(Boolean).join(' · ')}</span>
+                </div>
+                <button type="button" className="btn btn-sm btn-secondary" onClick={() => onChange('')}>
+                    Change
+                </button>
+            </div>
+        );
+    }
+
+    function onKeyDown(e) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (matches.length === 0) return;
+            const step = e.key === 'ArrowDown' ? 1 : -1;
+            setCursor((at) => (at + step + matches.length) % matches.length);
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            // Enter takes the row the arrows are on, or the only match left.
+            const pick = cursor >= 0 ? matches[cursor] : (matches.length === 1 ? matches[0] : null);
+            if (pick) onChange(String(pick.id));
+        }
+    }
+
+    return (
+        <>
+            <input
+                type="text"
+                className="form-control mb-1"
+                placeholder="Search by name, email or department…"
+                value={filter}
+                onChange={(e) => onFilterChange(e.target.value)}
+                onKeyDown={onKeyDown}
+                aria-label="Search the staff list"
+                autoFocus
+            />
+            <div className="person-list" role="listbox" aria-label="Staff">
+                {matches.length === 0 && <div className="person-empty">No one matches that search.</div>}
+                {matches.map((emp, index) => (
+                    <button
+                        key={emp.id}
+                        type="button"
+                        role="option"
+                        aria-selected="false"
+                        className={`person-row ${index === cursor ? 'at-cursor' : ''}`}
+                        ref={index === cursor ? (el) => el && el.scrollIntoView({ block: 'nearest' }) : undefined}
+                        onClick={() => onChange(String(emp.id))}
+                    >
+                        <strong>{emp.name}</strong>
+                        <span>{[emp.department || 'No department', emp.email].filter(Boolean).join(' · ')}</span>
+                    </button>
+                ))}
+            </div>
+            <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                Click a person to select them{matches.length === 1 ? ', or press Enter' : ''}.
+            </div>
+        </>
+    );
+}
+
 // `suggest` pre-fills who it is going to, when the caller already has a good
 // idea (the Intune check does): { employeeId } for someone on the staff list,
 // or { name, email } to offer adding them. Nothing is chosen for the person;
@@ -140,14 +223,8 @@ export function AssignModal({ assetId, mode = 'assign', assignmentId, suggest, o
         setQuantity(isReassign ? Math.max(1, maxQuantity) : 1);
     }, [isReassign, maxQuantity]);
 
-    const filteredEmployees = useMemo(() => {
-        // Leavers stay on record but cannot be given anything.
-        const active = employees.filter((emp) => emp.status !== 'inactive');
-        const term = employeeFilter.trim().toLowerCase();
-        if (!term) return active;
-        return active.filter((emp) =>
-            [emp.name, emp.email, emp.department].some((v) => (v || '').toLowerCase().includes(term)));
-    }, [employees, employeeFilter]);
+    // Leavers stay on record but cannot be given anything.
+    const assignable = useMemo(() => employees.filter((emp) => emp.status !== 'inactive'), [employees]);
 
     async function createEmployee(e) {
         e.preventDefault();
@@ -166,7 +243,9 @@ export function AssignModal({ assetId, mode = 'assign', assignmentId, suggest, o
     async function submit() {
         setError('');
         if (isReassign && !fromRow) return setError('Choose who it is being reassigned from.');
-        if (holderType === 'employee' && !employeeId) return setError('Choose who it is going to.');
+        if (holderType === 'employee' && !assignable.some((emp) => String(emp.id) === String(employeeId))) {
+            return setError('Choose who it is going to: click their name in the list.');
+        }
         if (holderType === 'location' && !location.trim()) return setError('Enter the room or location.');
         if (quantity < 1 || quantity > maxQuantity) return setError(`Quantity must be between 1 and ${maxQuantity}.`);
 
@@ -268,26 +347,13 @@ export function AssignModal({ assetId, mode = 'assign', assignmentId, suggest, o
 
                     {holderType === 'employee' ? (
                         <div className="form-group">
-                            <input
-                                type="text"
-                                className="form-control mb-1"
-                                placeholder="Search by name, email or department…"
-                                value={employeeFilter}
-                                onChange={(e) => setEmployeeFilter(e.target.value)}
-                            />
-                            <select
-                                className="form-control"
+                            <PersonPicker
+                                people={assignable}
                                 value={employeeId}
-                                onChange={(e) => setEmployeeId(e.target.value)}
-                                size={Math.min(6, Math.max(3, filteredEmployees.length))}
-                            >
-                                {filteredEmployees.length === 0 && <option disabled>No matching employees</option>}
-                                {filteredEmployees.map((emp) => (
-                                    <option key={emp.id} value={emp.id}>
-                                        {emp.name} — {emp.department || 'No department'} ({emp.email})
-                                    </option>
-                                ))}
-                            </select>
+                                onChange={(id) => { setEmployeeId(id); setError(''); }}
+                                filter={employeeFilter}
+                                onFilterChange={setEmployeeFilter}
+                            />
                             <button
                                 type="button"
                                 className="btn btn-sm btn-secondary mt-1"
