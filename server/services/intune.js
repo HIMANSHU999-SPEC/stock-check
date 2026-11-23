@@ -3,6 +3,7 @@ const { entra } = require('../config');
 const { graphAll, GraphError, explainGraphError } = require('./graph');
 const { holderLabel } = require('./assignments');
 const { detectBrand } = require('./classifier');
+const { normaliseSerial } = require('../utils/serials');
 
 // Double-checks the register against Microsoft Intune: every device Intune
 // manages, and the person Intune says uses it, compared with what is recorded
@@ -51,23 +52,6 @@ function expectedInIntune(categoryName) {
     if (!name) return false;
     if (CONFIGURED_CATEGORIES.length) return CONFIGURED_CATEGORIES.includes(name.toLowerCase());
     return DEVICE_CATEGORY.test(name) && !NOT_A_DEVICE.test(name);
-}
-
-// Serial numbers as typed, scanned and reported never quite agree on case,
-// spaces or dashes. Values a manufacturer left as a placeholder are not
-// serial numbers at all and must never pair two devices up.
-const PLACEHOLDER_SERIALS = new Set([
-    'NA', 'NONE', 'NULL', 'UNKNOWN', 'DEFAULTSTRING', 'TOBEFILLEDBYOEM', 'SYSTEMSERIALNUMBER',
-    'NOTAPPLICABLE', 'NOTSPECIFIED', 'NOTAVAILABLE', 'INVALID', 'SERIALNUMBER', 'TBC', 'TBA'
-]);
-
-function normaliseSerial(value) {
-    const serial = String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-    if (serial.length < 4) return '';
-    if (/^(.)\1+$/.test(serial)) return ''; // 0000000, XXXXXXX
-    if (/^0?123456789?0?$/.test(serial)) return '';
-    if (PLACEHOLDER_SERIALS.has(serial)) return '';
-    return serial;
 }
 
 function lower(value) {
