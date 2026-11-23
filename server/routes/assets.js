@@ -10,6 +10,7 @@ const { getSettings } = require('../services/appSettings');
 const tidy = require('../services/tidy');
 const sales = require('../services/sales');
 const cells = require('../utils/importValues');
+const { normaliseSerial } = require('../utils/serials');
 const PDFDocument = require('pdfkit');
 const archiver = require('archiver');
 const { PassThrough } = require('stream');
@@ -639,27 +640,68 @@ router.get('/:id', (req, res) => {
     }
 });
 
+// What the asset form (or any API caller) sent, settled into what each
+// column stores: text trimmed and never a bare number, blanks as nothing,
+// the price as an amount. Throws a 400 for what cannot be stored.
+function assetFields(body = {}) {
+    const purchased = cells.date(body.purchase_date);
+    if (!purchased.ok) {
+        const error = new Error('The purchase date could not be read. Use a date such as 2026-01-15.');
+        error.status = 400;
+        throw error;
+    }
+    const categoryId = parseInt(body.category_id, 10);
+    return {
+        name: cells.text(body.name, 300),
+        category_id: Number.isInteger(categoryId) && categoryId > 0 ? categoryId : null,
+        model: cells.text(body.model, 300),
+        serial_number: cells.text(body.serial_number, 200),
+        brand: cells.text(body.brand, 100),
+        purchase_date: purchased.date,
+        purchase_price: cells.money(body.purchase_price),
+        supplier_name: cells.text(body.supplier_name, 200),
+        campus: cells.text(body.campus, 100) || '',
+        location: cells.text(body.location, 200),
+        notes: cells.text(body.notes, 5000)
+    };
+}
+
+// Another asset already carrying this serial number, if there is one. Case,
+// spaces and dashes are ignored, and placeholders such as "N/A" never count.
+function serialClash(serial, exceptId = 0) {
+    const wanted = normaliseSerial(serial);
+    if (!wanted) return null;
+    return db.prepare(`
+      SELECT id, asset_number, name, serial_number FROM assets
+      WHERE deleted_at IS NULL AND serial_number IS NOT NULL AND TRIM(serial_number) <> '' AND id <> ?
+    `).all(exceptId).find((row) => normaliseSerial(row.serial_number) === wanted) || null;
+}
+
+// Two assets with one serial number cannot be told apart by a scan or by the
+// Intune check, so a clash is refused unless the caller says it is intended.
+function refuseSerialClash(res, clash, serial) {
+    return res.status(409).json({
+        error: `${clash.asset_number} (${clash.name}) already has the serial number ${serial}.`,
+        code: 'duplicate_serial',
+        duplicate: { id: clash.id, asset_number: clash.asset_number, name: clash.name }
+    });
+}
+
 // Create new asset
 router.post('/', async (req, res) => {
     try {
-        const assetNumber = generateAssetNumber();
+        const { quantity = 1, warranty_period_months, status = 'available' } = req.body || {};
         const {
-            name,
-            category_id,
-        model,
-        serial_number,
-        brand,
-        quantity = 1,
-        purchase_date,
-        purchase_price,
-        supplier_name,
-        warranty_period_months,
-        intune_price,
-        status = 'available',
-        campus = '',
-        location,
-        notes
-    } = req.body;
+            name, category_id, model, serial_number, brand, purchase_date, purchase_price,
+            supplier_name, campus, location, notes
+        } = assetFields(req.body);
+        const intune_price = cells.money(req.body?.intune_price);
+        if (!name) return res.status(400).json({ error: 'Give the asset a name.' });
+        if (!req.body?.allow_duplicate_serial) {
+            const clash = serialClash(serial_number);
+            if (clash) return refuseSerialClash(res, clash, serial_number);
+        }
+        const assetNumber = generateAssetNumber();
 
         const safeQuantity = Math.max(1, parseInt(quantity, 10) || 1);
         // Whatever was left blank is worked out from the name: the category,
@@ -691,7 +733,7 @@ router.post('/', async (req, res) => {
         sharepoint.enqueue(newAsset.id);
         res.status(201).json(newAsset);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(error.status || 500).json({ error: error.message });
     }
 });
 
@@ -828,27 +870,24 @@ router.post('/import', async (req, res) => {
 // Update asset
 router.put('/:id', (req, res) => {
     try {
+        const { quantity = 1, warranty_period_months, status } = req.body || {};
         const {
-            name,
-            category_id,
-            model,
-            serial_number,
-            brand,
-            quantity = 1,
-            purchase_date,
-            purchase_price,
-            supplier_name,
-            warranty_period_months,
-            intune_price,
-            status,
-            campus = '',
-            location,
-            notes
-        } = req.body;
+            name, category_id, model, serial_number, brand, purchase_date, purchase_price,
+            supplier_name, campus, location, notes
+        } = assetFields(req.body);
 
         const current = db.prepare('SELECT * FROM assets WHERE id = ? AND deleted_at IS NULL').get(req.params.id);
         if (!current) {
             return res.status(404).json({ error: 'Asset not found' });
+        }
+        if (!name) return res.status(400).json({ error: 'Give the asset a name.' });
+        // The form has no field for this value, so leaving it out keeps it.
+        const intune_price = req.body.intune_price === undefined ? current.intune_price : cells.money(req.body.intune_price);
+        // Only a changed serial number is checked, so an asset that already
+        // shares one can still have its other details edited.
+        if (!req.body.allow_duplicate_serial && normaliseSerial(serial_number) !== normaliseSerial(current.serial_number)) {
+            const clash = serialClash(serial_number, current.id);
+            if (clash) return refuseSerialClash(res, clash, serial_number);
         }
 
         const safeQuantity = Math.max(1, parseInt(quantity, 10) || 1);
@@ -880,7 +919,7 @@ router.put('/:id', (req, res) => {
           status = ?, campus = ?, location = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `).run(
-                name, category_id, model, serial_number, brand || null, safeQuantity,
+                name, category_id, model, serial_number, brand, safeQuantity,
                 purchase_date, purchase_price, supplier_name, Math.max(0, parseInt(warranty_period_months, 10) || 0), intune_price,
                 // available / assigned are worked out from the assignments below
                 outOfService ? requestedStatus : current.status, campus, location, notes, current.id
@@ -905,6 +944,14 @@ router.put('/:id', (req, res) => {
           VALUES (?, 'updated', 'Asset information updated', ?)
         `).run(current.id, req.user?.email || null);
             }
+            // A changed serial number is what identifies the device, so the
+            // trail says what it was and what it became.
+            if ((current.serial_number || '') !== (serial_number || '')) {
+                db.prepare(`
+          INSERT INTO asset_history (asset_id, action, notes, performed_by)
+          VALUES (?, 'updated', ?, ?)
+        `).run(current.id, `Serial number changed from ${current.serial_number || 'none'} to ${serial_number || 'none'}`, req.user?.email || null);
+            }
             if ((after.campus || '') !== (current.campus || '')) {
                 db.prepare(`
           INSERT INTO asset_history (asset_id, action, notes, performed_by)
@@ -925,7 +972,7 @@ router.put('/:id', (req, res) => {
         const updatedAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.id);
         res.json(updatedAsset);
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        res.status(error.status || 500).json({ error: error.message });
     }
 });
 

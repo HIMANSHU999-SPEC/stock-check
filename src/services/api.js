@@ -79,8 +79,13 @@ async function apiCall(endpoint, options = {}) {
     });
 
     if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'API request failed');
+        const error = await response.json().catch(() => ({}));
+        const failure = new Error(error.error || 'API request failed');
+        // Lets a screen react to a particular refusal, not just show it.
+        failure.status = response.status;
+        failure.code = error.code;
+        failure.details = error;
+        throw failure;
     }
 
     return response.json();

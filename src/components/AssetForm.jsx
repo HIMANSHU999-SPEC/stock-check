@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { assetsAPI, reportsAPI, documentsAPI, tidyAPI } from '../services/api';
 import { CAMPUSES } from '../constants';
 
 export default function AssetForm() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { id } = useParams();
     const isEdit = Boolean(id);
     // A new asset can arrive part-filled, e.g. from a device the Intune check
@@ -93,6 +94,7 @@ export default function AssetForm() {
     async function loadAsset() {
         try {
             const data = await assetsAPI.getById(id);
+            setHadCategory(Boolean(data.category_id));
             setFormData({
                 name: data.name || '',
                 category_id: data.category_id || '',
@@ -164,24 +166,49 @@ export default function AssetForm() {
         };
     }, [formData.name, formData.model, isEdit]);
 
+    // Whether the asset had a category when the form opened. One that never
+    // had one can still be edited (its serial number corrected, say) without
+    // being made to choose; one that had cannot be left without.
+    const [hadCategory, setHadCategory] = useState(false);
+
+    // Back to wherever the form was opened from: the asset's page, the asset
+    // list with its filters, the Intune check. Opened directly, there is
+    // nowhere to go back to, so show the asset.
+    function leave() {
+        if (location.key !== 'default') navigate(-1);
+        else navigate(isEdit ? `/assets/${id}` : '/assets');
+    }
+
+    // Save, asking first if the serial number already belongs to another asset.
+    async function save(fields) {
+        try {
+            return isEdit ? await assetsAPI.update(id, fields) : await assetsAPI.create(fields);
+        } catch (error) {
+            if (error.code !== 'duplicate_serial') throw error;
+            const goAhead = window.confirm(
+                `${error.message}\n\nTwo assets with the same serial number cannot be told apart by a scan or by the Intune check. `
+                + 'If the number is a typing mistake, press Cancel and correct it.\n\nSave it anyway?'
+            );
+            if (!goAhead) return null;
+            const fieldsAgain = { ...fields, allow_duplicate_serial: true };
+            return isEdit ? assetsAPI.update(id, fieldsAgain) : assetsAPI.create(fieldsAgain);
+        }
+    }
+
     async function handleSubmit(e) {
         e.preventDefault();
         // A category that does not exist yet is created from the suggestion
         // on the server; otherwise one has to be chosen.
-        if (!formData.category_id && !suggestion?.category) {
+        if (!formData.category_id && !suggestion?.category && (!isEdit || hadCategory)) {
             alert('Choose a category for this asset.');
             return;
         }
         setLoading(true);
 
         try {
-            let newAssetId = id;
-            if (isEdit) {
-                await assetsAPI.update(id, formData);
-            } else {
-                const created = await assetsAPI.create(formData);
-                newAssetId = created.id;
-            }
+            const saved = await save(formData);
+            if (!saved) return; // duplicate serial, and they chose to correct it
+            const newAssetId = isEdit ? id : saved.id;
             if (invoiceFile && newAssetId) {
                 try {
                     await documentsAPI.upload(newAssetId, invoiceFile);
@@ -197,7 +224,7 @@ export default function AssetForm() {
                     .map((key) => `&${key}=${encodeURIComponent(query.get(key))}`).join('');
                 navigate(`/assets/${newAssetId}?assign=1${who}`);
             } else {
-                navigate('/assets');
+                leave();
             }
         } catch (error) {
             alert('Error saving asset: ' + error.message);
@@ -504,7 +531,7 @@ export default function AssetForm() {
                     <div className="card-footer">
                         <button
                             type="button"
-                            onClick={() => navigate('/assets')}
+                            onClick={leave}
                             className="btn btn-secondary"
                             disabled={loading}
                         >
