@@ -3,24 +3,20 @@ const router = express.Router();
 const db = require('../database');
 const { generateBookNumber } = require('../utils/bookNumber');
 const { logActivity } = require('../utils/activity');
+const { toCsv } = require('../utils/csv');
+
+// A loan is overdue from the day after its due date. Due dates are stored as
+// a plain day ("2026-11-23"), so they are compared as days: comparing with
+// the time of day made a book overdue all through the day it was due.
+const OVERDUE_SQL = "due_at IS NOT NULL AND date(due_at) < date('now','localtime')";
+function isOverdue(loan) {
+    if (loan.status !== 'issued' || !loan.due_at) return false;
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    return String(loan.due_at).slice(0, 10) < today;
+}
 const cells = require('../utils/importValues');
 
-function toCsv(rows) {
-    if (!rows || rows.length === 0) return '';
-    const headers = Object.keys(rows[0]);
-    const escape = (value) => {
-        const str = value === null || value === undefined ? '' : String(value);
-        if (str.includes('"') || str.includes(',') || str.includes('\n')) {
-            return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
-    };
-    const lines = [
-        headers.join(','),
-        ...rows.map((row) => headers.map((h) => escape(row[h])).join(','))
-    ];
-    return lines.join('\n');
-}
 
 function availableOf(book) {
     return Math.max(0, (book.quantity || 0) - (book.issued_quantity || 0));
@@ -125,7 +121,8 @@ router.get('/', (req, res) => {
         const params = [];
 
         if (category) {
-            query += " AND LOWER(TRIM(COALESCE(category, ''))) = LOWER(TRIM(?))";
+            // The box searches as it is typed, so part of the name is enough.
+            query += " AND LOWER(COALESCE(category, '')) LIKE '%' || LOWER(TRIM(?)) || '%'";
             params.push(category);
         }
 
@@ -235,16 +232,14 @@ router.get('/loans', (req, res) => {
         }
 
         if (overdue === '1' || overdue === 'true') {
-            query += " AND l.status = 'issued' AND l.due_at IS NOT NULL AND l.due_at < datetime('now','localtime')";
+            query += ` AND l.status = 'issued' AND ${OVERDUE_SQL.replace(/due_at/g, 'l.due_at')}`;
         }
 
         query += ' ORDER BY l.issued_at DESC';
 
         const loans = db.prepare(query).all(...params).map((loan) => ({
             ...loan,
-            is_overdue: loan.status === 'issued' && loan.due_at
-                ? new Date(loan.due_at).getTime() < Date.now()
-                : false
+            is_overdue: isOverdue(loan)
         }));
 
         res.json(loans);
@@ -401,7 +396,7 @@ router.get('/summary', (req, res) => {
         const activeLoans = db.prepare("SELECT COUNT(*) as count FROM book_loans WHERE status = 'issued'").get();
         const overdue = db.prepare(`
       SELECT COUNT(*) as count FROM book_loans
-      WHERE status = 'issued' AND due_at IS NOT NULL AND due_at < datetime('now','localtime')
+      WHERE status = 'issued' AND ${OVERDUE_SQL}
     `).get();
         const borrowers = db.prepare('SELECT COUNT(*) as count FROM borrowers').get();
 
@@ -582,9 +577,7 @@ router.get('/:id', (req, res) => {
       ORDER BY l.issued_at DESC
     `).all(req.params.id).map((loan) => ({
             ...loan,
-            is_overdue: loan.status === 'issued' && loan.due_at
-                ? new Date(loan.due_at).getTime() < Date.now()
-                : false
+            is_overdue: isOverdue(loan)
         }));
 
         res.json({ ...decorate(book), loans });
@@ -697,6 +690,9 @@ router.put('/:id', (req, res) => {
             return res.status(404).json({ error: 'Book not found' });
         }
 
+        if (!title || !String(title).trim()) {
+            return res.status(400).json({ error: 'Title is required' });
+        }
         const safeQuantity = Math.max(1, parseInt(quantity, 10) || 1);
         if (safeQuantity < current.issued_quantity) {
             return res.status(400).json({ error: `Quantity cannot be lower than currently issued copies (${current.issued_quantity})` });
@@ -709,7 +705,7 @@ router.put('/:id', (req, res) => {
         quantity = ?, shelf_location = ?, campus = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
-            title, author || null, isbn || null, category || null, publisher || null, year,
+            String(title).trim(), author || null, isbn || null, category || null, publisher || null, year,
             safeQuantity, shelf_location || null, campus || '', notes || null, req.params.id
         );
 

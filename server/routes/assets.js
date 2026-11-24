@@ -10,6 +10,7 @@ const { getSettings } = require('../services/appSettings');
 const tidy = require('../services/tidy');
 const sales = require('../services/sales');
 const cells = require('../utils/importValues');
+const { toCsv } = require('../utils/csv');
 const { normaliseSerial } = require('../utils/serials');
 const PDFDocument = require('pdfkit');
 const archiver = require('archiver');
@@ -43,6 +44,9 @@ const upload = multer({
         }
     }),
     limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+    // Browsers send file names as UTF-8; the default reading turned
+    // "Quote £450.pdf" into "Quote Â£450.pdf".
+    defParamCharset: 'utf8',
     fileFilter: (req, file, cb) => {
         if (ALLOWED_DOC_TYPES[file.mimetype]) return cb(null, true);
         cb(new Error('Only PDF, JPG, PNG or WEBP files are allowed'));
@@ -65,22 +69,6 @@ function verifyRestoreAccess(password, user) {
     return Boolean(user && user.role === 'admin');
 }
 
-function toCsv(rows) {
-    if (!rows || rows.length === 0) return '';
-    const headers = Object.keys(rows[0]);
-    const escape = (value) => {
-        const str = value === null || value === undefined ? '' : String(value);
-        if (str.includes('"') || str.includes(',') || str.includes('\n')) {
-            return `"${str.replace(/"/g, '""')}"`;
-        }
-        return str;
-    };
-    const lines = [
-        headers.join(','),
-        ...rows.map((row) => headers.map((h) => escape(row[h])).join(','))
-    ];
-    return lines.join('\n');
-}
 
 // Everyone (and every room) currently holding an asset, as one display string.
 const HOLDERS_SQL = `(
@@ -256,7 +244,7 @@ router.get('/export/by-supplier', (req, res) => {
 // Export assets filtered by model (CSV)
 router.get('/export/by-model', (req, res) => {
     try {
-        const { model } = req.query;
+        const { model, category } = req.query;
         let query = `
       SELECT a.asset_number, a.name, a.brand, a.model, a.serial_number, a.quantity, a.assigned_quantity,
              a.status, a.location, a.campus, a.purchase_date, a.purchase_price, a.supplier_name, a.warranty_period_months,
@@ -274,6 +262,13 @@ router.get('/export/by-model', (req, res) => {
                 query += " AND LOWER(TRIM(COALESCE(a.model, ''))) = LOWER(TRIM(?))";
                 params.push(model);
             }
+        }
+        // The model report has one row per model and category.
+        if (category === '__none__') {
+            query += ' AND a.category_id IS NULL';
+        } else if (category) {
+            query += ' AND a.category_id = ?';
+            params.push(category);
         }
         query += ' ORDER BY a.model, a.name';
         const rows = db.prepare(query).all(...params);
@@ -521,6 +516,16 @@ router.get('/bin', (req, res) => {
     }
 });
 
+// What it takes to restore from the bin, so the page can ask for a password
+// only when one is actually set.
+router.get('/bin-rules', (req, res) => {
+    const passwordRequired = Boolean(RESTORE_PASSWORD_HASH);
+    res.json({
+        password_required: passwordRequired,
+        can_restore: passwordRequired || req.user?.role === 'admin'
+    });
+});
+
 router.get('/bin/:id', (req, res) => {
     try {
         const item = db.prepare(`
@@ -596,6 +601,14 @@ router.get('/lookup', (req, res) => {
       LIMIT 1
     `).get(code, code, code);
         if (!asset) {
+            // Typed without its dashes or spaces, a serial number is still
+            // the same serial number.
+            const wanted = normaliseSerial(code);
+            const loose = wanted && db.prepare(`
+              SELECT id, asset_number, serial_number FROM assets
+              WHERE deleted_at IS NULL AND serial_number IS NOT NULL AND TRIM(serial_number) <> ''
+            `).all().filter((row) => normaliseSerial(row.serial_number) === wanted);
+            if (loose && loose.length === 1) return res.json({ id: loose[0].id, asset_number: loose[0].asset_number });
             return res.status(404).json({ error: `No asset found for "${code}"`, code });
         }
         res.json(asset);
@@ -1290,9 +1303,13 @@ router.post('/:id/email', async (req, res) => {
 // Restore asset from recycle bin (password protected)
 router.post('/:id/restore', (req, res) => {
     try {
-        const { password } = req.body;
+        const { password } = req.body || {};
         if (!verifyRestoreAccess(password, req.user)) {
-            return res.status(403).json({ error: 'Invalid recycle bin password or insufficient permissions' });
+            return res.status(403).json({
+                error: RESTORE_PASSWORD_HASH
+                    ? (password ? 'That is not the recycle bin password.' : 'Enter the recycle bin password to restore.')
+                    : 'Only an administrator can restore from the recycle bin.'
+            });
         }
 
         const binItem = db.prepare(`
@@ -1421,6 +1438,7 @@ const invoiceUpload = multer({
             cb(null, `invoice-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.pdf`)
     }),
     limits: { fileSize: 10 * 1024 * 1024 },
+    defParamCharset: 'utf8',
     fileFilter: (req, file, cb) => {
         if (file.mimetype === 'application/pdf') return cb(null, true);
         cb(new Error('Invoices must be PDF files'));
@@ -1437,7 +1455,9 @@ function parseInvoiceItems(text) {
         .filter(Boolean);
 
     const skip = /sub-?total|grand total|^total|total\b.*£|vat|tax|shipping|postage|delivery|promotion|discount|gift|invoice|receipt|order (number|#|id|date|total)|payment|billing|dispatch|address|amazon\.(co|com|de|eu)|www\.amazon|amazon (eu|services|payments)|sold by|supplied by|thank you|balance|account|page \d|qty unit|unit price|item price|description price|£?\d+\.\d{2} £?\d+\.\d{2} £?\d+\.\d{2} £?\d+\.\d{2}/i;
-    const priceToken = /(?:£\s?)?(\d{1,3}(?:,\d{3})*\.\d{2})(?:\s*(?:GBP|EUR|USD))?/g;
+    // A price: 749.00, 1,299.00 or 1299.00. It must not start part-way through
+    // a longer number, which used to turn £1299.00 into £299.00.
+    const priceToken = /(?:£\s?)?(?<![\d,.])((?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2})(?:\s*(?:GBP|EUR|USD))?/g;
 
     const items = [];
     for (const line of lines) {
@@ -1633,7 +1653,10 @@ router.get('/:id/documents/:docId/download', (req, res) => {
         }
         // Images and PDFs open inline in the browser; everything else downloads.
         res.setHeader('Content-Type', doc.mimetype || 'application/octet-stream');
-        res.setHeader('Content-Disposition', `inline; filename="${doc.original_name.replace(/"/g, '')}"`);
+        // A header can only carry plain characters, so the real name goes in
+        // the encoded form browsers read, with a plain one as a fallback.
+        const plainName = doc.original_name.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '');
+        res.setHeader('Content-Disposition', `inline; filename="${plainName}"; filename*=UTF-8''${encodeURIComponent(doc.original_name)}`);
         fs.createReadStream(filePath).pipe(res);
     } catch (error) {
         res.status(500).json({ error: error.message });

@@ -173,7 +173,7 @@ export default function BookList() {
                 </div>
             </div>
 
-            <div className="card mb-3">
+            <div className="write-only card mb-3">
                 <div className="card-header">
                     <h3 className="card-title">Import Books (Excel)</h3>
                 </div>
@@ -186,7 +186,11 @@ export default function BookList() {
                         <input
                             type="file"
                             accept=".xlsx,.xls"
-                            onChange={(e) => handleImportFile(e.target.files?.[0])}
+                            onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = '';
+                                handleImportFile(file);
+                            }}
                             disabled={importing}
                         />
                         {importing && <span className="text-muted">Importing...</span>}

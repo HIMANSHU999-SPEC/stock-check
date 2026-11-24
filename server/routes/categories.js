@@ -30,10 +30,22 @@ router.get('/:id', (req, res) => {
     }
 });
 
+// A category name as it will be stored, and any other category that
+// already has it (ignoring case), so "laptop" cannot sit beside "Laptop".
+function categoryName(body = {}) {
+    return typeof body.name === 'string' ? body.name.trim().slice(0, 100) : '';
+}
+function nameTaken(name, exceptId = 0) {
+    return Boolean(db.prepare('SELECT 1 FROM categories WHERE LOWER(name) = LOWER(?) AND id != ?').get(name, exceptId));
+}
+
 // Create category
 router.post('/', (req, res) => {
     try {
-        const { name, description } = req.body;
+        const { description } = req.body || {};
+        const name = categoryName(req.body);
+        if (!name) return res.status(400).json({ error: 'Give the category a name.' });
+        if (nameTaken(name)) return res.status(400).json({ error: 'Category name already exists' });
 
         const result = db.prepare(`
       INSERT INTO categories (name, description)
@@ -54,7 +66,10 @@ router.post('/', (req, res) => {
 // Update category
 router.put('/:id', (req, res) => {
     try {
-        const { name, description } = req.body;
+        const { description } = req.body || {};
+        const name = categoryName(req.body);
+        if (!name) return res.status(400).json({ error: 'Give the category a name.' });
+        if (nameTaken(name, req.params.id)) return res.status(400).json({ error: 'Category name already exists' });
 
         db.prepare(`
       UPDATE categories SET name = ?, description = ?
@@ -79,7 +94,10 @@ router.delete('/:id', (req, res) => {
         const assetCount = db.prepare('SELECT COUNT(*) as count FROM assets WHERE category_id = ?').get(req.params.id);
 
         if (assetCount.count > 0) {
-            return res.status(400).json({ error: 'Cannot delete category with assigned assets' });
+            const live = db.prepare('SELECT COUNT(*) as count FROM assets WHERE category_id = ? AND deleted_at IS NULL').get(req.params.id).count;
+            const binned = assetCount.count - live;
+            const what = [live ? `${live} asset${live === 1 ? '' : 's'}` : '', binned ? `${binned} in the recycle bin` : ''].filter(Boolean).join(' and ');
+            return res.status(400).json({ error: `This category still has ${what}. Move ${assetCount.count === 1 ? 'it' : 'them'} to another category first.` });
         }
 
         // Auto-categorising rules that point at it go with it.

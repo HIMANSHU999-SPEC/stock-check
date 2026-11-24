@@ -115,9 +115,11 @@ router.post('/login', (req, res) => {
     return res.status(400).json({ error: 'Email and password are required' });
   }
 
+  // People type their address in whatever case they like; accounts are
+  // matched the same way everywhere else.
   const user = db
-    .prepare('SELECT * FROM users WHERE email = ?')
-    .get(email);
+    .prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)')
+    .get(String(email).trim());
 
   if (!user || user.password_hash !== hashPassword(password)) {
     return res.status(401).json({ error: 'Invalid credentials' });
@@ -254,7 +256,7 @@ router.post('/change-password', (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(targetEmail);
+  const user = db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get(String(targetEmail).trim());
   if (!user) {
     return res.status(404).json({ error: 'User not found' });
   }

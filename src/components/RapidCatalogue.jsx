@@ -29,10 +29,11 @@ export default function RapidCatalogue() {
         setTimeout(() => inputRef.current?.focus(), 0);
     }
 
-    function recordResult(res) {
+    function recordResult(res, added = 1) {
         setSession((prev) => [{
             key: Date.now(),
             action: res.action,
+            added,
             title: res.book.title,
             book_number: res.book.book_number,
             quantity: res.book.quantity,
@@ -46,10 +47,15 @@ export default function RapidCatalogue() {
         setBusy(true);
         setError('');
         try {
-            const res = await booksAPI.rapidAdd(value, { category, campus, quantity: copies, ...extras });
-            recordResult(res);
-            setPending(null);
-            setPendingTitle('');
+            const added = copies || 1;
+            const res = await booksAPI.rapidAdd(value, { category, campus, quantity: added, ...extras });
+            recordResult(res, added);
+            // Only the book that was waiting for a title is finished with;
+            // scanning another must not make that prompt vanish.
+            if (pending && pending.isbn === value) {
+                setPending(null);
+                setPendingTitle('');
+            }
         } catch (err) {
             if (err.message.includes('not found in the online catalogues')) {
                 // Offer inline manual entry instead of a dead end.
@@ -92,7 +98,7 @@ export default function RapidCatalogue() {
     }
 
     const created = session.filter((s) => s.action === 'created').length;
-    const extraCopies = session.filter((s) => s.action === 'incremented').length;
+    const extraCopies = session.filter((s) => s.action === 'incremented').reduce((sum, s) => sum + (s.added || 1), 0);
 
     return (
         <div>
@@ -112,7 +118,8 @@ export default function RapidCatalogue() {
                                 max="999"
                                 className="form-control"
                                 value={copies}
-                                onChange={(e) => setCopies(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                                onChange={(e) => setCopies(e.target.value === '' ? '' : Math.min(999, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+                                onBlur={() => { if (copies === '') setCopies(1); }}
                             />
                         </div>
                         <div className="form-group">
@@ -239,7 +246,7 @@ export default function RapidCatalogue() {
                                     <tr key={s.key}>
                                         <td>
                                             <span className={`badge badge-${s.action === 'created' ? 'success' : 'info'}`}>
-                                                {s.action === 'created' ? 'NEW' : '+1 copy'}
+                                                {s.action === 'created' ? 'NEW' : `+${s.added || 1} cop${(s.added || 1) === 1 ? 'y' : 'ies'}`}
                                             </span>
                                         </td>
                                         <td>

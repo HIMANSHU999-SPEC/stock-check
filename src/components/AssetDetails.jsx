@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { assetsAPI, documentsAPI, settingsAPI } from '../services/api';
 import { handleEmailResult } from '../utils/emailTemplates';
-import { assetScanUrl, statusColor, outcomeLabel } from '../utils/scan';
+import { assetScanUrl, statusColor, outcomeLabel, availableQuantity as stockAvailable } from '../utils/scan';
 import { useAssetActions } from './AssetActions';
 import QRCode from 'react-qr-code';
+import { formatDate, formatDateTime } from '../utils/dates';
+import { actionLabel } from '../utils/labels';
 
 export default function AssetDetails() {
     const { id } = useParams();
@@ -107,7 +109,8 @@ export default function AssetDetails() {
         }
     }
 
-    const availableQuantity = Math.max(0, (asset?.quantity || 1) - (asset?.assigned_quantity || 0));
+    // In service and not already out: a lost, sold or in-repair item has none.
+    const availableQuantity = stockAvailable(asset);
     const holders = asset?.assignments || [];
     const isBulk = (asset?.quantity || 1) > 1;
     const inService = ['available', 'assigned'].includes(asset?.status);
@@ -291,7 +294,7 @@ export default function AssetDetails() {
                             <div className="form-group">
                                 <label className="form-label">Added to System</label>
                                 <div>
-                                    {asset.created_at ? new Date(asset.created_at).toLocaleDateString() : 'N/A'}
+                                    {formatDate(asset.created_at, 'N/A')}
                                 </div>
                             </div>
                         </div>
@@ -335,7 +338,7 @@ export default function AssetDetails() {
                                             <tr key={doc.id}>
                                                 <td>{doc.original_name}</td>
                                                 <td>{doc.size ? `${Math.max(1, Math.round(doc.size / 1024))} KB` : '—'}</td>
-                                                <td>{doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : '—'}</td>
+                                                <td>{formatDate(doc.uploaded_at)}</td>
                                                 <td>
                                                     <div className="flex gap-1">
                                                         <a
@@ -424,9 +427,9 @@ export default function AssetDetails() {
                                                 ? [row.employee_email, row.department].filter(Boolean).join(' · ')
                                                 : 'Room / location'}
                                             {' · since '}
-                                            {new Date(row.assigned_at.replace(' ', 'T') + 'Z').toLocaleDateString()}
+                                            {formatDate(row.assigned_at)}
                                             {row.confirmed_at
-                                                ? ` · ✓ confirmed ${new Date(row.confirmed_at.replace(' ', 'T') + 'Z').toLocaleDateString()} by ${
+                                                ? ` · ✓ confirmed ${formatDate(row.confirmed_at)} by ${
                                                     String(row.confirmed_by || '').toLowerCase() === String(row.employee_email || '').toLowerCase()
                                                         ? 'the holder' : `IT (${row.confirmed_by})`}`
                                                 : isBulk || !row.employee_id
@@ -531,8 +534,8 @@ export default function AssetDetails() {
                                             )}
                                         </td>
                                         {isBulk && <td>{row.quantity}</td>}
-                                        <td style={{ whiteSpace: 'nowrap' }}>{row.assigned_at ? new Date(row.assigned_at).toLocaleDateString() : '—'}</td>
-                                        <td style={{ whiteSpace: 'nowrap' }}>{new Date(row.returned_at).toLocaleDateString()}</td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{formatDate(row.assigned_at)}</td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{formatDate(row.returned_at)}</td>
                                         <td>{outcomeLabel(row.return_condition)}</td>
                                         <td>{row.returned_by_email || '—'}</td>
                                     </tr>
@@ -562,9 +565,9 @@ export default function AssetDetails() {
                             <tbody>
                                 {asset.history.map((entry) => (
                                     <tr key={entry.id}>
-                                        <td>{new Date(entry.timestamp).toLocaleString()}</td>
+                                        <td style={{ whiteSpace: 'nowrap' }}>{formatDateTime(entry.timestamp)}</td>
                                         <td>
-                                            <span className="badge badge-primary">{entry.action}</span>
+                                            <span className="badge badge-primary">{actionLabel(entry.action)}</span>
                                         </td>
                                         <td>{entry.employee_name || '-'}</td>
                                         <td>{entry.notes || '-'}</td>

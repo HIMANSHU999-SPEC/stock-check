@@ -30,7 +30,9 @@ if (allowedOrigins.length > 0) {
         allowedHeaders: ['Content-Type', 'Authorization']
     }));
 }
-app.use(express.json());
+// An imported spreadsheet arrives as one request; the default limit of
+// 100 kB stopped at a few hundred rows.
+app.use(express.json({ limit: '5mb' }));
 
 // Auth & license routes
 app.use('/api/auth', authRouter);
@@ -168,6 +170,12 @@ require('./services/leaverAlerts').startWorker();
 
 // Push queued asset changes to SharePoint (no-op until it is switched on).
 sharepoint.startWorker();
+
+// An API address that matches nothing gets a proper "not found" in JSON,
+// rather than falling through to the page below and returning HTML.
+app.use('/api', (req, res) => {
+    res.status(404).json({ error: 'Not found' });
+});
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {

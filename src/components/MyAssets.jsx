@@ -59,15 +59,18 @@ export default function MyAssets() {
         const waiting = data.items.filter((item) => !item.confirmed_at && !item.open_reports && !item.bulk);
         setBusyId('all');
         setNotice('');
+        let problem = '';
         try {
             for (const item of waiting) {
                 await myAPI.confirm(item.assignment_id);
             }
             setNotice('Thank you — everything on your list is confirmed.');
         } catch (err) {
-            setError(err.message);
+            problem = err.message;
         } finally {
             await load();
+            // Shown after the list reloads, which would otherwise clear it.
+            if (problem) setError(`Not everything could be confirmed: ${problem} Check the list below and try again.`);
             setBusyId(null);
         }
     }

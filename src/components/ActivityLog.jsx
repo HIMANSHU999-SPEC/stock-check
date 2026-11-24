@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { activityAPI } from '../services/api';
+import { formatDateTime } from '../utils/dates';
+import { actionLabel } from '../utils/labels';
 
 export default function ActivityLog() {
-    const [data, setData] = useState({ items: [], total: 0, total_pages: 1, actions: [] });
+    const [data, setData] = useState({ items: [], total: 0, page: 1, total_pages: 1, actions: [] });
     const [loading, setLoading] = useState(true);
     const [action, setAction] = useState('');
     const [page, setPage] = useState(1);
@@ -40,7 +42,7 @@ export default function ActivityLog() {
                             >
                                 <option value="">All actions</option>
                                 {data.actions.map((a) => (
-                                    <option key={a} value={a}>{a}</option>
+                                    <option key={a} value={a}>{actionLabel(a)}</option>
                                 ))}
                             </select>
                         </div>
@@ -68,9 +70,9 @@ export default function ActivityLog() {
                                 ) : (
                                     data.items.map((row) => (
                                         <tr key={row.id}>
-                                            <td>{row.timestamp ? new Date(row.timestamp).toLocaleString() : '—'}</td>
+                                            <td>{formatDateTime(row.timestamp)}</td>
                                             <td>{row.user_email || 'system'}</td>
-                                            <td><span className="badge badge-primary">{row.action}</span></td>
+                                            <td><span className="badge badge-primary">{actionLabel(row.action)}</span></td>
                                             <td>{row.description || '—'}</td>
                                         </tr>
                                     ))

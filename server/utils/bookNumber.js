@@ -6,7 +6,7 @@ function generateBookNumber() {
     const prefix = `LIB-${year}-`;
 
     const lastBook = db.prepare(
-        'SELECT book_number FROM books WHERE book_number LIKE ? ORDER BY book_number DESC LIMIT 1'
+        'SELECT book_number FROM books WHERE book_number LIKE ? ORDER BY LENGTH(book_number) DESC, book_number DESC LIMIT 1'
     ).get(`${prefix}%`);
 
     let nextNumber = 1;

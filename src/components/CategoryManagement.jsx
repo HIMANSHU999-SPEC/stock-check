@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { categoriesAPI } from '../services/api';
+import { formatDate } from '../utils/dates';
 
 export default function CategoryManagement() {
     const [categories, setCategories] = useState([]);
@@ -109,7 +110,7 @@ export default function CategoryManagement() {
                                     <tr key={category.id}>
                                         <td><strong>{category.name}</strong></td>
                                         <td>{category.description || 'No description'}</td>
-                                        <td>{new Date(category.created_at).toLocaleDateString()}</td>
+                                        <td>{formatDate(category.created_at)}</td>
                                         <td>
                                             <div className="flex gap-1">
                                                 <button

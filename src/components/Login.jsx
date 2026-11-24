@@ -4,7 +4,7 @@ import { authAPI } from '../services/api';
 
 const STORED_EMAIL_KEY = 'saved_login_email';
 
-export default function Login({ onLogin, license, authLoading, user }) {
+export default function Login({ onLogin, license, authLoading, user, sessionEnded }) {
     const navigate = useNavigate();
     const location = useLocation();
     // Where the person was heading before being asked to sign in (for
@@ -74,6 +74,11 @@ export default function Login({ onLogin, license, authLoading, user }) {
                 </p>
             </div>
             <div className="card-body">
+                {sessionEnded && !error && (
+                    <div className="alert alert-info">
+                        You have been signed out because your session ended. Sign in again to carry on where you were.
+                    </div>
+                )}
                 {error && <div className="alert alert-danger">{error}</div>}
                 {message && <div className="alert alert-success">{message}</div>}
                 {license?.expired && (

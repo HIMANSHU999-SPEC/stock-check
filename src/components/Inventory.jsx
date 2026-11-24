@@ -9,7 +9,9 @@ const money = (value) => `£${Math.round(value || 0).toLocaleString()}`;
 function assetsLink({ campus, categoryId, status }) {
     const params = new URLSearchParams();
     if (campus !== undefined) params.set('campus', campus === '' ? '__unassigned__' : campus);
-    if (categoryId) params.set('category', categoryId);
+    // null is the "Uncategorised" row; undefined means no category filter.
+    if (categoryId === null) params.set('category', '__none__');
+    else if (categoryId) params.set('category', categoryId);
     if (status) params.set('status', status);
     return `/assets?${params}`;
 }

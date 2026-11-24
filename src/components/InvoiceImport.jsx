@@ -150,7 +150,8 @@ export default function InvoiceImport() {
                                             <td>
                                                 <input type="number" min="1" className="form-control" style={{ width: '70px' }}
                                                     value={it.quantity}
-                                                    onChange={(e) => updateRow(i, 'quantity', parseInt(e.target.value, 10) || 1)} />
+                                                    onChange={(e) => updateRow(i, 'quantity', e.target.value === '' ? '' : parseInt(e.target.value, 10) || 1)}
+                                                    onBlur={() => { if (it.quantity === '') updateRow(i, 'quantity', 1); }} />
                                             </td>
                                             <td>
                                                 <input type="number" min="0" step="0.01" className="form-control" style={{ width: '110px' }}

@@ -5,6 +5,7 @@ import { assetsAPI, reportsAPI } from '../services/api';
 import { statusColor } from '../utils/scan';
 import { useAssetActions } from './AssetActions';
 import { CAMPUSES } from '../constants';
+import { formatDate } from '../utils/dates';
 
 const EMPTY_FILTERS = { search: '', status: '', category: '', campus: '', model: '', brand: '' };
 
@@ -16,6 +17,14 @@ function filtersFromUrl(search) {
         if (params.get(key) !== null) preset[key] = params.get(key);
     }
     return preset;
+}
+
+function filtersToQuery(filters) {
+    const params = new URLSearchParams();
+    for (const key of Object.keys(EMPTY_FILTERS)) {
+        if (filters[key]) params.set(key, filters[key]);
+    }
+    return params.toString();
 }
 
 export default function AssetList() {
@@ -52,13 +61,24 @@ export default function AssetList() {
         loadBrands();
     }, []);
 
-    // Following another link to this page while it is open re-applies its filters.
+    // The filters live in the address as well as on screen, so reloading,
+    // coming back from editing an asset, or sharing the link shows the same
+    // list. `written` is the address this page last set itself, so that its
+    // own update is not read back as a new link.
+    const written = useRef(null);
     useEffect(() => {
-        const preset = filtersFromUrl(location.search);
-        setFilters((prev) => {
-            const next = { ...prev, ...preset };
-            return Object.keys(next).every((key) => next[key] === prev[key]) ? prev : next;
-        });
+        const query = filtersToQuery(filters);
+        if (query === filtersToQuery({ ...EMPTY_FILTERS, ...filtersFromUrl(location.search) })) return;
+        written.current = query;
+        navigate({ search: query ? `?${query}` : '' }, { replace: true });
+    }, [filters]);
+
+    // Following another link to this page while it is open applies that
+    // link's filters, and only those.
+    useEffect(() => {
+        const fromUrl = { ...EMPTY_FILTERS, ...filtersFromUrl(location.search) };
+        if (filtersToQuery(fromUrl) === written.current) return;
+        setFilters((prev) => (Object.keys(fromUrl).every((key) => fromUrl[key] === prev[key]) ? prev : fromUrl));
     }, [location.search]);
 
     async function loadModels() {
@@ -136,7 +156,7 @@ export default function AssetList() {
             'Purchase Date': a.purchase_date || '',
             'Purchase Price': a.purchase_price || '',
             'Warranty (months)': a.warranty_period_months || 0,
-            'Date Added': a.created_at ? new Date(a.created_at).toLocaleDateString() : ''
+            'Date Added': formatDate(a.created_at, '')
         }));
         const ws = XLSX.utils.json_to_sheet(rows);
         const wb = XLSX.utils.book_new();
@@ -375,17 +395,7 @@ export default function AssetList() {
                             <select
                                 className="form-control"
                                 value={filters.campus}
-                                onChange={(e) => {
-                                    const val = e.target.value;
-                                    setFilters({ ...filters, campus: val });
-                                    const search = new URLSearchParams(location.search);
-                                    if (val) {
-                                        search.set('campus', val);
-                                    } else {
-                                        search.delete('campus');
-                                    }
-                                    navigate({ search: search.toString() });
-                                }}
+                                onChange={(e) => setFilters({ ...filters, campus: e.target.value })}
                             >
                                 <option value="">All Campuses</option>
                                 <option value="__unassigned__">No campus yet{noCampusCount ? ` (${noCampusCount})` : ''}</option>
@@ -413,7 +423,13 @@ export default function AssetList() {
                         <input
                             type="file"
                             accept=".xlsx,.xls"
-                            onChange={(e) => handleImportFile(e.target.files?.[0])}
+                            onChange={(e) => {
+                                // Cleared straight away, so choosing the same
+                                // file again after correcting it is noticed.
+                                const file = e.target.files?.[0];
+                                e.target.value = '';
+                                handleImportFile(file);
+                            }}
                             disabled={importing}
                         />
                         <label className="flex items-center gap-1">
@@ -437,10 +453,7 @@ export default function AssetList() {
                     </span>
                     <button
                         className="btn btn-sm btn-secondary"
-                        onClick={() => {
-                            setFilters({ ...filters, campus: '__unassigned__' });
-                            navigate({ search: 'campus=__unassigned__' });
-                        }}
+                        onClick={() => setFilters({ ...EMPTY_FILTERS, campus: '__unassigned__' })}
                     >
                         Show assets with no campus
                     </button>
@@ -553,7 +566,7 @@ export default function AssetList() {
                                                 </div>
                                             </td>
                                             <td style={{ whiteSpace: 'nowrap' }}>
-                                                {asset.created_at ? new Date(asset.created_at).toLocaleDateString() : '—'}
+                                                {formatDate(asset.created_at)}
                                             </td>
                                             <td>
                                                 <div className="flex gap-1">
