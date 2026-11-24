@@ -39,8 +39,10 @@ module.exports = {
     appBaseUrl,
     sso: {
         enabled: entra.configured && Boolean(appBaseUrl) && trim(process.env.SSO_ENABLED).toLowerCase() !== 'false',
-        // When true (and SSO works), email + password sign-in is refused.
-        passwordLoginDisabled: trim(process.env.DISABLE_PASSWORD_LOGIN).toLowerCase() === 'true'
+        // Once Microsoft sign-in works it is the only way in. This lets
+        // passwords back in as well: an emergency measure, set from the
+        // server's shell, for when Microsoft sign-in itself is broken.
+        allowPasswordLogin: trim(process.env.ALLOW_PASSWORD_LOGIN).toLowerCase() === 'true'
     },
     // Defaults for the settings an administrator can change from the Settings
     // page (stored in the settings table once edited there).

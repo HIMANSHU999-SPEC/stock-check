@@ -1,5 +1,4 @@
 const express = require('express');
-const crypto = require('crypto');
 const db = require('../database');
 const { signToken, verifyToken, usingDefaultSecret } = require('../utils/token');
 const config = require('../config');
@@ -12,7 +11,10 @@ const router = express.Router();
 // Single sign-on is only offered when sessions can be trusted: with the
 // public fallback AUTH_SECRET anyone could forge a login token anyway.
 const ssoEnabled = config.sso.enabled && !usingDefaultSecret;
-const passwordLoginEnabled = !(ssoEnabled && config.sso.passwordLoginDisabled);
+// Once Microsoft sign-in is working it is the only way in. Passwords are for
+// where it is not set up (a new install, a developer's machine), or when
+// ALLOW_PASSWORD_LOGIN=true has been set on the server in an emergency.
+const passwordLoginEnabled = !ssoEnabled || config.sso.allowPasswordLogin;
 const SSO_COOKIE_OPTIONS = {
   httpOnly: true,
   sameSite: 'lax',
@@ -30,12 +32,6 @@ function readCookie(req, name) {
   }
   return null;
 }
-
-// Master password-reset override. Disabled unless MASTER_RESET_PASSWORD is set
-// in the environment — never hardcode this, the repository is public.
-const MASTER_RESET_PASSWORD_HASH = process.env.MASTER_RESET_PASSWORD
-  ? crypto.createHash('sha256').update(process.env.MASTER_RESET_PASSWORD).digest('hex')
-  : null;
 
 function getLicense() {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('license');
@@ -115,7 +111,7 @@ function getPersonFromToken(req) {
 router.post('/login', (req, res) => {
   const { email, password } = req.body;
   if (!passwordLoginEnabled) {
-    return res.status(403).json({ error: 'Password sign-in is turned off — use "Sign in with Microsoft"' });
+    return res.status(403).json({ error: 'This system signs in with Microsoft only. Use "Sign in with Microsoft".' });
   }
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required' });
@@ -251,12 +247,18 @@ router.get('/license', (req, res) => {
   });
 });
 
-// Change a password. Anyone signed in can change their own by giving the
-// current one, whatever their role. (An administrator resets someone else's
-// from Users; the master override, when configured, is the way back in if
-// every administrator is locked out.)
+// Change your own password, where passwords are in use: any role, signed in,
+// giving the current one. There is no way to set someone else's from here,
+// and none at all once Microsoft sign-in is the way in.
 router.post('/change-password', (req, res) => {
-  const { current_password, new_password, email } = req.body || {};
+  const requester = getUserFromToken(req);
+  if (!requester) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  if (!passwordLoginEnabled) {
+    return res.status(403).json({ error: 'This system signs in with Microsoft only: there is no password to change' });
+  }
+  const { current_password, new_password } = req.body || {};
   if (typeof new_password !== 'string' || !new_password) {
     return res.status(400).json({ error: 'New password is required' });
   }
@@ -270,42 +272,21 @@ router.post('/change-password', (req, res) => {
     return res.status(400).json({ error: 'The new password is too long' });
   }
 
-  const requester = getUserFromToken(req);
-  const targetEmail = (typeof email === 'string' && email.trim()) || requester?.email;
-
-  if (!targetEmail) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  const isMasterOverride = Boolean(
-    MASTER_RESET_PASSWORD_HASH && hashPassword(current_password) === MASTER_RESET_PASSWORD_HASH
-  );
-  const user = db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get(String(targetEmail).trim());
-  // The same answer whether or not the account exists, so this cannot be
-  // used to find out who has one.
-  const isSelfWithPassword = Boolean(
-    user && requester && requester.id === user.id && user.password_hash === hashPassword(current_password)
-  );
-
-  if (!user || (!isMasterOverride && !isSelfWithPassword)) {
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(requester.id);
+  if (!user || user.password_hash !== hashPassword(current_password)) {
     return res.status(403).json({ error: 'Current password is incorrect' });
   }
-  if (!isMasterOverride && !passwordLoginEnabled) {
-    return res.status(403).json({ error: 'Password sign-in is turned off: there is no password to change' });
-  }
-  if (!isMasterOverride && new_password === current_password) {
+  if (new_password === current_password) {
     return res.status(400).json({ error: 'The new password is the same as the current one' });
   }
 
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(new_password), user.id);
-  req.user = requester || { id: null, email: user.email };
+  req.user = requester;
   logActivity(req, {
     action: 'password_changed',
     entity_type: 'user',
     entity_id: user.id,
-    description: isSelfWithPassword
-      ? `${user.email} changed their own password`
-      : `Password for ${user.email} reset with the master override`
+    description: `${user.email} changed their own password`
   });
   return res.json({ message: 'Password updated successfully' });
 });

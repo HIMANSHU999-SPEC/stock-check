@@ -25,7 +25,8 @@ Built and maintained by **Himanshu Chadha**. Hosting for the deployed instance i
 - **Cost tracking** — purchase price and Intune licensing cost per asset
 - **Reports** — summary statistics, category breakdown, CSV export
 - **Recycle bin** — soft delete with password-protected restore
-- **Role-based access** — administrator, sub-administrator, viewer, and viewer with downloads; ordinary staff see only their own assets. Anyone who signs in with a password can change it themselves (*Change password*, top right); an administrator is only needed when it has been forgotten
+- **Role-based access** — administrator, sub-administrator, viewer, and viewer with downloads; ordinary staff see only their own assets
+- **Microsoft sign-in only** — once single sign-on is set up it is the only way in: no password sign-in, no password resets, and accounts are created without passwords. (Before it is set up, on a new install, people sign in with a password and can change their own.)
 - **Dark/light mode** and responsive layout
 
 ## Design notes
@@ -40,7 +41,7 @@ A few decisions worth explaining, since they were deliberate:
 
 **Sign-in proves identity; the Users list grants access.** Single sign-on never creates accounts. Someone must be added under Users before their Microsoft sign-in is accepted, so membership of the tenant alone gives nobody access.
 
-**No hardcoded secrets.** Every credential is read from the environment. `AUTH_SECRET`, `ADMIN_PASSWORD`, `RESTORE_PASSWORD` and `MASTER_RESET_PASSWORD` are all injected at runtime — see `DEPLOYMENT.md`. The repository is public, so this is enforced rather than assumed.
+**No hardcoded secrets.** Every credential is read from the environment. `AUTH_SECRET`, `ADMIN_PASSWORD`, `RESTORE_PASSWORD` and the Microsoft client secret are all injected at runtime — see `DEPLOYMENT.md`. The repository is public, so this is enforced rather than assumed.
 
 ## Installation
 
@@ -173,7 +174,7 @@ stock-check/
 `/api/settings/integrations` · `/api/settings/email-templates` · `/api/settings/email-log` · `/api/settings/sharepoint/*`
 
 ### Sign-in
-`POST /api/auth/login` · `GET /api/auth/sso/login` → Microsoft → `GET /api/auth/sso/callback` · `POST /api/auth/change-password` (your own, with the current one; any role)
+`GET /api/auth/sso/login` → Microsoft → `GET /api/auth/sso/callback`. Where single sign-on is not set up: `POST /api/auth/login` · `POST /api/auth/change-password` (your own, with the current one); both are refused once it is
 
 ### Employees
 `GET` `POST` `/api/employees` · `GET` `PUT` `DELETE` `/api/employees/:id`
@@ -235,7 +236,7 @@ npm test          # the test suite
 `npm test` runs everything under `tests/` with Node's built-in test runner; there is nothing extra to install.
 
 - `tests/unit` checks the pieces that work on their own: reading spreadsheet cells, serial numbers, CSV output, the ZIP writer, the rules that file an asset by its name.
-- `tests/api` starts the real server for each file, with an empty database in a temporary folder and its own port, and uses it as the web app does: signing in and changing passwords, what each role may do, adding / assigning / returning / selling / deleting assets, the totals, Excel imports, library loans, and the Intune check (against a stand-in for Microsoft that runs on the same machine).
+- `tests/api` starts the real server for each file, with an empty database in a temporary folder and its own port, and uses it as the web app does: signing in with Microsoft (and that nothing else gets in once it is set up), passwords where they are still in use, what each role may do, adding / assigning / returning / selling / deleting assets, the totals, Excel imports, library loans, and the Intune check. Microsoft is played by a stand-in that runs on the same machine, takes the same sign-in steps and signs its tokens the same way.
 
 The tests never read `.env`, never open the real database and never reach the internet. `npm test -- figures` runs only the files whose path contains that word.
 

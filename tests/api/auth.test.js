@@ -67,23 +67,25 @@ test('nobody can change someone else\'s password this way', async () => {
     await admin.post('/users', { name: 'Ian Inventory', email: 'ian@test.local', role: 'inventory', password: 'ians-password' });
     const ian = await app.login('ian@test.local', 'ians-password');
 
-    // Ian knows his own password, and names the administrator's account.
-    const res = await ian.post('/auth/change-password', {
-        email: ADMIN.email, current_password: 'ians-password', new_password: 'taken-over-123'
+    // Ian names the administrator's account and guesses at its password.
+    const guess = await ian.post('/auth/change-password', {
+        email: ADMIN.email, current_password: 'a-guess-at-it', new_password: 'taken-over-123'
     });
-    assert.equal(res.status, 403);
-    // Without a session at all, even with the right current password.
+    assert.equal(guess.status, 403);
+    // Even knowing it, naming another account does nothing: only his own
+    // current password counts, and only his own password changes.
+    const named = await ian.post('/auth/change-password', {
+        email: ADMIN.email, current_password: ADMIN.password, new_password: 'taken-over-123'
+    });
+    assert.equal(named.status, 403);
+    // Without a session there is nothing to change, whatever is sent.
     const anonymous = await app.request('POST', '/auth/change-password', {
         body: { email: ADMIN.email, current_password: ADMIN.password, new_password: 'taken-over-123' }
     });
-    assert.equal(anonymous.status, 403);
-    // The same answer for an account that does not exist.
-    const nobody = await app.request('POST', '/auth/change-password', {
-        body: { email: 'nobody@test.local', current_password: 'x', new_password: 'taken-over-123' }
-    });
-    assert.equal(nobody.status, 403);
+    assert.equal(anonymous.status, 401);
 
     await app.login(); // the administrator's password still works
+    await app.login('ian@test.local', 'ians-password'); // and so does Ian's
 });
 
 test('an account that signs in with Microsoft only has no password to change', async () => {

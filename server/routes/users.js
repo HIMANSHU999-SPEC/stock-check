@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const router = express.Router();
 const db = require('../database');
 const { logActivity } = require('../utils/activity');
-const { ssoEnabled } = require('./auth');
+const { ssoEnabled, passwordLoginEnabled } = require('./auth');
 
 // admin: everything. subadmin: day-to-day work, no users or settings.
 // inventory: look at everything and download it, change nothing.
@@ -13,6 +13,8 @@ const ALLOWED_ROLES = ['admin', 'subadmin', 'inventory', 'viewer'];
 // It is not a valid SHA-256 digest, so no password can ever match it.
 const NO_PASSWORD = '!sso-only';
 const USER_COLUMNS = `id, name, email, role, created_at, (password_hash <> '${NO_PASSWORD}') as has_password`;
+
+const MICROSOFT_ONLY = 'People sign in to this system with their Microsoft account; an account here has no password. Leave the password blank.';
 
 function hashPassword(password) {
     return crypto.createHash('sha256').update(password).digest('hex');
@@ -62,6 +64,9 @@ router.post('/', (req, res) => {
         if (!email) {
             return res.status(400).json({ error: 'Email is required' });
         }
+        if (password && !passwordLoginEnabled) {
+            return res.status(400).json({ error: MICROSOFT_ONLY });
+        }
         // Without single sign-on a password is the only way in.
         if (!password && !ssoEnabled) {
             return res.status(400).json({ error: 'Email and password are required' });
@@ -99,6 +104,9 @@ router.put('/:id', (req, res) => {
         const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
         if (!user) {
             return res.status(404).json({ error: 'User not found' });
+        }
+        if (password && !passwordLoginEnabled) {
+            return res.status(400).json({ error: MICROSOFT_ONLY });
         }
         if (remove_password && !ssoEnabled) {
             return res.status(400).json({ error: 'Single sign-on must be working before a password can be removed' });

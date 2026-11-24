@@ -39,7 +39,8 @@ async function waitUntilUp(url, child, output) {
 
 /**
  * Resolves with { url, dir, admin, request, login, session, tokenFor, db, stop }.
- * `env` adds to (or overrides) the server's environment.
+ * `env` adds to (or overrides) the server's environment; give a function to
+ * build it from the address the server will have.
  */
 async function startApp({ env = {} } = {}) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stock-check-test-'));
@@ -59,7 +60,7 @@ async function startApp({ env = {} } = {}) {
         ADMIN_EMAIL: ADMIN.email,
         ADMIN_PASSWORD: ADMIN.password,
         AI_ENABLED: 'false',
-        ...env
+        ...(typeof env === 'function' ? env(url) : env)
     };
 
     const output = [];

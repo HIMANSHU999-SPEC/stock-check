@@ -151,8 +151,9 @@ function Integrations() {
                             <strong> Users</strong> are let in — add someone there (no password needed) to give them access.
                         </p>
                         <p className="text-muted">
-                            Password sign-in is {data.sso.password_login ? 'still allowed' : 'turned off'}.
-                            {data.sso.password_login && ' Set DISABLE_PASSWORD_LOGIN=true on the server once everyone signs in with Microsoft.'}
+                            {data.sso.password_login
+                                ? 'Passwords are also being accepted, because ALLOW_PASSWORD_LOGIN=true is set on the server. That is meant for emergencies: remove it and restart once Microsoft sign-in is working again.'
+                                : 'This is the only way in: there is no password sign-in.'}
                         </p>
                     </>
                 ) : (
