@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import ChangePassword from './ChangePassword';
 
 // The menu, grouped so it fits on one line. An entry with `items` is a
 // drop-down; `match` lists the path prefixes that light it up.
@@ -80,8 +81,10 @@ export default function Navbar({ user, onLogout, license }) {
     const location = useLocation();
     const [openGroup, setOpenGroup] = useState(null);
     const [menuOpen, setMenuOpen] = useState(false);
+    const [changingPassword, setChangingPassword] = useState(false);
     const navRef = useRef(null);
     const menu = buildMenu(user);
+    const roleLabel = { admin: 'Administrator', subadmin: 'Sub-administrator', inventory: 'Viewer + downloads', viewer: 'Viewer' }[user?.role] || 'Staff';
 
     // Moving to another page closes whatever was open.
     useEffect(() => {
@@ -182,16 +185,46 @@ export default function Navbar({ user, onLogout, license }) {
 
                     <div className="navbar-user">
                         {license?.expired && <span className="badge badge-danger">Licence expired</span>}
-                        <div className="navbar-user-name">
-                            <span>{user?.name || user?.email}</span>
-                            <small>{{ admin: 'Administrator', subadmin: 'Sub-administrator', inventory: 'Viewer + downloads', viewer: 'Viewer' }[user?.role] || 'Staff'}</small>
-                        </div>
+                        {user?.can_change_password ? (
+                            // The name opens a small menu: a second button beside
+                            // "Log out" did not fit on a laptop screen.
+                            <div className={`nav-group navbar-account ${openGroup === 'account' ? 'open' : ''}`}>
+                                <button
+                                    type="button"
+                                    className="navbar-user-name navbar-account-btn"
+                                    aria-haspopup="true"
+                                    aria-expanded={openGroup === 'account'}
+                                    title={`${user?.name || user?.email}: your account`}
+                                    onClick={() => setOpenGroup(openGroup === 'account' ? null : 'account')}
+                                >
+                                    <span>
+                                        <span className="navbar-user-label">{user?.name || user?.email}</span>
+                                        <span className="nav-caret" aria-hidden="true">▾</span>
+                                    </span>
+                                    <small>{roleLabel}</small>
+                                </button>
+                                <div className="nav-menu nav-menu-right">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setChangingPassword(true); setOpenGroup(null); setMenuOpen(false); }}
+                                    >
+                                        Change password
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="navbar-user-name" title={user?.name || user?.email}>
+                                <span className="navbar-user-label">{user?.name || user?.email}</span>
+                                <small>{roleLabel}</small>
+                            </div>
+                        )}
                         <button type="button" className="btn btn-sm navbar-logout" onClick={onLogout}>
                             Log out
                         </button>
                     </div>
                 </div>
             </div>
+            {changingPassword && <ChangePassword onClose={() => setChangingPassword(false)} />}
         </nav>
     );
 }

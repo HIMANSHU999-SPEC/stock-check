@@ -1271,6 +1271,61 @@ code {
   color: rgba(255, 255, 255, 0.72);
 }
 
+/* The signed-in person's name, when it opens the account menu. */
+/* A long name is cut short rather than pushing "Log out" off the screen. */
+.navbar-user-label {
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.navbar-account-btn {
+  padding: 0.3rem 0.5rem;
+  /* The padding is for the hover highlight; it takes no room in the bar. */
+  margin: 0 -0.5rem;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.navbar-account-btn:hover,
+.navbar-account.open .navbar-account-btn {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.navbar-account-btn > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.nav-menu-right {
+  left: auto;
+  right: 0;
+}
+
+.nav-menu button {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.nav-menu button:hover {
+  background: var(--bg-tertiary);
+}
+
 .navbar-logout {
   background: rgba(255, 255, 255, 0.14);
   color: #fff;
@@ -1305,13 +1360,13 @@ code {
 }
 
 /* The subtitle is the first thing to go when the bar gets tight. */
-@media (max-width: 1280px) {
+@media (max-width: 1380px) {
   .navbar-subtitle {
     display: none;
   }
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1260px) {
   .navbar-content {
     flex-wrap: wrap;
   }
@@ -1377,16 +1432,39 @@ code {
     box-shadow: none;
   }
 
-  .nav-menu a {
+  .nav-menu a,
+  .nav-menu button {
     padding: 0.6rem;
     color: rgba(255, 255, 255, 0.92);
     font-size: 1rem;
   }
 
   .nav-menu a:hover,
-  .nav-menu a.active {
+  .nav-menu a.active,
+  .nav-menu button:hover {
     color: #fff;
     background: rgba(255, 255, 255, 0.18);
+  }
+
+  /* The account menu is one item: listed under the name, like the rest. */
+  .navbar-account .nav-menu {
+    display: block;
+    padding: 0;
+  }
+
+  .navbar-account .nav-menu button {
+    padding-left: 0;
+    text-decoration: underline;
+  }
+
+  .navbar-account-btn {
+    margin: 0;
+    padding-left: 0;
+    pointer-events: none;
+  }
+
+  .navbar-user-label {
+    max-width: 60vw;
   }
 
   .navbar-user {
@@ -1501,6 +1579,8 @@ input[type='radio'] {
 .btn:focus-visible,
 .nav-link:focus-visible,
 .nav-menu a:focus-visible,
+.nav-menu button:focus-visible,
+.navbar-account-btn:focus-visible,
 a:focus-visible {
   outline: 2px solid var(--primary-light);
   outline-offset: 2px;

@@ -14,3 +14,11 @@ export function actionLabel(action) {
     const words = key.replace(/_/g, ' ').trim();
     return words.charAt(0).toUpperCase() + words.slice(1);
 }
+
+// What the totals leave out, in words: "Excludes sold items", or with lost,
+// stolen and retired added when the organisation has chosen not to count them.
+export function notCountedNote(statuses) {
+    const list = Array.isArray(statuses) && statuses.length ? statuses : ['sold'];
+    const words = list.length === 1 ? list[0] : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`;
+    return `Excludes ${words} items`;
+}

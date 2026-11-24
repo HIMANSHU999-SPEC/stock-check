@@ -224,6 +224,18 @@ function Integrations() {
                         <input type="text" className="form-control" value={form.org_name} onChange={set('org_name')} />
                     </div>
                     <div className="form-group">
+                        <label className="form-label">Totals on the dashboard and reports</label>
+                        <label className="flex items-center gap-1">
+                            <input type="checkbox" checked={Boolean(form.count_written_off)} onChange={set('count_written_off')} />
+                            <span>count items marked lost, stolen or retired</span>
+                        </label>
+                        <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                            Applies to Total Assets and Total Value on the dashboard and in the reports. Untick to count
+                            only what is still held. Sold items are never counted. The Inventory page always lists
+                            everything, with written-off items in their own column.
+                        </div>
+                    </div>
+                    <div className="form-group">
                         <label className="form-label">Send automatically</label>
                         <label className="flex items-center gap-1">
                             <input type="checkbox" checked={form.mail_on_assign} onChange={set('mail_on_assign')} />

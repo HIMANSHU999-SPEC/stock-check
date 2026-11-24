@@ -358,7 +358,7 @@ export default function AssetForm() {
                             </div>
 
                             <div className="form-group">
-                                <label className="form-label">Purchase Price (£)</label>
+                                <label className="form-label">Purchase price, per item (£)</label>
                                 <input
                                     type="number"
                                     name="purchase_price"
@@ -368,6 +368,13 @@ export default function AssetForm() {
                                     step="0.01"
                                     min="0"
                                 />
+                                {Number(formData.quantity) > 1 && Number(formData.purchase_price) > 0 && (
+                                    <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                        {formData.quantity} × £{Number(formData.purchase_price).toFixed(2)} = £
+                                        {(Number(formData.quantity) * Number(formData.purchase_price)).toFixed(2)} in total.
+                                        Enter the price of one, not of the lot.
+                                    </div>
+                                )}
                             </div>
 
                             <div className="form-group">

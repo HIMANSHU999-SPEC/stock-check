@@ -49,6 +49,34 @@ falls back to `server/stock-management.db` if it is not set.
 
 ---
 
+## Which version of Node
+
+Use **Node 24** (the version in `.nvmrc`). The app also runs on Node 22 and on
+20.19 or later, and the test suite passes on all three, but Node 20 stopped
+receiving security fixes in April 2026 and Node 22 stops in April 2027.
+
+Moving a running server from one version of Node to another:
+
+1. Back up the database first (see below).
+2. Install the new Node the same way the old one was installed (`nvm`, the
+   NodeSource apt repository, or the Lightsail blueprint). `node -v` should
+   then show the new version for the user that runs the app.
+3. In the app directory run `npm ci`. This is not optional: the database
+   library is compiled for one version of Node and will not load in another
+   until it is reinstalled.
+4. Run `npm test`. It uses its own temporary database and touches nothing live.
+5. Restart the app **under the new Node**. With PM2, `pm2 restart` keeps using
+   the old interpreter, so run `pm2 delete stock-backend`, start it again
+   from the app directory with the new `node` first on the `PATH`
+   (`pm2 start server/index.js --name stock-backend`, with the same
+   environment as before), then `pm2 save`. If PM2 itself was installed
+   under the old Node, reinstall it (`npm install -g pm2`, then `pm2 update`).
+6. Check `pm2 describe stock-backend` shows the new "node.js version", and
+   that the site answers.
+
+To go back, switch `node` back to the old version, run `npm ci` again and
+restart the same way.
+
 ## Option A — EC2 / Lightsail (Node + PM2)
 
 ### Connecting to a Lightsail instance (SSH with your .pem key)

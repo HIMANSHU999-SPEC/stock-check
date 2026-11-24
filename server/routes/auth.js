@@ -4,6 +4,8 @@ const db = require('../database');
 const { signToken, verifyToken, usingDefaultSecret } = require('../utils/token');
 const config = require('../config');
 const sso = require('../services/sso');
+const { hashPassword, hasPassword, MIN_LENGTH } = require('../utils/passwords');
+const { logActivity } = require('../utils/activity');
 
 const router = express.Router();
 
@@ -34,10 +36,6 @@ function readCookie(req, name) {
 const MASTER_RESET_PASSWORD_HASH = process.env.MASTER_RESET_PASSWORD
   ? crypto.createHash('sha256').update(process.env.MASTER_RESET_PASSWORD).digest('hex')
   : null;
-
-function hashPassword(password) {
-  return crypto.createHash('sha256').update(password).digest('hex');
-}
 
 function getLicense() {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('license');
@@ -72,6 +70,14 @@ function getUserFromToken(req) {
     .prepare('SELECT id, name, email, role FROM users WHERE id = ?')
     .get(payload.userId);
   return user || null;
+}
+
+// Whether this account can change its own password: it has one, and
+// passwords are still a way in.
+function canChangePassword(userId) {
+  if (!passwordLoginEnabled) return false;
+  const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(userId);
+  return Boolean(row && hasPassword(row.password_hash));
 }
 
 const STAFF_SESSION_DAYS = 1;
@@ -126,7 +132,10 @@ router.post('/login', (req, res) => {
   }
 
   const token = signToken({ userId: user.id, role: user.role }, 7);
-  res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+  res.json({
+    token,
+    user: { id: user.id, name: user.name, email: user.email, role: user.role, can_change_password: true }
+  });
 });
 
 // What the login screen should offer
@@ -212,7 +221,7 @@ router.get('/me', (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   if (person.user) {
-    return res.json({ user: person.user });
+    return res.json({ user: { ...person.user, can_change_password: canChangePassword(person.user.id) } });
   }
   // A member of staff: no account in Users, only their own staff record.
   res.json({
@@ -242,35 +251,62 @@ router.get('/license', (req, res) => {
   });
 });
 
-// Change password (requires auth or master override)
+// Change a password. Anyone signed in can change their own by giving the
+// current one, whatever their role. (An administrator resets someone else's
+// from Users; the master override, when configured, is the way back in if
+// every administrator is locked out.)
 router.post('/change-password', (req, res) => {
-  const { current_password, new_password, email } = req.body;
-  if (!new_password) {
+  const { current_password, new_password, email } = req.body || {};
+  if (typeof new_password !== 'string' || !new_password) {
     return res.status(400).json({ error: 'New password is required' });
+  }
+  if (typeof current_password !== 'string' || !current_password) {
+    return res.status(400).json({ error: 'Current password is required' });
+  }
+  if (new_password.length < MIN_LENGTH) {
+    return res.status(400).json({ error: `The new password must be at least ${MIN_LENGTH} characters long` });
+  }
+  if (new_password.length > 200) {
+    return res.status(400).json({ error: 'The new password is too long' });
   }
 
   const requester = getUserFromToken(req);
-  const targetEmail = email || requester?.email;
+  const targetEmail = (typeof email === 'string' && email.trim()) || requester?.email;
 
   if (!targetEmail) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get(String(targetEmail).trim());
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
-
   const isMasterOverride = Boolean(
-    MASTER_RESET_PASSWORD_HASH && current_password && hashPassword(current_password) === MASTER_RESET_PASSWORD_HASH
+    MASTER_RESET_PASSWORD_HASH && hashPassword(current_password) === MASTER_RESET_PASSWORD_HASH
   );
-  const isSelfWithPassword = requester && requester.id === user.id && user.password_hash === hashPassword(current_password || '');
+  const user = db.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get(String(targetEmail).trim());
+  // The same answer whether or not the account exists, so this cannot be
+  // used to find out who has one.
+  const isSelfWithPassword = Boolean(
+    user && requester && requester.id === user.id && user.password_hash === hashPassword(current_password)
+  );
 
-  if (!isMasterOverride && !isSelfWithPassword) {
+  if (!user || (!isMasterOverride && !isSelfWithPassword)) {
     return res.status(403).json({ error: 'Current password is incorrect' });
+  }
+  if (!isMasterOverride && !passwordLoginEnabled) {
+    return res.status(403).json({ error: 'Password sign-in is turned off: there is no password to change' });
+  }
+  if (!isMasterOverride && new_password === current_password) {
+    return res.status(400).json({ error: 'The new password is the same as the current one' });
   }
 
   db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(new_password), user.id);
+  req.user = requester || { id: null, email: user.email };
+  logActivity(req, {
+    action: 'password_changed',
+    entity_type: 'user',
+    entity_id: user.id,
+    description: isSelfWithPassword
+      ? `${user.email} changed their own password`
+      : `Password for ${user.email} reset with the master override`
+  });
   return res.json({ message: 'Password updated successfully' });
 });
 

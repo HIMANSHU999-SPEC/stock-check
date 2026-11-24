@@ -285,10 +285,15 @@ export default function AssetDetails() {
                             </div>
 
                             <div className="form-group">
-                                <label className="form-label">Purchase Price</label>
+                                <label className="form-label">Purchase Price{isBulk ? ' (per item)' : ''}</label>
                                 <div style={{ fontSize: '1.25rem', fontWeight: 'bold' }}>
                                     {asset.purchase_price ? `£${parseFloat(asset.purchase_price).toFixed(2)}` : 'N/A'}
                                 </div>
+                                {isBulk && asset.purchase_price > 0 && (
+                                    <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                                        £{(asset.purchase_price * asset.quantity).toFixed(2)} for all {asset.quantity}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="form-group">

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { reportsAPI, assetsAPI, authAPI, booksAPI, staffReportsAPI } from '../services/api';
 import DeviceBreakdown from './DeviceBreakdown';
+import { notCountedNote } from '../utils/labels';
 
 // Lightweight horizontal bar chart (no external chart library).
 function BarChart({ data, unit = '' }) {
@@ -151,7 +152,7 @@ export default function Dashboard({ user }) {
                 <div className="stat-card">
                     <div className="stat-label">Total Assets</div>
                     <div className="stat-value">{stats?.total || 0}</div>
-                    <div className="text-muted">All registered assets</div>
+                    <div className="text-muted">{notCountedNote(stats?.not_counted)}</div>
                 </div>
 
                 <div className="stat-card">
@@ -171,7 +172,7 @@ export default function Dashboard({ user }) {
                     <div className="stat-value">
                         £{(stats?.total_value || 0).toLocaleString()}
                     </div>
-                    <div className="text-muted">Purchase price</div>
+                    <div className="text-muted">Price paid × quantity</div>
                 </div>
             </div>
 

@@ -416,6 +416,11 @@ export const staffReportsAPI = {
 export const authAPI = {
     login: (email, password) => apiCall('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
     me: () => apiCall('/auth/me'),
+    changePassword: (currentPassword, newPassword) =>
+        apiCall('/auth/change-password', {
+            method: 'POST',
+            body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+        }),
     license: () => apiCall('/auth/license'),
     ssoConfig: () => apiCall('/auth/sso/config'),
     // A full-page navigation, not a fetch: the browser has to follow the

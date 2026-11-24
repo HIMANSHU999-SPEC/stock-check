@@ -25,7 +25,7 @@ Built and maintained by **Himanshu Chadha**. Hosting for the deployed instance i
 - **Cost tracking** — purchase price and Intune licensing cost per asset
 - **Reports** — summary statistics, category breakdown, CSV export
 - **Recycle bin** — soft delete with password-protected restore
-- **Role-based access** — admin and subadmin, SHA-256 hashed credentials
+- **Role-based access** — administrator, sub-administrator, viewer, and viewer with downloads; ordinary staff see only their own assets. Anyone who signs in with a password can change it themselves (*Change password*, top right); an administrator is only needed when it has been forgotten
 - **Dark/light mode** and responsive layout
 
 ## Design notes
@@ -44,7 +44,7 @@ A few decisions worth explaining, since they were deliberate:
 
 ## Installation
 
-**Prerequisites:** Node.js 20.19 or higher (22 recommended: Node 20 is no longer supported upstream), npm
+**Prerequisites:** Node.js 24 (the version in `.nvmrc`; tested on 20.19, 22 and 24, but Node 20 is no longer supported upstream), npm
 
 ```bash
 git clone https://github.com/HIMANSHU999-SPEC/stock-check.git
@@ -89,6 +89,8 @@ For production deployment and the full environment variable reference, see `DEPL
 
 Reports shows summary statistics, a category breakdown and Intune pricing analysis. The pricing report exports to CSV.
 
+**What the totals count** — Total Assets is the number of items (a line of 40 chairs counts as 40), and Total Value is the price of one multiplied by how many there are, so enter the price per item. Sold items are never counted, and neither is anything in the recycle bin. Whether items marked lost, stolen or retired are counted is a choice: *Settings → Totals on the dashboard and reports*. Each total says underneath what it leaves out. The Inventory page always lists everything on the register, with written-off items in their own column.
+
 ### Library
 
 The Books, Borrowers and Issue Desk sections form a self-contained library module, available to logged-in admin users.
@@ -118,9 +120,12 @@ stock-check/
 │   │   ├── sso.js          # Microsoft sign-in (OpenID Connect + PKCE)
 │   │   ├── graph.js        # Microsoft Graph client (app identity)
 │   │   ├── mailer.js       # email templates, sending, log
+│   │   ├── figures.js      # what Total Assets and Total Value count
 │   │   └── sharepoint.js   # list sync and outbox worker
 │   └── utils/
 │       ├── assetNumber.js
+│       ├── importValues.js # spreadsheet cells into dates, prices and text
+│       ├── zip.js          # ZIP file for the multi-person PDF export
 │       └── token.js        # signed session tokens
 ├── src/                    # React frontend
 │   ├── components/         # Dashboard, AssetList, AssetForm, AssetDetails,
@@ -129,6 +134,7 @@ stock-check/
 │   │                       # EmployeeList, Reports, UserManagement, RecycleBin
 │   ├── services/api.js
 │   └── App.jsx
+├── tests/                  # npm test: unit tests and tests of the running API
 ├── docs/MICROSOFT365_SETUP.md
 ├── vite.config.js
 └── package.json
@@ -167,7 +173,7 @@ stock-check/
 `/api/settings/integrations` · `/api/settings/email-templates` · `/api/settings/email-log` · `/api/settings/sharepoint/*`
 
 ### Sign-in
-`POST /api/auth/login` · `GET /api/auth/sso/login` → Microsoft → `GET /api/auth/sso/callback`
+`POST /api/auth/login` · `GET /api/auth/sso/login` → Microsoft → `GET /api/auth/sso/callback` · `POST /api/auth/change-password` (your own, with the current one; any role)
 
 ### Employees
 `GET` `POST` `/api/employees` · `GET` `PUT` `DELETE` `/api/employees/:id`
@@ -221,7 +227,17 @@ stock-check/
 npm run dev       # backend + frontend, hot reload
 npm run build     # production build
 npm run preview   # serve the production build
+npm test          # the test suite
 ```
+
+### Tests
+
+`npm test` runs everything under `tests/` with Node's built-in test runner; there is nothing extra to install.
+
+- `tests/unit` checks the pieces that work on their own: reading spreadsheet cells, serial numbers, CSV output, the ZIP writer, the rules that file an asset by its name.
+- `tests/api` starts the real server for each file, with an empty database in a temporary folder and its own port, and uses it as the web app does: signing in and changing passwords, what each role may do, adding / assigning / returning / selling / deleting assets, the totals, Excel imports, library loans, and the Intune check (against a stand-in for Microsoft that runs on the same machine).
+
+The tests never read `.env`, never open the real database and never reach the internet. `npm test -- figures` runs only the files whose path contains that word.
 
 ## Author
 
