@@ -13,8 +13,7 @@ const cells = require('../utils/importValues');
 const { toCsv } = require('../utils/csv');
 const { normaliseSerial } = require('../utils/serials');
 const PDFDocument = require('pdfkit');
-const archiver = require('archiver');
-const { PassThrough } = require('stream');
+const { zip } = require('../utils/zip');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
@@ -432,35 +431,13 @@ function exportAssignments(res, ids) {
     });
 
     Promise.all(buildBuffers).then((buffers) => {
-        const archive = archiver('zip');
-        const output = new PassThrough();
-        const zipChunks = [];
-
-        output.on('data', (c) => zipChunks.push(c));
-        output.on('end', () => {
-            const zipBuffer = Buffer.concat(zipChunks);
-            res.setHeader('Content-Type', 'application/zip');
-            res.setHeader('Content-Disposition', 'attachment; filename="assigned-assets.zip"');
-            res.setHeader('Content-Length', zipBuffer.length);
-            res.end(zipBuffer);
-        });
-        output.on('error', (err) => {
-            if (!res.headersSent) {
-                res.status(500).json({ error: err.message });
-            }
-        });
-
-        archive.on('error', (err) => {
-            if (!res.headersSent) {
-                res.status(500).json({ error: err.message });
-            }
-        });
-
-        archive.pipe(output);
-        buffers.forEach(({ employee, buffer }) => {
-            archive.append(buffer, { name: `assigned-assets-${employee.id}.pdf` });
-        });
-        archive.finalize();
+        const zipBuffer = zip(buffers.map(({ employee, buffer }) => ({
+            name: `assigned-assets-${employee.id}.pdf`, data: buffer
+        })));
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', 'attachment; filename="assigned-assets.zip"');
+        res.setHeader('Content-Length', zipBuffer.length);
+        res.end(zipBuffer);
     }).catch((err) => {
         if (!res.headersSent) {
             res.status(500).json({ error: err.message });

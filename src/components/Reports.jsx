@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { notCountedNote } from '../utils/labels';
 import { reportsAPI, assetsAPI, employeesAPI } from '../services/api';
 
 export default function Reports() {
@@ -110,11 +111,13 @@ export default function Reports() {
                 <div className="stat-card">
                     <div className="stat-label">Total Assets</div>
                     <div className="stat-value">{summary?.total || 0}</div>
+                    <div className="text-muted">{notCountedNote(summary?.not_counted)}</div>
                 </div>
 
                 <div className="stat-card">
                     <div className="stat-label">Total Value</div>
                     <div className="stat-value">£{(summary?.total_value || 0).toLocaleString()}</div>
+                    <div className="text-muted">Price paid × quantity</div>
                 </div>
 
                 <div className="stat-card">

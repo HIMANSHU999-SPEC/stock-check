@@ -1,11 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { counting } = require('../services/figures');
 
 // Stock position per campus, broken down by category. Quantities, not row
 // counts, so 40 chairs registered as one line count as 40.
 router.get('/summary', (req, res) => {
     try {
+        // Value follows the same rule as the reports: sold never counts, and
+        // lost, stolen and retired count only if the organisation says so.
+        const notCounted = counting().excluded.map((status) => `'${status}'`).join(',');
         const rows = db.prepare(`
       SELECT
         CASE WHEN a.campus IS NULL OR TRIM(a.campus) = '' THEN '' ELSE TRIM(a.campus) END AS campus,
@@ -20,7 +24,7 @@ router.get('/summary', (req, res) => {
                  THEN a.quantity - COALESCE(a.assigned_quantity, 0) ELSE 0 END) AS in_repair,
         SUM(CASE WHEN a.status IN ('damaged', 'lost', 'stolen', 'retired', 'sold')
                  THEN a.quantity - COALESCE(a.assigned_quantity, 0) ELSE 0 END) AS written_off,
-        SUM(COALESCE(a.purchase_price, 0) * a.quantity) AS value
+        SUM(CASE WHEN a.status IN (${notCounted}) THEN 0 ELSE COALESCE(a.purchase_price, 0) * a.quantity END) AS value
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       WHERE a.deleted_at IS NULL

@@ -15,6 +15,9 @@ const FIELDS = {
     support_email: { type: 'email', fallback: () => '' },
     // Who is told when someone who has left still holds equipment.
     leaver_alert_to: { type: 'emails', fallback: () => '' },
+    // Whether items marked lost, stolen or retired still count in Total
+    // Assets and Total Value. Sold items never do.
+    count_written_off: { type: 'boolean', fallback: () => true },
     mail_on_assign: { type: 'boolean', fallback: () => true },
     mail_on_return: { type: 'boolean', fallback: () => true },
     sharepoint_enabled: { type: 'boolean', fallback: () => Boolean(defaults.sharepointSite) },

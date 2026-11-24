@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database');
+const { counting } = require('../services/figures');
 
 // Get all categories
 router.get('/', (req, res) => {
@@ -15,10 +16,10 @@ router.get('/', (req, res) => {
 // Get summary statistics
 router.get('/summary', (req, res) => {
     try {
+        const count = counting();
         const qty = db.prepare(`
       SELECT
-        -- A sold item stays on record but is no longer ours to count.
-        COALESCE(SUM(CASE WHEN status = 'sold' THEN 0 ELSE quantity END), 0) as total_quantity,
+        COALESCE(SUM(${count.quantity()}), 0) as total_quantity,
         COALESCE(SUM(assigned_quantity), 0) as assigned_quantity,
         -- "Ready to assign": in service and not already out. Anything in
         -- repair, damaged, lost, stolen, retired or sold is not.
@@ -27,7 +28,7 @@ router.get('/summary', (req, res) => {
       FROM assets
       WHERE deleted_at IS NULL
     `).get();
-        const totalValue = db.prepare("SELECT SUM(purchase_price) as total FROM assets WHERE deleted_at IS NULL AND status <> 'sold'").get();
+        const totalValue = db.prepare(`SELECT SUM(${count.value()}) as total FROM assets WHERE deleted_at IS NULL`).get();
         const totalIntuneValue = db.prepare('SELECT SUM(intune_price) as total FROM assets WHERE deleted_at IS NULL').get();
 
         res.json({
@@ -36,7 +37,9 @@ router.get('/summary', (req, res) => {
             available: qty.available_quantity || 0,
             maintenance: qty.maintenance_quantity || 0,
             total_value: totalValue.total || 0,
-            total_intune_value: totalIntuneValue.total || 0
+            total_intune_value: totalIntuneValue.total || 0,
+            // So the screens can say what the totals leave out.
+            not_counted: count.excluded
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -46,8 +49,9 @@ router.get('/summary', (req, res) => {
 // Get assets by category
 router.get('/by-category', (req, res) => {
     try {
+        const count = counting();
         const data = db.prepare(`
-      SELECT c.id, c.name, COUNT(a.id) as count, SUM(a.purchase_price) as total_value
+      SELECT c.id, c.name, COUNT(a.id) as count, SUM(${count.value('a.')}) as total_value
       FROM categories c
       LEFT JOIN assets a ON c.id = a.category_id AND a.deleted_at IS NULL
       GROUP BY c.id, c.name
@@ -79,13 +83,14 @@ router.get('/by-status', (req, res) => {
 // Get assets grouped by supplier
 router.get('/by-supplier', (req, res) => {
     try {
+        const count = counting();
         const data = db.prepare(`
       SELECT
         CASE WHEN supplier_name IS NULL OR TRIM(supplier_name) = '' THEN 'Unspecified' ELSE supplier_name END AS supplier_name,
         COUNT(*) as asset_count,
-        SUM(quantity) as total_quantity,
+        SUM(${count.quantity()}) as total_quantity,
         SUM(CASE WHEN status IN ('available','assigned') THEN MAX(COALESCE(quantity,0) - COALESCE(assigned_quantity,0), 0) ELSE 0 END) as available_quantity,
-        SUM(purchase_price) as total_value
+        SUM(${count.value()}) as total_value
       FROM assets
       WHERE deleted_at IS NULL
       GROUP BY supplier_name
@@ -101,13 +106,14 @@ router.get('/by-supplier', (req, res) => {
 // Assets grouped by campus
 router.get('/by-campus', (req, res) => {
     try {
+        const count = counting();
         const data = db.prepare(`
       SELECT
         CASE WHEN campus IS NULL OR TRIM(campus) = '' THEN 'Unspecified' ELSE campus END AS campus,
         COUNT(*) as asset_count,
-        SUM(quantity) as total_quantity,
+        SUM(${count.quantity()}) as total_quantity,
         SUM(CASE WHEN status IN ('available','assigned') THEN MAX(COALESCE(quantity,0) - COALESCE(assigned_quantity,0), 0) ELSE 0 END) as available_quantity,
-        SUM(purchase_price) as total_value
+        SUM(${count.value()}) as total_value
       FROM assets
       WHERE deleted_at IS NULL
       GROUP BY campus
@@ -123,13 +129,14 @@ router.get('/by-campus', (req, res) => {
 // Assets grouped by brand (case/spacing-insensitive), with counts per brand.
 router.get('/by-brand', (req, res) => {
     try {
+        const count = counting();
         const data = db.prepare(`
       SELECT
         COALESCE(NULLIF(TRIM(MIN(a.brand)), ''), 'Unspecified') AS brand,
         COUNT(*) AS asset_count,
-        SUM(COALESCE(a.quantity, 0)) AS total_quantity,
+        SUM(${count.quantity('a.')}) AS total_quantity,
         SUM(CASE WHEN a.status IN ('available','assigned') THEN MAX(COALESCE(a.quantity,0) - COALESCE(a.assigned_quantity,0), 0) ELSE 0 END) AS available_quantity,
-        SUM(a.purchase_price) AS total_value
+        SUM(${count.value('a.')}) AS total_value
       FROM assets a
       WHERE a.deleted_at IS NULL
       GROUP BY LOWER(TRIM(COALESCE(a.brand, '')))
@@ -146,16 +153,17 @@ router.get('/by-brand', (req, res) => {
 // "x360 g8 " count as one model), per category.
 router.get('/by-model', (req, res) => {
     try {
+        const count = counting();
         const data = db.prepare(`
       SELECT
         COALESCE(NULLIF(TRIM(MIN(a.model)), ''), 'Unspecified') AS model,
         c.name AS category,
         a.category_id AS category_id,
         COUNT(*) AS asset_count,
-        SUM(COALESCE(a.quantity, 0)) AS total_quantity,
+        SUM(${count.quantity('a.')}) AS total_quantity,
         SUM(COALESCE(a.assigned_quantity, 0)) AS assigned_quantity,
         SUM(CASE WHEN a.status IN ('available','assigned') THEN MAX(COALESCE(a.quantity,0) - COALESCE(a.assigned_quantity,0), 0) ELSE 0 END) AS available_quantity,
-        SUM(a.purchase_price) AS total_value
+        SUM(${count.value('a.')}) AS total_value
       FROM assets a
       LEFT JOIN categories c ON a.category_id = c.id
       WHERE a.deleted_at IS NULL

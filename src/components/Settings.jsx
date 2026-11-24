@@ -151,8 +151,9 @@ function Integrations() {
                             <strong> Users</strong> are let in — add someone there (no password needed) to give them access.
                         </p>
                         <p className="text-muted">
-                            Password sign-in is {data.sso.password_login ? 'still allowed' : 'turned off'}.
-                            {data.sso.password_login && ' Set DISABLE_PASSWORD_LOGIN=true on the server once everyone signs in with Microsoft.'}
+                            {data.sso.password_login
+                                ? 'Passwords are also being accepted, because ALLOW_PASSWORD_LOGIN=true is set on the server. That is meant for emergencies: remove it and restart once Microsoft sign-in is working again.'
+                                : 'This is the only way in: there is no password sign-in.'}
                         </p>
                     </>
                 ) : (
@@ -222,6 +223,18 @@ function Integrations() {
                     <div className="form-group">
                         <label className="form-label">Organisation name (used in emails and on stickers)</label>
                         <input type="text" className="form-control" value={form.org_name} onChange={set('org_name')} />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label">Totals on the dashboard and reports</label>
+                        <label className="flex items-center gap-1">
+                            <input type="checkbox" checked={Boolean(form.count_written_off)} onChange={set('count_written_off')} />
+                            <span>count items marked lost, stolen or retired</span>
+                        </label>
+                        <div className="text-muted" style={{ fontSize: '0.85rem' }}>
+                            Applies to Total Assets and Total Value on the dashboard and in the reports. Untick to count
+                            only what is still held. Sold items are never counted. The Inventory page always lists
+                            everything, with written-off items in their own column.
+                        </div>
                     </div>
                     <div className="form-group">
                         <label className="form-label">Send automatically</label>

@@ -118,8 +118,17 @@ Sign in as an administrator and open **Settings**.
    denied the request, `DeviceManagementManagedDevices.Read.All` is missing or
    has no admin consent.
 
-Once everybody signs in with Microsoft, set `DISABLE_PASSWORD_LOGIN=true` in
-`.env` and restart. Remove it again if you ever need a password to get back in.
+**Microsoft becomes the only way in.** As soon as single sign-on is working
+(`ENTRA_*`, `APP_BASE_URL` and a real `AUTH_SECRET` are all set), email +
+password sign-in is refused, nobody has a password to change or reset, and new
+accounts under **Users** are created without one. So before restarting with
+these settings, make sure at least one administrator under **Users** has the
+email address they sign in to Microsoft with.
+
+If Microsoft sign-in ever breaks and you need to get in (an expired client
+secret is the usual cause, and is fixed in `.env`), set
+`ALLOW_PASSWORD_LOGIN=true` in `.env` and restart: accounts that had a password
+before can use it again. Remove the line and restart once sign-in is repaired.
 
 ## Troubleshooting
 

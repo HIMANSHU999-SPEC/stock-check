@@ -85,7 +85,7 @@ export default function Inventory() {
                 <div className="stat-card">
                     <div className="stat-label">Total items</div>
                     <div className="stat-value">{totals.total.toLocaleString()}</div>
-                    <div className="text-muted">{totals.lines.toLocaleString()} asset lines</div>
+                    <div className="text-muted">{totals.lines.toLocaleString()} asset lines, whatever their status</div>
                 </div>
                 <div className="stat-card">
                     <div className="stat-label">Assigned</div>

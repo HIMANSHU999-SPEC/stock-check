@@ -1,6 +1,6 @@
 # Multi-stage build for the Stock & Library Management app.
 # Serves the built React frontend and the Express API from a single container.
-FROM node:22-slim AS build
+FROM node:24-slim AS build
 WORKDIR /app
 
 # Install build tools needed by better-sqlite3 native bindings.
@@ -13,7 +13,7 @@ RUN npm ci || npm install
 COPY . .
 RUN npm run build
 
-FROM node:22-slim AS runtime
+FROM node:24-slim AS runtime
 WORKDIR /app
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 

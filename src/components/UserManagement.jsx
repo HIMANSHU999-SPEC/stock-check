@@ -22,6 +22,8 @@ export default function UserManagement({ currentUser }) {
     const [error, setError] = useState('');
     // With Microsoft sign-in on, an account needs no password of its own.
     const [ssoEnabled, setSsoEnabled] = useState(false);
+    // Off once Microsoft sign-in is the only way in: accounts then have no password.
+    const [passwords, setPasswords] = useState(true);
     // Staff who can already see their own assets but have no account here.
     const [staff, setStaff] = useState([]);
 
@@ -30,7 +32,7 @@ export default function UserManagement({ currentUser }) {
     useEffect(() => {
         if (isAdmin) loadUsers();
         else setLoading(false);
-        authAPI.ssoConfig().then((c) => setSsoEnabled(Boolean(c.enabled))).catch(() => {});
+        authAPI.ssoConfig().then((c) => { setSsoEnabled(Boolean(c.enabled)); setPasswords(c.password_login !== false); }).catch(() => {});
     }, [isAdmin]);
 
     async function loadUsers() {
@@ -150,7 +152,7 @@ export default function UserManagement({ currentUser }) {
                                     <td>{u.name || '—'}</td>
                                     <td>{u.email}{String(u.id) === String(currentUser.id) && <span className="text-muted"> (you)</span>}</td>
                                     <td><span className={`badge badge-${roleInfo(u.role).badge}`}>{roleInfo(u.role).label}</span></td>
-                                    <td>{u.has_password ? 'Password' : 'Microsoft only'}{u.has_password && ssoEnabled ? ' or Microsoft' : ''}</td>
+                                    <td>{!passwords ? 'Microsoft' : <>{u.has_password ? 'Password' : 'Microsoft only'}{u.has_password && ssoEnabled ? ' or Microsoft' : ''}</>}</td>
                                     <td>{formatDate(u.created_at)}</td>
                                     <td>
                                         <div className="flex gap-1">
@@ -213,6 +215,13 @@ export default function UserManagement({ currentUser }) {
                                 </select>
                                 <div className="text-muted" style={{ fontSize: '0.85rem' }}>{roleInfo(formData.role).can}</div>
                             </div>
+                            {!passwords && (
+                                <p className="text-muted" style={{ fontSize: '0.9rem' }}>
+                                    They sign in with their Microsoft account, so use their work email address.
+                                    There is no password to set.
+                                </p>
+                            )}
+                            {passwords && (
                             <div className="form-group">
                                 <label className="form-label">
                                     {editing
@@ -238,6 +247,7 @@ export default function UserManagement({ currentUser }) {
                                     </label>
                                 ) : null}
                             </div>
+                            )}
                             {error && <p style={{ color: 'var(--danger,#ef4444)' }}>{error}</p>}
                             <div className="flex gap-2 mt-3">
                                 <button type="button" onClick={() => setShowModal(false)} className="btn btn-secondary">Cancel</button>
